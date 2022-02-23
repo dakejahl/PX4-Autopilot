@@ -256,3 +256,13 @@ CONFIG:
       buildType: MinSizeRel
       settings:
         CONFIG: raspberrypi_pico_default
+    watts_can-bms_default:
+      short: watts_can-bms_default
+      buildType: MinSizeRel
+      settings:
+        CONFIG: watts_can-bms_default
+    watts_can-bms_canbootloader:
+      short: watts_can-bms_canbootloader
+      buildType: MinSizeRel
+      settings:
+        CONFIG: watts_can-bms_canbootloader

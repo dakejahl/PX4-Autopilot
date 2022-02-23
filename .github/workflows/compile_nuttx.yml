@@ -64,7 +64,8 @@ jobs:
           px4_fmu-v6x,
           sky-drones_smartap-airlink,
           spracing_h7extreme,
-          uvify_core
+          uvify_core,
+          watts_can-bms
           ]
     steps:
     - uses: actions/checkout@v1
