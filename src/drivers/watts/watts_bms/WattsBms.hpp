@@ -107,7 +107,8 @@ private:
 	int sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len);
 	uint16_t sub_command_response16(uint8_t offset);
 
-    int write_memory(uint16_t addr, uint8_t* tx_buf, size_t tx_len);
+    int write_memory8(uint16_t addr, uint8_t data);
+    int write_memory16(uint16_t addr, uint16_t data);
 
 	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
 	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);

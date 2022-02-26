@@ -112,17 +112,14 @@ int WattsBms::init()
 
 	///// SET SETTINGS INTO PERMANENT MEMORY /////
 
-
 	// Set REG1 voltage to 3.3v
-	value = REG1_ENABLE_3v3;
-	ret = write_memory(ADDR_REG12_CONFIG, &value, 1);
+	ret = write_memory8(ADDR_REG12_CONFIG, REG1_ENABLE_3v3);
 	if (ret != PX4_OK) {
 		PX4_ERR("configuring REG1 failed");
 	}
 
 	// Enable regulator(s)
-	value = 0x01;
-	ret = write_memory(ADDR_REG0, &value, 1); // Enable the other bq
+	ret = write_memory8(ADDR_REG0, 0x01); // Enable the other bq
 	if (ret != PX4_OK) {
 		PX4_ERR("enabling regulator failed");
 	}
@@ -170,14 +167,9 @@ int WattsBms::exit_config_update_mode()
 	return PX4_ERROR;
 }
 
-int WattsBms::write_memory(uint16_t addr, uint8_t* tx_buf, size_t tx_len)
+int WattsBms::write_memory8(uint16_t addr, uint8_t data)
 {
-	PX4_INFO_RAW("Writing to %x --> ", addr);
-
-	for (size_t i = 0; i < tx_len; i++) {
-		PX4_INFO_RAW("%x", tx_buf[i]);
-	}
-	PX4_INFO_RAW("\n");
+	PX4_INFO("Writing to %x --> %x", addr, data);
 
 	int ret = enter_config_update_mode();
 	if (ret != PX4_OK) {
@@ -185,32 +177,73 @@ int WattsBms::write_memory(uint16_t addr, uint8_t* tx_buf, size_t tx_len)
 		return PX4_ERROR;
 	}
 
+	// See pg 13 of technical reference
 	// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
 	// number of bytes used in the transfer buffer, then the result is bitwise inverted
 	uint8_t checksum = 0;
-	uint8_t transer_length = 0; // See pg 13 of technical reference
-	// Send the data to the transfer buffer
+	// Send the data
 	{
-		uint8_t buf[3 + tx_len] = {};
+		uint8_t buf[5] = {};
 		buf[0] = CMD_ADDR_SUBCMD_LOW;
 		buf[1] = uint8_t(addr & 0x00FF);
 		buf[2] = uint8_t((addr >> 8) & 0x00FF);
-		memcpy(buf + 3, tx_buf, tx_len);
-		transfer(buf, tx_len + 2, nullptr, 0);
-		transer_length += tx_len + 2;
+		buf[3] = data;
 
-		for (size_t i = 1; i < 3 + tx_len; i++) {
+		transfer(buf, sizeof(buf), nullptr, 0);
+		for (size_t i = 1; i < 3 + 2; i++) {
 			checksum += buf[i];
 		}
-		checksum = ~checksum;
 	}
 
 	// Send checksum and length
 	{
 		uint8_t buf[3] = {};
 		buf[0] = CMD_ADDR_RESP_CHKSUM;
-		buf[1] = checksum;
-		buf[2] = transer_length + 2;
+		buf[1] = ~checksum;
+		buf[2] = 5; // 2 bytes addr, 1 bytes data, 1 byte checksum, 1 byte length
+		transfer(buf, sizeof(buf), nullptr, 0);
+	}
+
+	exit_config_update_mode();
+
+	return PX4_OK;
+}
+
+int WattsBms::write_memory16(uint16_t addr, uint16_t data)
+{
+	PX4_INFO("Writing to %x --> %x", addr, data);
+
+	int ret = enter_config_update_mode();
+	if (ret != PX4_OK) {
+		PX4_ERR("failed to write memory");
+		return PX4_ERROR;
+	}
+
+	// See pg 13 of technical reference
+	// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
+	// number of bytes used in the transfer buffer, then the result is bitwise inverted
+	uint8_t checksum = 0;
+	// Send the data
+	{
+		uint8_t buf[5] = {};
+		buf[0] = CMD_ADDR_SUBCMD_LOW;
+		buf[1] = uint8_t(addr & 0x00FF);
+		buf[2] = uint8_t((addr >> 8) & 0x00FF);
+		buf[3] = uint8_t(data & 0x00FF);
+		buf[4] = uint8_t((data >> 8) & 0x00FF);
+
+		transfer(buf, sizeof(buf), nullptr, 0);
+		for (size_t i = 1; i < 3 + 2; i++) {
+			checksum += buf[i];
+		}
+	}
+
+	// Send checksum and length
+	{
+		uint8_t buf[3] = {};
+		buf[0] = CMD_ADDR_RESP_CHKSUM;
+		buf[1] = ~checksum;
+		buf[2] = 6; // 2 bytes addr, 2 bytes data, 1 byte checksum, 1 byte length
 		transfer(buf, sizeof(buf), nullptr, 0);
 	}
 
