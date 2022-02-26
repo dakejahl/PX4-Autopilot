@@ -1,0 +1,9 @@
+menu "watts"
+    menuconfig WATTS_DRIVERS
+        bool "Watts Drivers"
+        default n
+        select WATTS_BMS
+        ---help---
+            Enable watts driver
+    rsource "*/Kconfig"
+endmenu #watts

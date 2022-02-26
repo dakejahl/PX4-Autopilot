@@ -1,0 +1,5 @@
+menuconfig DRIVERS_WATTS_WATTS_BMS
+	bool "watts_bms"
+	default n
+	---help---
+		Enable support for watts_bms
