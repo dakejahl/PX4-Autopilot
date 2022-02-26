@@ -44,6 +44,8 @@
 
 using namespace time_literals;
 
+#define CMD_READ_VOLTAGE_STACK    0x34
+
 class WattsBms : public device::I2C, public I2CSPIDriver<WattsBms>
 {
 public:
@@ -68,14 +70,15 @@ private:
 
 	uORB::Publication<battery_status_s>	_battery_status_pub {ORB_ID(battery_status)};
 
-	static const hrt_abstime	SAMPLE_INTERVAL {50_ms};
+	static const hrt_abstime	SAMPLE_INTERVAL {500_ms};
 
 	battery_status_s _battery_status_report {};
 
 	perf_counter_t _cycle_perf;
 
+    int direct_command(uint8_t command, uint8_t* buf, size_t len);
 
-	int readReg(uint8_t addr, uint8_t *buf, size_t len);
-	int writeReg(uint8_t addr, uint8_t *buf, size_t len);
+	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
+	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);
 
 };

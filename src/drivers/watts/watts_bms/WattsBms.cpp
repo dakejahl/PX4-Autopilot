@@ -62,7 +62,11 @@ void WattsBms::RunImpl()
 	_battery_status_report.timestamp = hrt_absolute_time();
 
 	// TODO: Do stuff
-	PX4_INFO("RUNNING");
+	uint8_t buf[2] = {};
+	direct_command(CMD_READ_VOLTAGE_STACK, buf, sizeof(buf));
+
+	float stack_voltage = (buf[1] << 8) | buf[0];
+	PX4_INFO("stack_voltage: %f", double(stack_voltage / 100)); // units of 0.01v
 
 	perf_end(_cycle_perf);
 }
@@ -98,15 +102,20 @@ int WattsBms::init()
 	return PX4_OK;
 }
 
-int WattsBms::readReg(uint8_t addr, uint8_t *buf, size_t len)
+int WattsBms::direct_command(uint8_t command, uint8_t* buf, size_t len)
 {
-	return transfer(&addr, 1, buf, len);
+	return transfer(&command, 1, buf, len);
 }
 
-int WattsBms::writeReg(uint8_t addr, uint8_t *buf, size_t len)
-{
-	uint8_t buffer[len + 1];
-	buffer[0] = addr;
-	memcpy(buffer + 1, buf, sizeof(uint8_t)*len);
-	return transfer(buffer, len + 1, nullptr, 0);
-}
+// int WattsBms::readReg(uint8_t addr, uint8_t *buf, size_t len)
+// {
+// 	return transfer(&addr, 1, buf, len);
+// }
+
+// int WattsBms::writeReg(uint8_t addr, uint8_t *buf, size_t len)
+// {
+// 	uint8_t buffer[len + 1];
+// 	buffer[0] = addr;
+// 	memcpy(buffer + 1, buf, sizeof(uint8_t)*len);
+// 	return transfer(buffer, len + 1, nullptr, 0);
+// }

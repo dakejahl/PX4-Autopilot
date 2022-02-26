@@ -50,7 +50,7 @@ extern "C" int watts_bms_main(int argc, char *argv[])
 	using ThisDriver = WattsBms;
 	BusCLIArguments cli{true, false};
 	cli.default_i2c_frequency = 400000;
-	cli.i2c_address = 0x48;
+	cli.i2c_address = 0x08;
 
 	const char *verb = cli.parseDefaultArguments(argc, argv);
 
