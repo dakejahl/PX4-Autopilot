@@ -44,7 +44,30 @@
 
 using namespace time_literals;
 
-#define CMD_READ_VOLTAGE_STACK    0x34
+// Direct commands(1 byte)
+#define CMD_BATTERY_STATUS 		0x12
+#define CMD_READ_VOLTAGE_STACK 	0x34
+
+// Subcommands (2 bytes)
+#define CMD_ADDR_SUBCMD_LOW    	0x3E
+
+#define CMD_ENTER_CFG_UPDATE 	0x0034 // The device will then automatically disable the protection FETs if they are enabled.
+
+#define CMD_SET_CFGUPDATE 		0x0090 // The device will then automatically disable the protection FETs if they are enabled.
+#define CMD_EXIT_CFG_UPDATE 	0x0092 // The device will then automatically disable the protection FETs if they are enabled.
+
+#define CMD_REG12_CONTROL 		0x0098
+
+// 7-bit Command Addresses
+#define CMD_ADDR_TRANSFER_BUFFER 0x40 // 32-byte transfer buffer
+#define CMD_ADDR_RESP_CHKSUM     0x60
+
+// Memory Addresses
+#define ADDR_REG12_CONFIG 	0x9236
+#define ADDR_REG0 			0x9237
+
+// Register Bitmasks
+#define REG1_ENABLE_3v3 0b00001101
 
 class WattsBms : public device::I2C, public I2CSPIDriver<WattsBms>
 {
@@ -67,6 +90,8 @@ protected:
 	void exit_and_cleanup() override;
 
 private:
+	int enter_config_update_mode();
+	int exit_config_update_mode();
 
 	uORB::Publication<battery_status_s>	_battery_status_pub {ORB_ID(battery_status)};
 
@@ -75,8 +100,14 @@ private:
 	battery_status_s _battery_status_report {};
 
 	perf_counter_t _cycle_perf;
+	perf_counter_t _comms_errors;
 
-    int direct_command(uint8_t command, uint8_t* buf, size_t len);
+    int direct_command(uint8_t command, uint8_t* rx_buf, size_t rx_len);
+
+	int sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len);
+	uint16_t sub_command_response16(uint8_t offset);
+
+    int write_memory(uint16_t addr, uint8_t* tx_buf, size_t tx_len);
 
 	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
 	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);

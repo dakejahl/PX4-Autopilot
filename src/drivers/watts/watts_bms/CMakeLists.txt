@@ -34,6 +34,7 @@ px4_add_module(
 	MODULE drivers__watts_bms
 	MAIN watts_bms
 	COMPILE_FLAGS
+		-DDEBUG_BUILD
 	SRCS
 		watts_bms_main.cpp
 		WattsBms.cpp
