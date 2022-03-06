@@ -31,26 +31,31 @@
  *
  ****************************************************************************/
 
-#include "WattsBms.hpp"
+// The Texas Instruments BQ76952 is a highly integrated, high accuracy battery monitor and protector for 3-series
+// to 16-series li-ion, li-polymer, and LiFePO4 battery packs. The device includes a high accuracy monitoring
+// system, a highly configurable protection subsystem, and support for autonomous or host controlled cell
+// balancing. I
 
-WattsBms::WattsBms(const I2CSPIDriverConfig &config) :
+#include "BQ76952.hpp"
+
+BQ76952::BQ76952(const I2CSPIDriverConfig &config) :
 	I2C(config),
 	I2CSPIDriver(config),
 	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample"))
 {}
 
-WattsBms::~WattsBms()
+BQ76952::~BQ76952()
 {
 	ScheduleClear();
 	perf_free(_cycle_perf);
 }
 
-void WattsBms::exit_and_cleanup()
+void BQ76952::exit_and_cleanup()
 {
 	I2CSPIDriverBase::exit_and_cleanup();
 }
 
-void WattsBms::RunImpl()
+void BQ76952::RunImpl()
 {
 	if (should_exit()) {
 		PX4_INFO("exiting");
@@ -75,24 +80,24 @@ void WattsBms::RunImpl()
 	perf_end(_cycle_perf);
 }
 
-void WattsBms::print_usage()
+void BQ76952::print_usage()
 {
-	PRINT_MODULE_USAGE_NAME("watts_bms", "driver");
+	PRINT_MODULE_USAGE_NAME("bq76952", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
 	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(true, false);
 	PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(0x48);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 }
 
-void WattsBms::print_status()
+void BQ76952::print_status()
 {
 	I2CSPIDriverBase::print_status();
 	perf_print_counter(_cycle_perf);
 }
 
-int WattsBms::init()
+int BQ76952::init()
 {
-	PX4_INFO("Initializing WattsBms");
+	PX4_INFO("Initializing BQ76952");
 	int ret = I2C::init();
 
 	if (ret != PX4_OK) {
@@ -107,7 +112,7 @@ int WattsBms::init()
 
 	// First disable LDOs if they are enabled
 	uint8_t value = 0b00001100;
-	sub_command(CMD_REG12_CONTROL, &value, 1);
+	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
 	usleep(900); // 450us ttco
 
 	///// SET SETTINGS INTO PERMANENT MEMORY /////
@@ -126,7 +131,7 @@ int WattsBms::init()
 
 	// Enable LDO at REG1
 	value = 0b00001101;
-	sub_command(CMD_REG12_CONTROL, &value, 1);
+	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
 	usleep(900); // 450us ttco
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
@@ -134,7 +139,7 @@ int WattsBms::init()
 	return PX4_OK;
 }
 
-int WattsBms::enter_config_update_mode()
+int BQ76952::enter_config_update_mode()
 {
 	// Enter config udpate mode if not already in it and report status
 	uint8_t buf[2] = {};
@@ -154,7 +159,7 @@ int WattsBms::enter_config_update_mode()
 	return PX4_ERROR;
 }
 
-int WattsBms::exit_config_update_mode()
+int BQ76952::exit_config_update_mode()
 {
 	sub_command(CMD_EXIT_CFG_UPDATE, nullptr, 0);
 	usleep(2000); // 1000us time to complete operation
@@ -167,7 +172,7 @@ int WattsBms::exit_config_update_mode()
 	return PX4_ERROR;
 }
 
-int WattsBms::write_memory8(uint16_t addr, uint8_t data)
+int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 {
 	PX4_INFO("Writing to %x --> %x", addr, data);
 
@@ -209,7 +214,7 @@ int WattsBms::write_memory8(uint16_t addr, uint8_t data)
 	return PX4_OK;
 }
 
-int WattsBms::write_memory16(uint16_t addr, uint16_t data)
+int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 {
 	PX4_INFO("Writing to %x --> %x", addr, data);
 
@@ -252,12 +257,12 @@ int WattsBms::write_memory16(uint16_t addr, uint16_t data)
 	return PX4_OK;
 }
 
-int WattsBms::direct_command(uint8_t command, uint8_t* rx_buf, size_t rx_len)
+int BQ76952::direct_command(uint8_t command, uint8_t* rx_buf, size_t rx_len)
 {
 	return transfer(&command, 1, rx_buf, rx_len);
 }
 
-int WattsBms::sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len)
+int BQ76952::sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len)
 {
 	uint8_t buf[3 + tx_len] = {};
 	buf[0] = 0x3E;
@@ -268,7 +273,7 @@ int WattsBms::sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len)
 	return transfer(buf, sizeof(buf), nullptr, 0);
 }
 
-uint16_t WattsBms::sub_command_response16(uint8_t offset)
+uint16_t BQ76952::sub_command_response16(uint8_t offset)
 {
 	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER + offset;
 	uint8_t buf[2] = {};
@@ -279,12 +284,12 @@ uint16_t WattsBms::sub_command_response16(uint8_t offset)
 }
 
 
-// int WattsBms::readReg(uint8_t addr, uint8_t *buf, size_t len)
+// int BQ76952::readReg(uint8_t addr, uint8_t *buf, size_t len)
 // {
 // 	return transfer(&addr, 1, buf, len);
 // }
 
-// int WattsBms::writeReg(uint8_t addr, uint8_t *buf, size_t len)
+// int BQ76952::writeReg(uint8_t addr, uint8_t *buf, size_t len)
 // {
 // 	uint8_t buffer[len + 1];
 // 	buffer[0] = addr;

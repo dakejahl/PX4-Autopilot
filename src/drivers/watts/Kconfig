@@ -2,7 +2,7 @@ menu "watts"
     menuconfig WATTS_DRIVERS
         bool "Watts Drivers"
         default n
-        select WATTS_BMS
+        select BQ76952
         ---help---
             Enable watts driver
     rsource "*/Kconfig"

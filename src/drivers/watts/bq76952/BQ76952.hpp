@@ -69,11 +69,11 @@ using namespace time_literals;
 // Register Bitmasks
 #define REG1_ENABLE_3v3 0b00001101
 
-class WattsBms : public device::I2C, public I2CSPIDriver<WattsBms>
+class BQ76952 : public device::I2C, public I2CSPIDriver<BQ76952>
 {
 public:
-	WattsBms(const I2CSPIDriverConfig &config);
-	~WattsBms() override;
+	BQ76952(const I2CSPIDriverConfig &config);
+	~BQ76952() override;
 
 	int init() override;
 

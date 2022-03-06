@@ -31,12 +31,12 @@
 #
 ############################################################################
 px4_add_module(
-	MODULE drivers__watts_bms
-	MAIN watts_bms
+	MODULE drivers__bq76952
+	MAIN bq76952
 	COMPILE_FLAGS
 		-DDEBUG_BUILD
 	SRCS
-		watts_bms_main.cpp
-		WattsBms.cpp
+		bq76952_main.cpp
+		BQ76952.cpp
 	DEPENDS
 	)

@@ -32,9 +32,9 @@
  ****************************************************************************/
 
 
-#include "WattsBms.hpp"
+#include "BQ76952.hpp"
 
-void WattsBms::custom_method(const BusCLIArguments &cli)
+void BQ76952::custom_method(const BusCLIArguments &cli)
 {
 	switch(cli.custom1) {
 		case 1:
@@ -45,9 +45,9 @@ void WattsBms::custom_method(const BusCLIArguments &cli)
 	}
 }
 
-extern "C" int watts_bms_main(int argc, char *argv[])
+extern "C" int bq76952_main(int argc, char *argv[])
 {
-	using ThisDriver = WattsBms;
+	using ThisDriver = BQ76952;
 	BusCLIArguments cli{true, false};
 	cli.default_i2c_frequency = 400000;
 	cli.i2c_address = 0x08;
@@ -59,7 +59,7 @@ extern "C" int watts_bms_main(int argc, char *argv[])
 		return -1;
 	}
 
-	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_WATTS_BMS);
+	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_BQ76952);
 
 	if (!strcmp(verb, "start")) {
 		return ThisDriver::module_start(cli, iterator);
