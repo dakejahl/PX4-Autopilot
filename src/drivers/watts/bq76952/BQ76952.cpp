@@ -34,14 +34,29 @@
 // The Texas Instruments BQ76952 is a highly integrated, high accuracy battery monitor and protector for 3-series
 // to 16-series li-ion, li-polymer, and LiFePO4 battery packs. The device includes a high accuracy monitoring
 // system, a highly configurable protection subsystem, and support for autonomous or host controlled cell
-// balancing. I
+// balancing.
+
+// FUNCTION OF THE BQ76952
+// Enable bq34
+// Read temperature
+// Read cell voltages [12]
+// Read current
+// Read fault (Battery Status)
+
+// FUNCTION OF THE BQ34Z100
+// Read current consumed
+// Read energy consumed
+// Read percent remaining
+// Read time remaining
+// Read mAh consumed
 
 #include "BQ76952.hpp"
 
 BQ76952::BQ76952(const I2CSPIDriverConfig &config) :
 	I2C(config),
 	I2CSPIDriver(config),
-	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample"))
+	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
+	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
 {}
 
 BQ76952::~BQ76952()
@@ -64,18 +79,52 @@ void BQ76952::RunImpl()
 
 	perf_begin(_cycle_perf);
 
-	_battery_status_report.timestamp = hrt_absolute_time();
+	battery_status_s battery_status = {};
+	battery_status.timestamp = hrt_absolute_time();
 
-	// TODO: Do stuff
-	uint8_t buf[2] = {};
-	int ret = direct_command(CMD_READ_VOLTAGE_STACK, buf, sizeof(buf));
+	int ret = PX4_OK;
+
+	// Read stack voltage
+	int16_t stack_voltage = {};
+	ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
+	px4_usleep(50);
+	battery_status.voltage_v = stack_voltage / 100.0f;
+	battery_status.voltage_filtered_v = battery_status.voltage_v; // TODO: filter
+	// PX4_INFO("stack_voltage: %f", double(battery_status.voltage_v));
+
+	// Read current (centi-amp resolution 327amps +/-)
+	int16_t current = {};
+	ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
+	px4_usleep(50);
+	battery_status.current_a = current / 100.0f;
+	battery_status.current_filtered_a = battery_status.current_a; // TODO: filter
+	// PX4_INFO("current: %f", double(battery_status.current_a));
+
+	// Read temperature
+	int16_t temperature = {};
+	ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
+	battery_status.temperature = (temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+	// PX4_INFO("temperature: %f", double(battery_status.temperature));
+
+	// Read cell voltages
+	int16_t cell_voltages_mv[12] = {};
+	ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
+	px4_usleep(50);
+
+	for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
+		battery_status.voltage_cell_v[i] = cell_voltages_mv[i] / 1000.0f;
+		// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
+	}
+
+	// Read fault (Battery Status)
+
 
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
 
-	// float stack_voltage = (buf[1] << 8) | buf[0];
-	// PX4_INFO("stack_voltage: %f", double(stack_voltage / 100)); // units of 0.01v
+	// Publish to uORB
+	_battery_status_pub.publish(battery_status);
 
 	perf_end(_cycle_perf);
 }
@@ -95,6 +144,12 @@ void BQ76952::print_status()
 	perf_print_counter(_cycle_perf);
 }
 
+int BQ76952::probe()
+{
+	uint8_t val = {};
+	return transfer(&val, sizeof(val), nullptr, 0);
+}
+
 int BQ76952::init()
 {
 	PX4_INFO("Initializing BQ76952");
@@ -105,38 +160,76 @@ int BQ76952::init()
 		return ret;
 	}
 
-	// TODO: test that this works
-	if (I2C::probe() != PX4_OK) {
+	if (probe() != PX4_OK) {
+		PX4_ERR("probe failed");
 		return PX4_ERROR;
 	}
 
 	// First disable LDOs if they are enabled
 	uint8_t value = 0b00001100;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	usleep(900); // 450us ttco
+	px4_usleep(450);
 
-	///// SET SETTINGS INTO PERMANENT MEMORY /////
+	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
+
+	// Set current and voltage resolution (DA Configuration: USER_AMPS_0 and USER_AMPS_1)
+	ret = write_memory8(ADDR_DA_CONFIG, DA_CONFIG_CENTIVOLT_CENTIAMP);
+	if (ret != PX4_OK) {
+		PX4_ERR("writing DA_CONFIG failed");
+		return PX4_ERROR;
+	}
 
 	// Set REG1 voltage to 3.3v
 	ret = write_memory8(ADDR_REG12_CONFIG, REG1_ENABLE_3v3);
 	if (ret != PX4_OK) {
-		PX4_ERR("configuring REG1 failed");
+		PX4_ERR("writing REG12 failed");
+		return PX4_ERROR;
 	}
 
 	// Enable regulator(s)
-	ret = write_memory8(ADDR_REG0, 0x01); // Enable the other bq
+	ret = write_memory8(ADDR_REG0, 0x01); // Enable the bq32z100
 	if (ret != PX4_OK) {
-		PX4_ERR("enabling regulator failed");
+		PX4_ERR("writing REG0 failed");
+		return PX4_ERROR;
 	}
 
 	// Enable LDO at REG1
 	value = 0b00001101;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	usleep(900); // 450us ttco
+	px4_usleep(450);
+
+	// Check Manufacturing Status register
+	sub_command(CMD_MFG_STATUS, 0, 0);
+	uint16_t mfg_status_flags = sub_command_response16(0);
+	print_mfg_status_flags(mfg_status_flags);
+
+	// enable_fets();
+	// disable_fets();
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
 	return PX4_OK;
+}
+
+void BQ76952::print_mfg_status_flags(uint16_t status)
+{
+	PX4_INFO("mfg status: 0x%x", status);
+}
+
+void BQ76952::enable_fets()
+{
+	sub_command(CMD_FET_ENABLE, 0, 0);
+	px4_usleep(500);
+	sub_command(CMD_ALL_FETS_ON, 0, 0);
+	px4_usleep(500);
+}
+
+void BQ76952::disable_fets()
+{
+	sub_command(CMD_FET_ENABLE, 0, 0);
+	px4_usleep(500);
+	sub_command(CMD_ALL_FETS_OFF, 0, 0);
+	px4_usleep(500);
 }
 
 int BQ76952::enter_config_update_mode()
@@ -144,10 +237,12 @@ int BQ76952::enter_config_update_mode()
 	// Enter config udpate mode if not already in it and report status
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+	px4_usleep(50);
 	if (!(buf[0] & 0x01)) {
 		sub_command(CMD_SET_CFGUPDATE, nullptr, 0);
-		usleep(4000); // 2000us time to complete operation
+		px4_usleep(4000); // 2000us time to complete operation
 		direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+		px4_usleep(50);
 		if (buf[0] & 0x01) {
 			return PX4_OK;
 		}
@@ -162,10 +257,11 @@ int BQ76952::enter_config_update_mode()
 int BQ76952::exit_config_update_mode()
 {
 	sub_command(CMD_EXIT_CFG_UPDATE, nullptr, 0);
-	usleep(2000); // 1000us time to complete operation
+	px4_usleep(2000); // 1000us time to complete operation
 
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+	px4_usleep(50);
 	if (!(buf[0] & 0x01)) {
 		return PX4_OK;
 	}
@@ -174,11 +270,12 @@ int BQ76952::exit_config_update_mode()
 
 int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 {
-	PX4_INFO("Writing to %x --> %x", addr, data);
+	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
 
+	// Must be in config update mode to write to memory
 	int ret = enter_config_update_mode();
 	if (ret != PX4_OK) {
-		PX4_ERR("failed to write memory");
+		PX4_ERR("failed to enter config update mode");
 		return PX4_ERROR;
 	}
 
@@ -216,7 +313,7 @@ int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 
 int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 {
-	PX4_INFO("Writing to %x --> %x", addr, data);
+	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
 
 	int ret = enter_config_update_mode();
 	if (ret != PX4_OK) {
@@ -257,18 +354,18 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 	return PX4_OK;
 }
 
-int BQ76952::direct_command(uint8_t command, uint8_t* rx_buf, size_t rx_len)
+int BQ76952::direct_command(uint8_t command, void* rx_buf, size_t rx_len)
 {
-	return transfer(&command, 1, rx_buf, rx_len);
+	return transfer(&command, 1, (uint8_t*)rx_buf, rx_len);
 }
 
-int BQ76952::sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len)
+int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 {
 	uint8_t buf[3 + tx_len] = {};
 	buf[0] = 0x3E;
 	buf[1] = uint8_t(command & 0x00FF);
 	buf[2] = uint8_t((command >> 8) & 0x00FF);
-	memcpy(buf + 3, tx_buf, tx_len);
+	memcpy(buf + 3, (uint8_t*)tx_buf, tx_len);
 
 	return transfer(buf, sizeof(buf), nullptr, 0);
 }

@@ -1,0 +1,10 @@
+# Detect chip
+st-info --probe
+# Found 1 stlink programmers
+#  serial: 483f70065266545312321567
+# openocd: "\x48\x3f\x70\x06\x52\x66\x54\x53\x12\x32\x15\x67"
+#   flash: 524288 (pagesize: 16384)
+#    sram: 262144
+#  chipid: 0x0441
+#   descr: F4 device
+./flash_bootloader.sh

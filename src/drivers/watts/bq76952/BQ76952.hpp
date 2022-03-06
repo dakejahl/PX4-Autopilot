@@ -35,27 +35,33 @@
 
 #include <stdint.h>
 #include <drivers/device/i2c.h>
+#include <drivers/drv_hrt.h>
+#include <lib/perf/perf_counter.h>
+#include <lib/geo/geo.h>
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/topics/battery_status.h>
 #include <uORB/Publication.hpp>
-#include <lib/perf/perf_counter.h>
-#include <drivers/drv_hrt.h>
 
 using namespace time_literals;
 
 // Direct commands(1 byte)
 #define CMD_BATTERY_STATUS 		0x12
-#define CMD_READ_VOLTAGE_STACK 	0x34
+#define CMD_READ_CELL_VOLTAGE   0x14
+#define CMD_READ_STACK_VOLTAGE 	0x34
+#define CMD_READ_CC2_CURRENT    0x3A
+#define CMD_READ_CFETOFF_TEMP   0x6A
 
 // Subcommands (2 bytes)
 #define CMD_ADDR_SUBCMD_LOW    	0x3E
 
+#define CMD_FET_ENABLE          0x0022
 #define CMD_ENTER_CFG_UPDATE 	0x0034 // The device will then automatically disable the protection FETs if they are enabled.
-
+#define CMD_MFG_STATUS          0x0057 // pg 118
 #define CMD_SET_CFGUPDATE 		0x0090 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_EXIT_CFG_UPDATE 	0x0092 // The device will then automatically disable the protection FETs if they are enabled.
-
+#define CMD_ALL_FETS_OFF        0x0095
+#define CMD_ALL_FETS_ON         0x0096
 #define CMD_REG12_CONTROL 		0x0098
 
 // 7-bit Command Addresses
@@ -65,8 +71,10 @@ using namespace time_literals;
 // Memory Addresses
 #define ADDR_REG12_CONFIG 	0x9236
 #define ADDR_REG0 			0x9237
+#define ADDR_DA_CONFIG      0x9303
 
 // Register Bitmasks
+#define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
 #define REG1_ENABLE_3v3 0b00001101
 
 class BQ76952 : public device::I2C, public I2CSPIDriver<BQ76952>
@@ -90,27 +98,29 @@ protected:
 	void exit_and_cleanup() override;
 
 private:
+
+    int probe() override;
+
+    void enable_fets();
+    void disable_fets();
+
+    void print_mfg_status_flags(uint16_t status);
+
+
 	int enter_config_update_mode();
 	int exit_config_update_mode();
+    int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
+    int sub_command(uint16_t command, void* tx_buf, size_t tx_len);
+    uint16_t sub_command_response16(uint8_t offset);
+    int write_memory8(uint16_t addr, uint8_t data);
+    int write_memory16(uint16_t addr, uint16_t data);
+    // int readReg(uint8_t addr, uint8_t *buf, size_t len);
+    // int writeReg(uint8_t addr, uint8_t *buf, size_t len);
+private:
+    static const hrt_abstime    SAMPLE_INTERVAL {500_ms};
 
 	uORB::Publication<battery_status_s>	_battery_status_pub {ORB_ID(battery_status)};
 
-	static const hrt_abstime	SAMPLE_INTERVAL {500_ms};
-
-	battery_status_s _battery_status_report {};
-
 	perf_counter_t _cycle_perf;
 	perf_counter_t _comms_errors;
-
-    int direct_command(uint8_t command, uint8_t* rx_buf, size_t rx_len);
-
-	int sub_command(uint16_t command, uint8_t* tx_buf, size_t tx_len);
-	uint16_t sub_command_response16(uint8_t offset);
-
-    int write_memory8(uint16_t addr, uint8_t data);
-    int write_memory16(uint16_t addr, uint16_t data);
-
-	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
-	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);
-
 };
