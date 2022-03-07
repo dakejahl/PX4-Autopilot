@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2021 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2019-2021 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,14 +31,57 @@
  *
  ****************************************************************************/
 
-#include <px4_arch/spi_hw_description.h>
-#include <drivers/drv_sensor.h>
-#include <nuttx/spi/spi.h>
+#include "SSD1306.hpp"
 
-constexpr px4_spi_bus_t px4_spi_buses[SPI_BUS_MAX_BUS_ITEMS] = {
-	initSPIBus(SPI::Bus::SPI1, {
-		initSPIDevice(DRV_DEVTYPE_SSD1306, SPI::CS{GPIO::PortB, GPIO::Pin2}),
-	}),
-};
+#include <px4_platform_common/getopt.h>
+#include <px4_platform_common/module.h>
 
-static constexpr bool unused = validateSPIConfig(px4_spi_buses);
+void SSD1306::print_usage()
+{
+	PRINT_MODULE_USAGE_NAME("ssd1306", "driver");
+	PRINT_MODULE_USAGE_SUBCATEGORY("imu");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(false, true);
+	// PRINT_MODULE_USAGE_PARAM_INT('R', 0, 0, 35, "Rotation", true);
+	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+}
+
+extern "C" int ssd1306_main(int argc, char *argv[])
+{
+	using ThisDriver = SSD1306;
+	BusCLIArguments cli{false, true};
+	cli.default_spi_frequency = 2000000; // 2mhz
+
+	// TODO: in the future we could select height/width
+	// while ((ch = cli.getOpt(argc, argv, "R:")) != EOF) {
+	// 	switch (ch) {
+	// 	case 'R':
+	// 		cli.rotation = (enum Rotation)atoi(cli.optArg());
+	// 		break;
+	// 	}
+	// }
+
+	const char *verb = cli.optArg();
+
+	if (!verb) {
+		ThisDriver::print_usage();
+		return -1;
+	}
+
+	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_SSD1306);
+
+	if (!strcmp(verb, "start")) {
+		return ThisDriver::module_start(cli, iterator);
+	}
+
+	if (!strcmp(verb, "stop")) {
+		return ThisDriver::module_stop(iterator);
+	}
+
+	if (!strcmp(verb, "status")) {
+		return ThisDriver::module_status(iterator);
+	}
+
+	ThisDriver::print_usage();
+	return -1;
+}

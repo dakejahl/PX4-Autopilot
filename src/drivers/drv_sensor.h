@@ -208,6 +208,8 @@
 
 #define DRV_HYGRO_DEVTYPE_SHT3X 0xB1
 
+#define DRV_DEVTYPE_SSD1306     0xfc
+#define DRV_DEVTYPE_BQ34Z100    0xfd
 #define DRV_DEVTYPE_BQ76952     0xfe
 #define DRV_DEVTYPE_UNUSED		0xff
 
