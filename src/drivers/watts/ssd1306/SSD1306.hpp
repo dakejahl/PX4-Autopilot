@@ -116,7 +116,7 @@ public:
 	void RunImpl();
 
 	int init() override;
-	void print_status() override;
+	// void print_status() override;
 
 
 	// static I2CSPIDriverBase *instantiate(const BusCLIArguments &cli, const BusInstanceIterator &iterator,
@@ -162,7 +162,9 @@ private:
 
 	uint8_t* _buffer {nullptr};
 
-	OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_32;
+	// OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_32;
+	OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_64;
+
 	OLEDDISPLAY_TEXT_ALIGNMENT _textAlignment = TEXT_ALIGN_LEFT;
 
 	static constexpr uint16_t DISPLAY_WIDTH = 128;

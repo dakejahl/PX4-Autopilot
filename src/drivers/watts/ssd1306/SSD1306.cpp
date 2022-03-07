@@ -373,6 +373,11 @@ void SSD1306::sendData(uint8_t* data, size_t size)
 	writeBytes(data, size);
 }
 
+void SSD1306::writeBytes(uint8_t* data, size_t size)
+{
+	transfer(data, nullptr, size);
+}
+
 void SSD1306::resetDisplay(void)
 {
 	clear();

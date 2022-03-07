@@ -48,18 +48,19 @@ void SSD1306::print_usage()
 
 extern "C" int ssd1306_main(int argc, char *argv[])
 {
+	int ch;
 	using ThisDriver = SSD1306;
 	BusCLIArguments cli{false, true};
 	cli.default_spi_frequency = 2000000; // 2mhz
 
 	// TODO: in the future we could select height/width
-	// while ((ch = cli.getOpt(argc, argv, "R:")) != EOF) {
-	// 	switch (ch) {
-	// 	case 'R':
-	// 		cli.rotation = (enum Rotation)atoi(cli.optArg());
-	// 		break;
-	// 	}
-	// }
+	while ((ch = cli.getOpt(argc, argv, "R:")) != EOF) {
+		// switch (ch) {
+		// case 'R':
+		// 	cli.rotation = (enum Rotation)atoi(cli.optArg());
+		// 	break;
+		// }
+	}
 
 	const char *verb = cli.optArg();
 
