@@ -200,6 +200,7 @@ int BQ76952::init()
 
 	// Check Manufacturing Status register
 	sub_command(CMD_MFG_STATUS, 0, 0);
+	px4_usleep(605);
 	uint16_t mfg_status_flags = sub_command_response16(0);
 	print_mfg_status_flags(mfg_status_flags);
 

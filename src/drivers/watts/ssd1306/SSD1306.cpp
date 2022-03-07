@@ -64,6 +64,7 @@ int SSD1306::init()
 
 	///// NOTE: I commented this section out because we are handling it in our preboot code.
 	// First reset the device
+	PX4_INFO("Initializing SSD1306");
 	stm32_gpiowrite(GPIO_SPI1_OLED_RST, false);
 	usleep(10000);
 	stm32_gpiowrite(GPIO_SPI1_OLED_RST, true);
