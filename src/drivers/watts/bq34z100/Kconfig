@@ -1,0 +1,5 @@
+menuconfig DRIVERS_WATTS_BQ34Z100
+	bool "bq34z100"
+	default n
+	---help---
+		Enable support for bq34z100

@@ -79,52 +79,57 @@ void BQ76952::RunImpl()
 
 	perf_begin(_cycle_perf);
 
-	battery_status_s battery_status = {};
-	battery_status.timestamp = hrt_absolute_time();
+	// TODO: check if we are armed/disarmed and enable/disable protections
 
-	int ret = PX4_OK;
+	// Collect data and publish on uORB --> UAVCAN
+	{
+		battery_status_s battery_status = {};
+		battery_status.timestamp = hrt_absolute_time();
 
-	// Read stack voltage
-	int16_t stack_voltage = {};
-	ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
-	px4_usleep(50);
-	battery_status.voltage_v = stack_voltage / 100.0f;
-	battery_status.voltage_filtered_v = battery_status.voltage_v; // TODO: filter
-	// PX4_INFO("stack_voltage: %f", double(battery_status.voltage_v));
+		int ret = PX4_OK;
 
-	// Read current (centi-amp resolution 327amps +/-)
-	int16_t current = {};
-	ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
-	px4_usleep(50);
-	battery_status.current_a = current / 100.0f;
-	battery_status.current_filtered_a = battery_status.current_a; // TODO: filter
-	// PX4_INFO("current: %f", double(battery_status.current_a));
+		// Read stack voltage
+		int16_t stack_voltage = {};
+		ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
+		px4_usleep(50);
+		battery_status.voltage_v = stack_voltage / 100.0f;
+		battery_status.voltage_filtered_v = battery_status.voltage_v; // TODO: filter
+		// PX4_INFO("stack_voltage: %f", double(battery_status.voltage_v));
 
-	// Read temperature
-	int16_t temperature = {};
-	ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
-	battery_status.temperature = (temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
-	// PX4_INFO("temperature: %f", double(battery_status.temperature));
+		// Read current (centi-amp resolution 327amps +/-)
+		int16_t current = {};
+		ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
+		px4_usleep(50);
+		battery_status.current_a = current / 100.0f;
+		battery_status.current_filtered_a = battery_status.current_a; // TODO: filter
+		// PX4_INFO("current: %f", double(battery_status.current_a));
 
-	// Read cell voltages
-	int16_t cell_voltages_mv[12] = {};
-	ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
-	px4_usleep(50);
+		// Read temperature
+		int16_t temperature = {};
+		ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
+		battery_status.temperature = (temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+		// PX4_INFO("temperature: %f", double(battery_status.temperature));
 
-	for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
-		battery_status.voltage_cell_v[i] = cell_voltages_mv[i] / 1000.0f;
-		// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
+		// Read cell voltages
+		int16_t cell_voltages_mv[12] = {};
+		ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
+		px4_usleep(50);
+
+		for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
+			battery_status.voltage_cell_v[i] = cell_voltages_mv[i] / 1000.0f;
+			// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
+		}
+
+		// Read fault (Battery Status)
+
+
+		if (ret != PX4_OK) {
+			perf_count(_comms_errors);
+		}
+
+		// Publish to uORB
+		_battery_status_pub.publish(battery_status);
 	}
-
-	// Read fault (Battery Status)
-
-
-	if (ret != PX4_OK) {
-		perf_count(_comms_errors);
-	}
-
-	// Publish to uORB
-	_battery_status_pub.publish(battery_status);
 
 	perf_end(_cycle_perf);
 }
@@ -158,11 +163,6 @@ int BQ76952::init()
 	if (ret != PX4_OK) {
 		PX4_ERR("I2C init failed");
 		return ret;
-	}
-
-	if (probe() != PX4_OK) {
-		PX4_ERR("probe failed");
-		return PX4_ERROR;
 	}
 
 	// First disable LDOs if they are enabled
@@ -204,8 +204,8 @@ int BQ76952::init()
 	uint16_t mfg_status_flags = sub_command_response16(0);
 	print_mfg_status_flags(mfg_status_flags);
 
+	// Enable the outputs
 	// enable_fets();
-	// disable_fets();
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
