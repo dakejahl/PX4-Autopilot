@@ -48,12 +48,16 @@ BQ34Z100::BQ34Z100(const I2CSPIDriverConfig &config) :
 	I2CSPIDriver(config),
 	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
 	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
-{}
+{
+	_battery_status_pub.advertise();
+}
+
 
 BQ34Z100::~BQ34Z100()
 {
 	ScheduleClear();
 	perf_free(_cycle_perf);
+	_battery_status_pub.unadvertise();
 }
 
 void BQ34Z100::exit_and_cleanup()

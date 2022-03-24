@@ -41,7 +41,7 @@
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/topics/battery_status.h>
-#include <uORB/Publication.hpp>
+#include <uORB/PublicationMulti.hpp>
 
 using namespace time_literals;
 
@@ -82,7 +82,7 @@ private:
 private:
     static const hrt_abstime    SAMPLE_INTERVAL {500_ms};
 
-	uORB::Publication<battery_status_s>	_battery_status_pub {ORB_ID(battery_status)};
+    uORB::PublicationMulti<battery_status_s> _battery_status_pub{ORB_ID(battery_status)};
 
 	perf_counter_t _cycle_perf;
 	perf_counter_t _comms_errors;

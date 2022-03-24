@@ -57,13 +57,16 @@ BQ76952::BQ76952(const I2CSPIDriverConfig &config) :
 	I2CSPIDriver(config),
 	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
 	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
-{}
+{
+	_battery_status_pub.advertise();
+}
 
 BQ76952::~BQ76952()
 {
 	ScheduleClear();
 	perf_free(_cycle_perf);
 	perf_free(_comms_errors);
+	_battery_status_pub.unadvertise();
 }
 
 void BQ76952::exit_and_cleanup()
@@ -93,7 +96,7 @@ void BQ76952::RunImpl()
 		int16_t stack_voltage = {};
 		ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
 		px4_usleep(50);
-		battery_status.voltage_v = stack_voltage / 100.0f;
+		battery_status.voltage_v = (float)stack_voltage / 100.0f;
 		battery_status.voltage_filtered_v = battery_status.voltage_v; // TODO: filter
 		// PX4_INFO("stack_voltage: %f", double(battery_status.voltage_v));
 
@@ -101,14 +104,14 @@ void BQ76952::RunImpl()
 		int16_t current = {};
 		ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
 		px4_usleep(50);
-		battery_status.current_a = current / 100.0f;
+		battery_status.current_a = (float)current / 100.0f;
 		battery_status.current_filtered_a = battery_status.current_a; // TODO: filter
 		// PX4_INFO("current: %f", double(battery_status.current_a));
 
 		// Read temperature
 		int16_t temperature = {};
 		ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
-		battery_status.temperature = (temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+		battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
 		// PX4_INFO("temperature: %f", double(battery_status.temperature));
 
 		// Read cell voltages
@@ -122,6 +125,7 @@ void BQ76952::RunImpl()
 		}
 
 		// Read fault (Battery Status)
+		// listener battery_status
 
 
 		if (ret != PX4_OK) {
