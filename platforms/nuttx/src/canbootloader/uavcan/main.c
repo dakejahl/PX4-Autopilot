@@ -1185,6 +1185,19 @@ __EXPORT int main(int argc, char *argv[])
 
 	} else {
 
+		// JAKE: It is a regular boot, so we should just jump straight to the app because
+		// the battery is always powered on before the flight controller.
+
+		// Except in dual battery systems... In which case.. what happens?
+
+
+		// If app is already valid, jump straight to app
+		if (bootloader.app_valid) {
+			goto boot;
+		}
+
+		// Otherwise this is a bad/blank app and we need to be updated
+
 		/*
 		 * It is a regular boot, So we need to autobaud and get a node ID
 		 * If the tBoot was started, we will boot normal if the auto baud
