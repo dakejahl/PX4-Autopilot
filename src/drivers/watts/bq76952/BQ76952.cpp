@@ -88,6 +88,7 @@ void BQ76952::RunImpl()
 	// Collect data and publish on uORB --> UAVCAN
 	{
 		battery_status_s battery_status = {};
+		battery_status.id = 1;
 		battery_status.timestamp = hrt_absolute_time();
 
 		int ret = PX4_OK;

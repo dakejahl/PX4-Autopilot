@@ -235,6 +235,19 @@ PARAM_DEFINE_INT32(UAVCAN_SUB_BARO, 0);
 PARAM_DEFINE_INT32(UAVCAN_SUB_BAT, 0);
 
 /**
+ * subscription smart battery
+ *
+ * Enable UAVCAN battery subscription.
+ *  uavcan::equipment::power::BatteryInfo
+ *  ardupilot::equipment::power::BatteryInfoAux
+ *
+ * @boolean
+ * @reboot_required true
+ * @group UAVCAN
+ */
+PARAM_DEFINE_INT32(UAVCAN_SUB_SMBAT, 0);
+
+/**
  * subscription differential pressure
  *
  * Enable UAVCAN differential pressure subscription.
