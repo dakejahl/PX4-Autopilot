@@ -63,6 +63,7 @@ BQ76952::~BQ76952()
 {
 	ScheduleClear();
 	perf_free(_cycle_perf);
+	perf_free(_comms_errors);
 }
 
 void BQ76952::exit_and_cleanup()

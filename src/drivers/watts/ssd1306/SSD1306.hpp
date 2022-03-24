@@ -33,9 +33,11 @@
 
 #pragma once
 
+#include <lib/perf/perf_counter.h>
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/getopt.h>
 #include <px4_platform_common/time.h>
+#include <drivers/device/i2c.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 
@@ -44,6 +46,8 @@
 // #include <uORB/topics/shutdown.h>
 
 #include "ssd1306_fonts.h"
+
+using namespace time_literals;
 
 #define pgm_read_byte(addr)   (*(const unsigned char *)(addr))
 
@@ -104,10 +108,9 @@ typedef char (*FontTableLookupFunction)(const uint8_t ch);
 char DefaultFontTableLookup(const uint8_t ch);
 
 
-class SSD1306 : public device::SPI, public I2CSPIDriver<SSD1306>
+class SSD1306 : public device::I2C, public I2CSPIDriver<SSD1306>
 {
 public:
-	// SSD1306(I2CSPIBusOption bus_option, const int bus, SSD1306_SPI* interface);
 	SSD1306(const I2CSPIDriverConfig &config);
 	~SSD1306() override;
 
@@ -116,16 +119,11 @@ public:
 	void RunImpl();
 
 	int init() override;
-	// void print_status() override;
 
-
-	// static I2CSPIDriverBase *instantiate(const BusCLIArguments &cli, const BusInstanceIterator &iterator,
-	// 				     int runtime_instance);
-	// static void print_usage();
-
-	// void RunImpl();
+	void exit_and_cleanup() override;
 
 private:
+    static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
 
 	void updateStatus(const battery_status_s& data);
 
@@ -161,6 +159,7 @@ private:
 	// uORB::Subscription _shutdown_sub{ORB_ID(shutdown)};
 
 	uint8_t* _buffer {nullptr};
+	uint8_t* _buffer2 {nullptr};
 
 	// OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_32;
 	OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_64;
@@ -168,12 +167,13 @@ private:
 	OLEDDISPLAY_TEXT_ALIGNMENT _textAlignment = TEXT_ALIGN_LEFT;
 
 	static constexpr uint16_t DISPLAY_WIDTH = 128;
-	static constexpr uint16_t DISPLAY_HEIGHT = 32;
+	static constexpr uint16_t DISPLAY_HEIGHT = 64;
 	static constexpr uint16_t DISPLAY_BUFFER_SIZE = DISPLAY_WIDTH * DISPLAY_HEIGHT / 8;
 
 	const uint8_t* _fontData = ArialMT_Plain_16; // pointer to the font data structure
 
 	FontTableLookupFunction _fontTableLookupFunction = DefaultFontTableLookup;
 
-
+	perf_counter_t _cycle_perf;
+	perf_counter_t _comms_errors;
 };

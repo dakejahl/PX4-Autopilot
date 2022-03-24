@@ -41,28 +41,19 @@ void SSD1306::print_usage()
 	PRINT_MODULE_USAGE_NAME("ssd1306", "driver");
 	PRINT_MODULE_USAGE_SUBCATEGORY("imu");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(false, true);
+	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(true, false);
 	// PRINT_MODULE_USAGE_PARAM_INT('R', 0, 0, 35, "Rotation", true);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 }
 
 extern "C" int ssd1306_main(int argc, char *argv[])
 {
-	int ch;
 	using ThisDriver = SSD1306;
-	BusCLIArguments cli{false, true};
-	cli.default_spi_frequency = 2000000; // 2mhz
+	BusCLIArguments cli{true, false};
+	cli.default_i2c_frequency = 400000;
+	cli.i2c_address = 0x3d;
 
-	// TODO: in the future we could select height/width
-	while ((ch = cli.getOpt(argc, argv, "R:")) != EOF) {
-		// switch (ch) {
-		// case 'R':
-		// 	cli.rotation = (enum Rotation)atoi(cli.optArg());
-		// 	break;
-		// }
-	}
-
-	const char *verb = cli.optArg();
+	const char *verb = cli.parseDefaultArguments(argc, argv);
 
 	if (!verb) {
 		ThisDriver::print_usage();

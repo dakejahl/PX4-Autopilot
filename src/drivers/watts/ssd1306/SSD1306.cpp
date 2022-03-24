@@ -36,48 +36,62 @@
 using namespace time_literals;
 
 SSD1306::SSD1306(const I2CSPIDriverConfig &config) :
-	SPI(config),
-	I2CSPIDriver(config)
+	I2C(config),
+	I2CSPIDriver(config),
+	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
+	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
 {}
 
 SSD1306::~SSD1306()
 {
+	ScheduleClear();
+
 	if (_buffer) {
 		delete[] _buffer;
 	}
+
+	perf_free(_cycle_perf);
+}
+
+void SSD1306::exit_and_cleanup()
+{
+	I2CSPIDriverBase::exit_and_cleanup();
 }
 
 int SSD1306::init()
 {
-	SPI::init();
+	PX4_INFO("Initializing SSD1306");
+	int ret = I2C::init();
 
-	if (!_buffer)
-	{
+	if (ret != PX4_OK) {
+		PX4_ERR("I2C init failed");
+		return ret;
+	}
+	if (!_buffer) {
 		_buffer = new uint8_t[DISPLAY_BUFFER_SIZE];
+		_buffer2 = new uint8_t[DISPLAY_BUFFER_SIZE + 1];
 
-		if(!_buffer)
-		{
+		if( !_buffer) {
 			PX4_INFO("Not enough memory to create display");
 			return PX4_ERROR;
 		}
 	}
 
-	///// NOTE: I commented this section out because we are handling it in our preboot code.
-	// First reset the device
-	PX4_INFO("Initializing SSD1306");
-	stm32_gpiowrite(GPIO_SPI1_OLED_RST, false);
 	usleep(10000);
-	stm32_gpiowrite(GPIO_SPI1_OLED_RST, true);
 	sendInitCommands();
 	resetDisplay();
 
 	usleep(10000);
+
+	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
 	return PX4_OK;
 }
 
 void SSD1306::RunImpl()
 {
+	perf_begin(_cycle_perf);
+
 	battery_status_s battery;
 
 	if (_battery_sub.update(&battery)) {
@@ -91,6 +105,8 @@ void SSD1306::RunImpl()
 	// 	displayOff();
 	// 	exit_and_cleanup();
 	// }
+
+	perf_end(_cycle_perf);
 }
 
 void SSD1306::updateStatus(const battery_status_s& data)
@@ -364,19 +380,15 @@ uint16_t SSD1306::getStringWidth(const char* text, uint16_t length)
 
 void SSD1306::sendCommand(uint8_t command)
 {
-	stm32_gpiowrite(GPIO_SPI1_OLED_DC, false); // deassert data control line
-	writeBytes(&command, 1);
+	uint8_t tx[2] = {0x80, command};
+	writeBytes(tx, 2);
 }
 
 void SSD1306::sendData(uint8_t* data, size_t size)
 {
-	stm32_gpiowrite(GPIO_SPI1_OLED_DC, true); // assert data control line
-	writeBytes(data, size);
-}
-
-void SSD1306::writeBytes(uint8_t* data, size_t size)
-{
-	transfer(data, nullptr, size);
+	_buffer2[0] = 0x40;
+	memcpy(_buffer2 + 1, data, size);
+	writeBytes(_buffer2, size + 1);
 }
 
 void SSD1306::resetDisplay(void)
@@ -437,80 +449,12 @@ char DefaultFontTableLookup(const uint8_t ch)
 	return (uint8_t) 0; // otherwise: return zero, if character has to be ignored
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  End of driver implementation details -- below is driver boilerplate
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void SSD1306::writeBytes(uint8_t* data, size_t size)
+{
+	// transfer(data, nullptr, size);
+	int ret = transfer(data, (unsigned)size, nullptr, 0);
 
-// I2CSPIDriverBase *SSD1306::instantiate(const BusCLIArguments &cli, const BusInstanceIterator &iterator,
-// 				      int runtime_instance)
-// {
-// 	auto interface = new SSD1306_SPI(iterator.bus(), iterator.devid(), SPI_FREQ_20MHZ);
-
-// 	PX4_INFO("bus: %d", iterator.bus());
-// 	PX4_INFO("devid: %d", iterator.devid());
-
-
-// 	if (interface == nullptr) {
-// 		PX4_INFO("alloc failed");
-// 		return nullptr;
-// 	}
-
-// 	if (interface->init() != OK) {
-// 		delete interface;
-// 		PX4_INFO("no device on bus %i (devid 0x%x)", iterator.bus(), iterator.devid());
-// 		return nullptr;
-// 	}
-
-// 	SSD1306* instance = new SSD1306(iterator.configuredBusOption(), iterator.bus(), interface);
-
-// 	if (instance == nullptr) {
-// 		PX4_INFO("alloc failed");
-// 		return nullptr;
-// 	}
-
-// 	instance->init();
-
-// 	instance->ScheduleOnInterval(500_ms);
-
-// 	return instance;
-// }
-
-// extern "C" __EXPORT int ssd1306_main(int argc, char *argv[])
-// {
-// 	using ThisDriver = SSD1306;
-// 	BusCLIArguments cli{false, true};
-// 	cli.default_spi_frequency = 20 * 1000 * 1000;
-
-// 	const char *verb = cli.parseDefaultArguments(argc, argv);
-// 	if (!verb) {
-// 		ThisDriver::print_usage();
-// 		return -1;
-// 	}
-
-// 	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_SSD1306);
-
-// 	if (!strcmp(verb, "start")) {
-// 		return ThisDriver::module_start(cli, iterator);
-// 	}
-
-// 	ThisDriver::print_usage();
-// 	return -1;
-// }
-
-// void SSD1306::print_usage()
-// {
-// 	PRINT_MODULE_DESCRIPTION(
-// 		R"DESCR_STR(
-// ### Description
-// Driver for OLED display SSD1306.
-
-// )DESCR_STR");
-
-// 	PRINT_MODULE_USAGE_NAME("ssd1306", "driver");
-
-// 	PRINT_MODULE_USAGE_COMMAND("start");
-
-// 	PRINT_MODULE_USAGE_COMMAND_DESCR("none", "doesn't exit");
-
-// 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
-// }
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+}
