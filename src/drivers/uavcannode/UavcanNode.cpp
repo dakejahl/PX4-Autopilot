@@ -288,6 +288,7 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 	// Was the node_id supplied by the bootloader?
 
 	if (node_id != 0) {
+		PX4_INFO("Node ID %u was supplied by the bootloader", node_id.get());
 		_node.setNodeID(node_id);
 	}
 
@@ -341,6 +342,7 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 	// If the node_id was not supplied by the bootloader do Dynamic Node ID allocation
 
 	if (node_id == 0) {
+		PX4_INFO("Performing Dynamic Node ID allocation");
 
 		uavcan::DynamicNodeIDClient client(_node);
 
@@ -367,7 +369,9 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 			}
 		}
 
-		_node.setNodeID(client.getAllocatedNodeID());
+		auto allocated_id = client.getAllocatedNodeID();
+		PX4_INFO("Got Node ID %u", allocated_id.get());
+		_node.setNodeID(allocated_id);
 	}
 
 	return rv;
@@ -599,7 +603,7 @@ extern "C" int uavcannode_start(int argc, char *argv[])
 #endif
 
 	// CAN bitrate
-	int32_t bitrate = 0;
+	int32_t bitrate = 1000000;
 
 	// Node ID
 	int32_t node_id = 0;
@@ -612,6 +616,7 @@ extern "C" int uavcannode_start(int argc, char *argv[])
 
 		bitrate = shared.bus_speed;
 		node_id = shared.node_id;
+		PX4_INFO("Got node ID from shared mem: %ld", node_id);
 
 		// Invalidate to prevent deja vu
 		bootloader_app_shared_invalidate();
@@ -625,20 +630,23 @@ extern "C" int uavcannode_start(int argc, char *argv[])
 
 		} else
 #endif
-		{
-			(void)param_get(param_find("CANNODE_NODE_ID"), &node_id);
-			(void)param_get(param_find("CANNODE_BITRATE"), &bitrate);
-		}
+		// Otherwise we perform Dynamic Node ID Allocation during init()
+
+		// {
+		// 	(void)param_get(param_find("CANNODE_NODE_ID"), &node_id);
+		// 	(void)param_get(param_find("CANNODE_BITRATE"), &bitrate);
+		// 	PX4_INFO("Got node ID from param: %ld", node_id);
+		// }
 	}
 
-	if (
-#if defined(SUPPORT_ALT_CAN_BOOTLOADER)
-		board_booted_by_px4() &&
-#endif
-		(node_id < 0 || node_id > uavcan::NodeID::Max || !uavcan::NodeID(node_id).isUnicast())) {
-		PX4_ERR("Invalid Node ID %" PRId32, node_id);
-		return 1;
-	}
+// 	if (
+// #if defined(SUPPORT_ALT_CAN_BOOTLOADER)
+// 		board_booted_by_px4() &&
+// #endif
+// 		(node_id < 0 || node_id > uavcan::NodeID::Max || !uavcan::NodeID(node_id).isUnicast())) {
+// 		PX4_ERR("Invalid Node ID %" PRId32, node_id);
+// 		return 1;
+// 	}
 
 	// Start
 	PX4_INFO("Node ID %" PRId32 ", bitrate %" PRId32, node_id, bitrate);
