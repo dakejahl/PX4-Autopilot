@@ -8,3 +8,7 @@ st-info --probe
 #  chipid: 0x0441
 #   descr: F4 device
 ./flash_bootloader.sh
+
+# Generate bitmap image
+mogrify -resize 128x64 +dither -format xbm *.jpeg
+cat *.xbm | sed s/static/const/ | sed s/=/PROGMEM=/  > icons.h
