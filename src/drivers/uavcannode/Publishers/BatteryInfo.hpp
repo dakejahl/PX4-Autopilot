@@ -82,7 +82,7 @@ public:
 			battery.current = status.current_a; // float16
 			battery.voltage = status.voltage_v; // float16
 			// battery.remaining = status.remaining; // uint8
-			battery.battery_remaining = 55; // uint8
+			battery.percent_remaining = 55; // uint8
 			battery.status_flags = 77; // uint8
 
 
