@@ -38,5 +38,6 @@ px4_add_module(
 	SRCS
 		bq76952_main.cpp
 		BQ76952.cpp
+		BQ34Z100.cpp
 	DEPENDS
 	)

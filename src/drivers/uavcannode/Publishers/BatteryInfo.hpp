@@ -37,7 +37,7 @@
 #include <ardupilot/equipment/power/SmartBatteryContinuous.hpp>
 
 #include <uORB/SubscriptionCallback.hpp>
-#include <uORB/topics/battery_status.h>
+#include <uORB/topics/watts_battery_status.h>
 
 namespace uavcannode
 {
@@ -50,7 +50,7 @@ class BatteryInfo :
 public:
 	BatteryInfo(px4::WorkItem *work_item, uavcan::INode &node) :
 		UavcanPublisherBase(ardupilot::equipment::power::SmartBatteryContinuous::DefaultDataTypeID),
-		uORB::SubscriptionCallbackWorkItem(work_item, ORB_ID(battery_status)),
+		uORB::SubscriptionCallbackWorkItem(work_item, ORB_ID(watts_battery_status)),
 		uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>(node)
 	{
 		this->setPriority(uavcan::TransferPriority::MiddleLower);
@@ -69,20 +69,23 @@ public:
 	void BroadcastAnyUpdates() override
 	{
 		// battery_status -> ardupilot::equipment::power::SmartBatteryContinuous
-		battery_status_s status;
+		watts_battery_status_s status;
+
+		// Iterate over the watts_battery_status subscriptions and check that both are updated to send
 
 		if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
 			// Only handle Continuous data for now TODO: FIXME
-			if (status.id != 1) {
-				return;
-			}
+			// if (status.id != 1) {
+			// 	return;
+			// }
 
 			ardupilot::equipment::power::SmartBatteryContinuous battery = {};
 			battery.temperature = status.temperature; // float16
-			battery.current = status.current_a; // float16
-			battery.voltage = status.voltage_v; // float16
+			battery.current = status.current; // float16
+			battery.voltage = status.voltage; // float16
+			battery.capacity_consumed = status.capacity_consumed;
 			// battery.remaining = status.remaining; // uint8
-			battery.percent_remaining = 55; // uint8
+			// battery.percent_remaining = 55; // uint8
 			battery.status_flags = 77; // uint8
 
 

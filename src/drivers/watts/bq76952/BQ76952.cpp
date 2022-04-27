@@ -87,27 +87,11 @@ void BQ76952::RunImpl()
 
 	// Collect data and publish on uORB --> UAVCAN
 	{
-		battery_status_s battery_status = {};
-		battery_status.id = 1;
+		watts_battery_status_s battery_status = {};
 		battery_status.timestamp = hrt_absolute_time();
 
 		int ret = PX4_OK;
 
-		// Read stack voltage
-		int16_t stack_voltage = {};
-		ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
-		px4_usleep(50);
-		battery_status.voltage_v = (float)stack_voltage / 100.0f;
-		battery_status.voltage_filtered_v = battery_status.voltage_v; // TODO: filter
-		// PX4_INFO("stack_voltage: %f", double(battery_status.voltage_v));
-
-		// Read current (centi-amp resolution 327amps +/-)
-		int16_t current = {};
-		ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
-		px4_usleep(50);
-		battery_status.current_a = (float)current / 100.0f;
-		battery_status.current_filtered_a = battery_status.current_a; // TODO: filter
-		// PX4_INFO("current: %f", double(battery_status.current_a));
 
 		// Read temperature
 		int16_t temperature = {};
@@ -115,15 +99,44 @@ void BQ76952::RunImpl()
 		battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
 		// PX4_INFO("temperature: %f", double(battery_status.temperature));
 
+		// Read current (centi-amp resolution 327amps +/-)
+		int16_t current = {};
+		ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
+		px4_usleep(50);
+		battery_status.current = (float)current / 100.0f;
+		// PX4_INFO("current: %f", double(battery_status.current_a));
+
+		// Read stack voltage
+		int16_t stack_voltage = {};
+		ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
+		px4_usleep(50);
+		battery_status.voltage = (float)stack_voltage / 100.0f;
+
+		// ignore capacity consumed
+
+		// Read capacity remaining
+		battery_status.capacity_remaining = _bq34->read_remaining_capacity();
+		// PX4_INFO("capacity_remaining (mAh) %lu", capacity_remaining);
+
 		// Read cell voltages
 		int16_t cell_voltages_mv[12] = {};
 		ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
 		px4_usleep(50);
 
 		for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
-			battery_status.voltage_cell_v[i] = cell_voltages_mv[i] / 1000.0f;
+			battery_status.cell_voltages[i] = cell_voltages_mv[i] / 1000.0f;
 			// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
 		}
+
+		// Read design capacity
+		battery_status.design_capacity = _bq34->read_design_capacity();
+		// Read actual_capacity
+		battery_status.actual_capacity = _bq34->read_full_charge_capacity();
+		// Read cycle count
+		battery_status.cycle_count = _bq34->read_cycle_count();
+		// Read state of health
+		battery_status.state_of_health = _bq34->read_state_of_health();
+
 
 		// Read fault (Battery Status)
 		// listener battery_status
@@ -212,6 +225,19 @@ int BQ76952::init()
 
 	// Enable the outputs
 	// enable_fets();
+
+	// Enable the BQ34
+	_bq34 = new BQ34Z100();
+
+	if (!_bq34) {
+		PX4_INFO("failed to create BQ34Z100");
+		return PX4_ERROR;
+	}
+
+	if (_bq34->init() != PX4_OK) {
+		PX4_INFO("failed to initialize BQ34Z100");
+		return PX4_ERROR;
+	}
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 

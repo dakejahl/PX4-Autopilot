@@ -43,78 +43,20 @@
 
 #include "BQ34Z100.hpp"
 
-BQ34Z100::BQ34Z100(const I2CSPIDriverConfig &config) :
-	I2C(config),
-	I2CSPIDriver(config),
+BQ34Z100::BQ34Z100() :
+	I2C(DRV_DEVTYPE_BQ34Z100, "BQ34Z100", 1, 0x55, 400000),
 	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
 	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
-{
-	_battery_status_pub.advertise();
-}
-
+{}
 
 BQ34Z100::~BQ34Z100()
 {
-	ScheduleClear();
 	perf_free(_cycle_perf);
-	_battery_status_pub.unadvertise();
-}
-
-void BQ34Z100::exit_and_cleanup()
-{
-	I2CSPIDriverBase::exit_and_cleanup();
-}
-
-void BQ34Z100::RunImpl()
-{
-	if (should_exit()) {
-		PX4_INFO("exiting");
-		return;
-	}
-
-	perf_begin(_cycle_perf);
-
-	// Collect data and publish on uORB --> UAVCAN
-	{
-		battery_status_s battery_status = {};
-		battery_status.timestamp = hrt_absolute_time();
-
-		int ret = PX4_OK;
-
-		// TODO: read data
-		// float voltage = read_voltage();
-		// PX4_INFO("voltage: %fv", double(voltage));
-		// uint8_t soc = read_soc();
-		// PX4_INFO("soc: %u%%", soc);
-
-		if (ret != PX4_OK) {
-			perf_count(_comms_errors);
-		}
-
-		// Publish to uORB
-		_battery_status_pub.publish(battery_status);
-	}
-
-	perf_end(_cycle_perf);
-}
-
-void BQ34Z100::print_usage()
-{
-	PRINT_MODULE_USAGE_NAME("bq34z100", "driver");
-	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(true, false);
-	PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(0x48);
-	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
-}
-
-void BQ34Z100::print_status()
-{
-	I2CSPIDriverBase::print_status();
-	perf_print_counter(_cycle_perf);
 }
 
 int BQ34Z100::probe()
 {
+	PX4_INFO("BQ34Z100::probe() I'm being probed!!!!");
 	static constexpr uint16_t DEVICE_TYPE_EXPECTED = 0x0100;
 	uint8_t val = {};
 
@@ -141,22 +83,53 @@ int BQ34Z100::init()
 	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
 	// TODO?
 
-	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
+	// ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
 	return PX4_OK;
 }
 
-uint8_t BQ34Z100::read_soc()
-{
-	static constexpr uint8_t REG_ADDR_SOC = 0x02;
-	return read_register8(REG_ADDR_SOC);
-}
+// uint8_t BQ34Z100::read_soc()
+// {
+// 	static constexpr uint8_t REG_ADDR_SOC = 0x02;
+// 	return read_register8(REG_ADDR_SOC);
+// }
 
 float BQ34Z100::read_voltage()
 {
 	static constexpr uint8_t REG_ADDR_VOLTAGE = 0x08;
 	return float(read_register16(REG_ADDR_VOLTAGE)) / 1000.0f;
 }
+
+uint32_t BQ34Z100::read_remaining_capacity()
+{
+	static constexpr uint8_t REG_ADDR_REMAINING_CAPACITY = 0x04;
+	return uint32_t(read_register16(REG_ADDR_REMAINING_CAPACITY));
+}
+
+uint32_t BQ34Z100::read_full_charge_capacity()
+{
+	static constexpr uint8_t REG_ADDR_FULL_CHARGE_CAPACITY = 0x06;
+	return uint32_t(read_register16(REG_ADDR_FULL_CHARGE_CAPACITY));
+}
+
+uint32_t BQ34Z100::read_design_capacity()
+{
+	static constexpr uint8_t REG_ADDR_DESIGN_CAPACITY = 0x3C;
+	return uint32_t(read_register16(REG_ADDR_DESIGN_CAPACITY));
+}
+
+uint16_t BQ34Z100::read_cycle_count()
+{
+	static constexpr uint8_t REG_ADDR_CYCLE_COUNT = 0x2C;
+	return uint16_t(read_register16(REG_ADDR_CYCLE_COUNT));
+}
+
+uint8_t BQ34Z100::read_state_of_health()
+{
+	static constexpr uint8_t REG_ADDR_CYCLE_COUNT = 0x2E;
+	return uint8_t(read_register16(REG_ADDR_CYCLE_COUNT));
+}
+
 
 uint16_t BQ34Z100::read_device_type()
 {
