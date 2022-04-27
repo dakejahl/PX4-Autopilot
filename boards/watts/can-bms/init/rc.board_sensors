@@ -3,5 +3,7 @@
 # board sensors init
 #------------------------------------------------------------------------------
 bq76952 start -I -b 1
+# bq76 turns on bq34, give a sec to boot
+usleep 100000
 bq34z100 start -I -b 1
 ssd1306 start -I -b 2
