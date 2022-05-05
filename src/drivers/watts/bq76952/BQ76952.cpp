@@ -74,6 +74,65 @@ void BQ76952::exit_and_cleanup()
 	I2CSPIDriverBase::exit_and_cleanup();
 }
 
+bool BQ76952::check_button_held()
+{
+	const bool button_pressed = !px4_arch_gpioread(GPIO_N_BTN); // Button press pulls to GND
+	hrt_abstime now = hrt_absolute_time();
+
+	if (button_pressed) {
+		if (!_button_pressed) {
+			_button_pressed = true;
+			_pressed_start_time = now;
+		}
+
+		static constexpr hrt_abstime HOLD_TIME = 3_s;
+		if (now - _pressed_start_time > HOLD_TIME) {
+			_button_pressed = false;
+			return true;
+		}
+	} else {
+		_button_pressed = false;
+	}
+
+	return false;
+}
+
+void BQ76952::shutdown()
+{
+	disable_fets();
+	PX4_INFO("Good bye!");
+	px4_usleep(50000);
+	stm32_gpiowrite(GPIO_PWR_EN, false);
+	while(1){}; // never exits
+}
+
+void BQ76952::handle_button()
+{
+	if (!_booted) {
+		bool held = check_button_held();
+
+		if (held) {
+			PX4_INFO("Button was held, turning on FETs");
+			_booted = true;
+			enable_fets();
+		}
+
+		// Check if 5 seconds has elapsed, power off
+		if (hrt_absolute_time() > 5_s) {
+			PX4_INFO("Button not held");
+			shutdown();
+		}
+
+	} else {
+		bool held = check_button_held();
+
+		if (held) {
+			PX4_INFO("Button was held, disabling FETs and powering down!");
+			shutdown();
+		}
+	}
+}
+
 void BQ76952::RunImpl()
 {
 	if (should_exit()) {
@@ -83,7 +142,13 @@ void BQ76952::RunImpl()
 
 	perf_begin(_cycle_perf);
 
+	handle_button();
+
 	// TODO: check if we are armed/disarmed and enable/disable protections
+	bool current_above_threshold = false;
+	if (current_above_threshold) {
+
+	}
 
 	// Collect data and publish on uORB --> UAVCAN
 	{
@@ -138,8 +203,7 @@ void BQ76952::RunImpl()
 		battery_status.state_of_health = _bq34->read_state_of_health();
 
 
-		// Read fault (Battery Status)
-		// listener battery_status
+		// Read bq76 faults (0x12 Battery Status())
 
 
 		if (ret != PX4_OK) {
@@ -252,9 +316,9 @@ void BQ76952::print_mfg_status_flags(uint16_t status)
 void BQ76952::enable_fets()
 {
 	sub_command(CMD_FET_ENABLE, 0, 0);
-	px4_usleep(500);
+	px4_usleep(1000);
 	sub_command(CMD_ALL_FETS_ON, 0, 0);
-	px4_usleep(500);
+	px4_usleep(1000);
 }
 
 void BQ76952::disable_fets()

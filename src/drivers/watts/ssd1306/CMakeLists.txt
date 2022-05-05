@@ -36,7 +36,6 @@ px4_add_module(
 	COMPILE_FLAGS
 		-DDEBUG_BUILD
 	SRCS
-		ssd1306_main.cpp
 		SSD1306.cpp
 		# esp8266-oled-ssd1306/src/OLEDDisplay.cpp
 		# esp8266-oled-ssd1306/src/OLEDDisplayUi.cpp

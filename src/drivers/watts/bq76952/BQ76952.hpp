@@ -103,6 +103,13 @@ private:
 
     int probe() override;
 
+
+    void handle_button();
+    bool check_button_held();
+
+    void shutdown();
+
+
     void enable_fets();
     void disable_fets();
 
@@ -128,4 +135,9 @@ private:
 
 	perf_counter_t _cycle_perf;
 	perf_counter_t _comms_errors;
+
+    // State variables
+    hrt_abstime _pressed_start_time{0};
+    bool _button_pressed{false};
+    bool _booted{false};
 };

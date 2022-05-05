@@ -92,7 +92,7 @@ void SSD1306::RunImpl()
 {
 	perf_begin(_cycle_perf);
 
-	battery_status_s battery;
+	watts_battery_status_s battery;
 
 	if (_battery_sub.update(&battery)) {
 		updateStatus(battery);
@@ -109,26 +109,32 @@ void SSD1306::RunImpl()
 	perf_end(_cycle_perf);
 }
 
-void SSD1306::updateStatus(const battery_status_s& data)
+void SSD1306::updateStatus(const watts_battery_status_s& data)
 {
 	clear();
 
 	char text_temp[20] = {};
 	const char* str;
 
-	snprintf(text_temp, sizeof(text_temp), "mV: %d", (int)(data.voltage_v*1000));
+	// Voltage
+	snprintf(text_temp, sizeof(text_temp), "Voltage: %2.2f", double(data.voltage));
 	str = text_temp;
 	drawString(0, 0, str);
 
-	// TODO: verify we are properly handling negatives here.
-	snprintf(text_temp, sizeof(text_temp), "mA: %d", (int)(data.current_a*-1000));
-
+	// Current
+	snprintf(text_temp, sizeof(text_temp), "Current: %3.2f", double(data.current));
 	str = text_temp;
 	drawString(0, 16, str);
 
-	snprintf(text_temp, sizeof(text_temp), "%d%%", (int)(data.remaining*100));
+	// mAH consumed
+	snprintf(text_temp, sizeof(text_temp), "mAh used: %u", (int)data.capacity_consumed);
 	str = text_temp;
-	drawString(85, 0, str);
+	drawString(0, 48, str);
+
+	// % remaining
+	snprintf(text_temp, sizeof(text_temp), "Remaining: %u%%", (int)(100.0f * (float)data.capacity_remaining / (float)data.actual_capacity));
+	str = text_temp;
+	drawString(0, 32, str);
 
 	display();
 }
@@ -457,4 +463,45 @@ void SSD1306::writeBytes(uint8_t* data, size_t size)
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
+}
+
+void SSD1306::print_usage()
+{
+	PRINT_MODULE_USAGE_NAME("ssd1306", "driver");
+	PRINT_MODULE_USAGE_SUBCATEGORY("system");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(true, false);
+	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+}
+
+extern "C" int ssd1306_main(int argc, char *argv[])
+{
+	using ThisDriver = SSD1306;
+	BusCLIArguments cli{true, false};
+	cli.default_i2c_frequency = 400000;
+	cli.i2c_address = 0x3d;
+
+	const char *verb = cli.parseDefaultArguments(argc, argv);
+
+	if (!verb) {
+		ThisDriver::print_usage();
+		return -1;
+	}
+
+	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_SSD1306);
+
+	if (!strcmp(verb, "start")) {
+		return ThisDriver::module_start(cli, iterator);
+	}
+
+	if (!strcmp(verb, "stop")) {
+		return ThisDriver::module_stop(iterator);
+	}
+
+	if (!strcmp(verb, "status")) {
+		return ThisDriver::module_status(iterator);
+	}
+
+	ThisDriver::print_usage();
+	return -1;
 }

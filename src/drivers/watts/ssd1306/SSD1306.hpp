@@ -42,7 +42,7 @@
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 
 #include <uORB/Subscription.hpp>
-#include <uORB/topics/battery_status.h>
+#include <uORB/topics/watts_battery_status.h>
 // #include <uORB/topics/shutdown.h>
 
 #include "ssd1306_fonts.h"
@@ -125,7 +125,7 @@ public:
 private:
     static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
 
-	void updateStatus(const battery_status_s& data);
+	void updateStatus(const watts_battery_status_s& data);
 
 	// Driver specific
 	void sendCommand(uint8_t command);
@@ -155,7 +155,7 @@ private:
 	void writeBytes(uint8_t* data, size_t size);
 
 private:
-	uORB::Subscription _battery_sub{ORB_ID(battery_status)};
+	uORB::Subscription _battery_sub{ORB_ID(watts_battery_status)};
 	// uORB::Subscription _shutdown_sub{ORB_ID(shutdown)};
 
 	uint8_t* _buffer {nullptr};
