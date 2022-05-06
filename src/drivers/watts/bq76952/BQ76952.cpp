@@ -163,15 +163,147 @@ void BQ76952::collect_and_publish()
 	// Read state of health
 	battery_status.state_of_health = _bq34->read_state_of_health();
 
-	// Read bq76 faults (0x12 Battery Status())
-	// uint32_t status_flags = {};
-
-	if (ret != PX4_OK) {
-		perf_count(_comms_errors);
-	}
+	battery_status.status_flags = get_status_flags();
 
 	// Publish to uORB
 	_battery_status_pub.publish(battery_status);
+}
+
+uint32_t BQ76952::get_status_flags()
+{
+	uint32_t status_flags = {};
+
+	// static constexpr uint32_t STATUS_FLAG_IN_USE               = 1;
+	// static constexpr uint32_t STATUS_FLAG_READY_TO_USE         = 2;
+	// static constexpr uint32_t STATUS_FLAG_CHARGING             = 4;
+	static constexpr uint32_t STATUS_FLAG_OVER_TEMP            = 8;
+	static constexpr uint32_t STATUS_FLAG_UNDER_TEMP           = 16;
+	static constexpr uint32_t STATUS_FLAG_OVER_VOLT            = 32;
+	static constexpr uint32_t STATUS_FLAG_UNDER_VOLT           = 64;
+	static constexpr uint32_t STATUS_FLAG_OVER_CURRENT         = 128;
+	static constexpr uint32_t STATUS_FLAG_SHORT_CIRCUIT        = 256;
+	static constexpr uint32_t STATUS_FLAG_SAFETY_FAULT         = 512;
+	// static constexpr uint32_t STATUS_FLAG_CELL_IMBALANCE       = 1024;
+	// static constexpr uint32_t STATUS_FLAG_CELL_BALANCING       = 2048;
+	// static constexpr uint32_t STATUS_FLAG_CELL_FAULT           = 4096;
+	// static constexpr uint32_t STATUS_FLAG_PROTECTIONS_ENABLED  = 8192;
+	static constexpr uint32_t STATUS_FLAG_REQUIRES_SERVICE     = 16384;
+
+	// SAFETY ALERT/STATUS A
+	{
+		int ret = PX4_OK;
+		uint8_t safety_alert_a = {};
+		uint8_t safety_status_a = {};
+		ret |= direct_command(CMD_SAFETY_ALERT_A, &safety_alert_a, sizeof(safety_alert_a));
+		ret |= direct_command(CMD_SAFETY_STATUS_A, &safety_status_a, sizeof(safety_status_a));
+
+		if (ret != PX4_OK) {
+			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
+			return status_flags;
+		}
+
+		uint8_t under_volt_mask = (1 << 2);
+		if (safety_alert_a & under_volt_mask) {
+			status_flags |= STATUS_FLAG_UNDER_VOLT;
+			if (safety_status_a & under_volt_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+
+		uint8_t over_volt_mask = (1 << 3);
+		if (safety_alert_a & over_volt_mask) {
+			status_flags |= STATUS_FLAG_OVER_VOLT;
+			if (safety_status_a & over_volt_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+
+		uint8_t over_current_mask = (1 << 4) | (1 << 5) | (1 << 6);
+		if (safety_alert_a & over_current_mask) {
+			status_flags |= STATUS_FLAG_OVER_CURRENT;
+			if (safety_status_a & over_current_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+
+		uint8_t short_circuit_mask = (1 << 7);
+		if (safety_alert_a & short_circuit_mask) {
+			status_flags |= STATUS_FLAG_SHORT_CIRCUIT;
+			if (safety_status_a & short_circuit_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+	}
+
+	// SAFETY ALERT/STATUS B
+	{
+		int ret = PX4_OK;
+		uint8_t safety_alert_b = {};
+		uint8_t safety_status_b = {};
+		ret |= direct_command(CMD_SAFETY_ALERT_B, &safety_alert_b, sizeof(safety_alert_b));
+		ret |= direct_command(CMD_SAFETY_STATUS_B, &safety_status_b, sizeof(safety_status_b));
+
+		if (ret != PX4_OK) {
+			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
+			return status_flags;
+		}
+
+		uint8_t over_temp_mask = (1 << 7) | (1 << 6) | (1 << 5) | (1 << 4);
+		if (safety_alert_b & over_temp_mask) {
+			status_flags |= STATUS_FLAG_OVER_TEMP;
+			if (safety_status_b & over_temp_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+
+		uint8_t under_temp_mask = (1 << 0) | (1 << 1) | (1 << 2);
+		if (safety_alert_b & under_temp_mask) {
+			status_flags |= STATUS_FLAG_UNDER_TEMP;
+			if (safety_status_b & under_temp_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+	}
+
+	// SAFETY ALERT/STATUS C
+	{
+		int ret = PX4_OK;
+		uint8_t safety_alert_c = {};
+		uint8_t safety_status_c = {};
+		ret |= direct_command(CMD_SAFETY_ALERT_C, &safety_alert_c, sizeof(safety_alert_c));
+		ret |= direct_command(CMD_SAFETY_STATUS_C, &safety_status_c, sizeof(safety_status_c));
+
+		if (ret != PX4_OK) {
+			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
+			return status_flags;
+		}
+
+		uint8_t over_current_mask = (1 << 7) | (1 << 5);
+		if (safety_alert_c & over_current_mask) {
+			status_flags |= STATUS_FLAG_OVER_CURRENT;
+			if (safety_status_c & over_current_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+
+		uint8_t short_circuit_mask = (1 << 6);
+		if (safety_alert_c & short_circuit_mask) {
+			status_flags |= STATUS_FLAG_SHORT_CIRCUIT;
+			if (safety_status_c & short_circuit_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+
+		uint8_t over_volt_mask = (1 << 4);
+		if (safety_alert_c & over_volt_mask) {
+			status_flags |= STATUS_FLAG_OVER_VOLT;
+			if (safety_status_c & over_volt_mask) {
+				status_flags |= STATUS_FLAG_SAFETY_FAULT;
+			}
+		}
+	}
+
+	return status_flags;
 }
 
 void BQ76952::handle_automatic_protections()
@@ -195,13 +327,13 @@ void BQ76952::handle_automatic_protections()
 	if (current > protect_current) {
 		if (_protections_enabled) {
 			// Disable protections
-			PX4_INFO("Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
+			PX4_INFO("TODO: Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
 			_protections_enabled = false;
 		}
 	} else {
 		if (!_protections_enabled) {
 			// Enable protections
-			PX4_INFO("Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
+			PX4_INFO("TODO: Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
 			_protections_enabled = true;
 		}
 	}
@@ -248,7 +380,7 @@ void BQ76952::handle_button()
 		bool held = check_button_held();
 
 		if (held) {
-			PX4_INFO("Button was held, turning on FETs");
+			PX4_INFO("Button was held, enabling FETs");
 			_booted = true;
 			enable_fets();
 		}
@@ -265,6 +397,7 @@ void BQ76952::handle_button()
 
 		if (held) {
 			PX4_INFO("Button was held, disabling FETs");
+			disable_fets();
 			// Notify shutdown
 			_shutdown_pub.publish(shutdown_s{});
 			_shutting_down = true;
@@ -334,7 +467,14 @@ void BQ76952::print_status()
 int BQ76952::probe()
 {
 	uint8_t val = {};
-	return transfer(&val, sizeof(val), nullptr, 0);
+
+	int ret = transfer(&val, sizeof(val), nullptr, 0);
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	return ret;
 }
 
 int BQ76952::init()
@@ -395,6 +535,8 @@ int BQ76952::init()
 	// enable_protections();
 	disable_protections();
 
+	read_mfg_scratchpad();
+
 	// Enable the BQ34
 	_bq34 = new BQ34Z100();
 
@@ -420,7 +562,7 @@ void BQ76952::configure_protections()
 	// OCDL_CURR_RECOV -- 1 = OCDL recovers when current is greater than or equal to Protections:OCDL:RecoveryTime
 	// PF_OTP -- If this bit is not set, Permanent Failure status will be lost on any reset
 
-	// 	The individual protections can be enabled by setting the related Settings:Protection:Enabled Protections
+	//  The individual protections can be enabled by setting the related Settings:Protection:Enabled Protections
 	//  A – C configuration registers.
 
 	// Settings:Protection:Enabled Protections A
@@ -511,18 +653,18 @@ void BQ76952::enable_protections()
 		uint8_t byte = {};
 
 		// 7 SCD 1 Short Circuit in Discharge Protection
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 7);
 
 		// 4 OCC 1 Overcurrent in Charge Protection
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 4);
 
 		// 3 COV 1 Cell Overvoltage Protection
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 3);
 
 		write_memory8(ADDR_CHG_FET_Protections_A, byte);
@@ -533,28 +675,28 @@ void BQ76952::enable_protections()
 		uint8_t byte = {};
 
 		// 7 OTF 1 FET Overtemperature
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 7);
 
 		// 6 OTINT 1 Internal Overtemperature
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 6);
 
 		// 4 OTC 1 Overtemperature in Charge
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 4);
 
 		// 2 UTINT 1 Internal Undertemperature
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 2);
 
 		// 0 UTC 1 Undertemperature in Charge
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 0);
 
 		write_memory8(ADDR_CHG_FET_Protections_B, byte);
@@ -565,27 +707,32 @@ void BQ76952::enable_protections()
 		uint8_t byte = {};
 
 		// 6 SCDL 1 Short Circuit in Discharge Latch
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (6 << 0);
 
 		// 4 COVL 1 Cell Overvoltage Latch
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (4 << 0);
 
 		// 2 PTO 1 Precharge Timeout
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (2 << 0);
 
 		// 1 HWDF 1 Host Watchdog Fault
-		// 		0 = CHG FET is not disabled when protection is triggered.
-		// 		1 = CHG FET is disabled when protection is triggered.
+		//      0 = CHG FET is not disabled when protection is triggered.
+		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 0);
 
 		write_memory8(ADDR_CHG_FET_Protections_C, byte);
 	}
+}
+
+void BQ76952::read_mfg_scratchpad()
+{
+	PX4_INFO("TODO: read_mfg_scratchpad");
 }
 
 void BQ76952::disable_protections()
@@ -644,7 +791,7 @@ int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 		buf[2] = uint8_t((addr >> 8) & 0x00FF);
 		buf[3] = data;
 
-		transfer(buf, sizeof(buf), nullptr, 0);
+		ret |= transfer(buf, sizeof(buf), nullptr, 0);
 		for (size_t i = 1; i < sizeof(buf); i++) {
 			checksum += buf[i];
 		}
@@ -656,7 +803,11 @@ int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 		buf[0] = CMD_ADDR_RESP_CHKSUM;
 		buf[1] = ~checksum;
 		buf[2] = 5; // 2 bytes addr, 1 bytes data, 1 byte checksum, 1 byte length
-		transfer(buf, sizeof(buf), nullptr, 0);
+		ret |= transfer(buf, sizeof(buf), nullptr, 0);
+	}
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
 	}
 
 	exit_config_update_mode();
@@ -687,7 +838,7 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 		buf[3] = uint8_t(data & 0x00FF);
 		buf[4] = uint8_t((data >> 8) & 0x00FF);
 
-		transfer(buf, sizeof(buf), nullptr, 0);
+		ret |= transfer(buf, sizeof(buf), nullptr, 0);
 		for (size_t i = 1; i < sizeof(buf); i++) {
 			checksum += buf[i];
 		}
@@ -699,7 +850,11 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 		buf[0] = CMD_ADDR_RESP_CHKSUM;
 		buf[1] = ~checksum;
 		buf[2] = 6; // 2 bytes addr, 2 bytes data, 1 byte checksum, 1 byte length
-		transfer(buf, sizeof(buf), nullptr, 0);
+		ret |= transfer(buf, sizeof(buf), nullptr, 0);
+	}
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
 	}
 
 	exit_config_update_mode();
@@ -745,7 +900,11 @@ int BQ76952::exit_config_update_mode()
 
 int BQ76952::direct_command(uint8_t command, void* rx_buf, size_t rx_len)
 {
-	return transfer(&command, 1, (uint8_t*)rx_buf, rx_len);
+	int ret = transfer(&command, 1, (uint8_t*)rx_buf, rx_len);
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+	return ret;
 }
 
 int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
@@ -756,7 +915,11 @@ int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 	buf[2] = uint8_t((command >> 8) & 0x00FF);
 	memcpy(buf + 3, (uint8_t*)tx_buf, tx_len);
 
-	return transfer(buf, sizeof(buf), nullptr, 0);
+	int ret = transfer(buf, sizeof(buf), nullptr, 0);
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+	return ret;
 }
 
 uint16_t BQ76952::sub_command_response16(uint8_t offset)
@@ -764,7 +927,11 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER + offset;
 	uint8_t buf[2] = {};
 
-	transfer(&addr, 1, buf, sizeof(buf));
+	int ret = transfer(&addr, 1, buf, sizeof(buf));
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
 
 	return (buf[0] << 8) | buf[1];
 }
@@ -772,15 +939,15 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 
 // int BQ76952::readReg(uint8_t addr, uint8_t *buf, size_t len)
 // {
-// 	return transfer(&addr, 1, buf, len);
+//  return transfer(&addr, 1, buf, len);
 // }
 
 // int BQ76952::writeReg(uint8_t addr, uint8_t *buf, size_t len)
 // {
-// 	uint8_t buffer[len + 1];
-// 	buffer[0] = addr;
-// 	memcpy(buffer + 1, buf, sizeof(uint8_t)*len);
-// 	return transfer(buffer, len + 1, nullptr, 0);
+//  uint8_t buffer[len + 1];
+//  buffer[0] = addr;
+//  memcpy(buffer + 1, buf, sizeof(uint8_t)*len);
+//  return transfer(buffer, len + 1, nullptr, 0);
 // }
 
 void BQ76952::custom_method(const BusCLIArguments &cli)

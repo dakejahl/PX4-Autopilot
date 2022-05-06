@@ -52,35 +52,38 @@
 using namespace time_literals;
 
 // Direct commands(1 byte)
+#define CMD_SAFETY_ALERT_A     0x02
 #define CMD_SAFETY_STATUS_A     0x03
+#define CMD_SAFETY_ALERT_B     0x04
 #define CMD_SAFETY_STATUS_B     0x05
+#define CMD_SAFETY_ALERT_C     0x06
 #define CMD_SAFETY_STATUS_C     0x07
 
-#define CMD_BATTERY_STATUS 		0x12
+#define CMD_BATTERY_STATUS      0x12
 #define CMD_READ_CELL_VOLTAGE   0x14
-#define CMD_READ_STACK_VOLTAGE 	0x34
+#define CMD_READ_STACK_VOLTAGE  0x34
 #define CMD_READ_CC2_CURRENT    0x3A
 #define CMD_READ_CFETOFF_TEMP   0x6A
 
 // Subcommands (2 bytes)
-#define CMD_ADDR_SUBCMD_LOW    	0x3E
+#define CMD_ADDR_SUBCMD_LOW     0x3E
 
 #define CMD_FET_ENABLE          0x0022
-#define CMD_ENTER_CFG_UPDATE 	0x0034 // The device will then automatically disable the protection FETs if they are enabled.
+#define CMD_ENTER_CFG_UPDATE    0x0034 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_MFG_STATUS          0x0057 // pg 118
-#define CMD_SET_CFGUPDATE 		0x0090 // The device will then automatically disable the protection FETs if they are enabled.
-#define CMD_EXIT_CFG_UPDATE 	0x0092 // The device will then automatically disable the protection FETs if they are enabled.
+#define CMD_SET_CFGUPDATE       0x0090 // The device will then automatically disable the protection FETs if they are enabled.
+#define CMD_EXIT_CFG_UPDATE     0x0092 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_ALL_FETS_OFF        0x0095
 #define CMD_ALL_FETS_ON         0x0096
-#define CMD_REG12_CONTROL 		0x0098
+#define CMD_REG12_CONTROL       0x0098
 
 // 7-bit Command Addresses
 #define CMD_ADDR_TRANSFER_BUFFER 0x40 // 32-byte transfer buffer
 #define CMD_ADDR_RESP_CHKSUM     0x60
 
 // Memory Addresses
-#define ADDR_REG12_CONFIG 	0x9236
-#define ADDR_REG0 			0x9237
+#define ADDR_REG12_CONFIG   0x9236
+#define ADDR_REG0           0x9237
 #define ADDR_DA_CONFIG      0x9303
 
 #define ADDR_PROTECTION_CONFIG  0x925F // 2 byte
@@ -119,65 +122,69 @@ protected:
 
 private:
 
-    int probe() override;
-    void update_params(const bool force = false);
+	int probe() override;
+	void update_params(const bool force = false);
 
-    void handle_button();
-    void handle_idle_current_detection();
-    void handle_automatic_protections();
+	void handle_button();
+	void handle_idle_current_detection();
+	void handle_automatic_protections();
 
-    bool check_button_held();
-    void shutdown();
+	bool check_button_held();
+	void shutdown();
 
-    void collect_and_publish();
+	void collect_and_publish();
+	uint32_t get_status_flags();
 
-    void configure_protections();
-    void enable_protections();
-    void disable_protections();
+	void read_mfg_scratchpad();
+	void configure_protections();
+	void enable_protections();
+	void disable_protections();
 
-    void enable_fets();
-    void disable_fets();
+	void enable_fets();
+	void disable_fets();
 
-    void print_mfg_status_flags(uint16_t status);
+	void print_mfg_status_flags(uint16_t status);
 
 	int enter_config_update_mode();
 	int exit_config_update_mode();
-    int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
-    int sub_command(uint16_t command, void* tx_buf, size_t tx_len);
-    uint16_t sub_command_response16(uint8_t offset);
-    int write_memory8(uint16_t addr, uint8_t data);
-    int write_memory16(uint16_t addr, uint16_t data);
-    // int readReg(uint8_t addr, uint8_t *buf, size_t len);
-    // int writeReg(uint8_t addr, uint8_t *buf, size_t len);
+	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
+	int sub_command(uint16_t command, void* tx_buf, size_t tx_len);
+	uint16_t sub_command_response16(uint8_t offset);
+	int write_memory8(uint16_t addr, uint8_t data);
+	int write_memory16(uint16_t addr, uint16_t data);
+	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
+	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);
 private:
-    static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
+	static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
 
-    BQ34Z100* _bq34 {nullptr};
+	BQ34Z100* _bq34 {nullptr};
 
-    uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
-	uORB::Publication<shutdown_s>	_shutdown_pub {ORB_ID(shutdown)};
-    uORB::PublicationMulti<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
+	uORB::Publication<shutdown_s>   _shutdown_pub {ORB_ID(shutdown)};
+	uORB::PublicationMulti<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
 
 	perf_counter_t _cycle_perf;
 	perf_counter_t _comms_errors;
 
-    // State variables
-    hrt_abstime _pressed_start_time{0};
-    bool _button_pressed{false};
-    bool _booted{false};
+	// State variables
+	hrt_abstime _pressed_start_time{0};
+	bool _button_pressed{false};
+	bool _booted{false};
 
-    bool _below_idle_current{false};
-    hrt_abstime _idle_start_time{0};
+	bool _below_idle_current{false};
+	hrt_abstime _idle_start_time{0};
 
-    bool _protections_enabled{true};
+	bool _protections_enabled{true};
 
-    bool _shutting_down{false};
+	bool _shutting_down{false};
 
-    DEFINE_PARAMETERS(
-        (ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
-        (ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
-        (ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
-        (ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current
-    );
+	char _manu_data[32]{0};
+
+	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
+		(ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
+		(ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
+		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current
+	);
 };
