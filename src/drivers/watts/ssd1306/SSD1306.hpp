@@ -43,7 +43,7 @@
 
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/watts_battery_status.h>
-// #include <uORB/topics/shutdown.h>
+#include <uORB/topics/shutdown.h>
 
 #include "ssd1306_fonts.h"
 
@@ -156,7 +156,7 @@ private:
 
 private:
 	uORB::Subscription _battery_sub{ORB_ID(watts_battery_status)};
-	// uORB::Subscription _shutdown_sub{ORB_ID(shutdown)};
+	uORB::Subscription _shutdown_sub{ORB_ID(shutdown)};
 
 	uint8_t* _buffer {nullptr};
 	uint8_t* _buffer2 {nullptr};
@@ -176,4 +176,6 @@ private:
 
 	perf_counter_t _cycle_perf;
 	perf_counter_t _comms_errors;
+
+	bool _shutting_down{false};
 };

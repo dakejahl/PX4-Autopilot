@@ -92,8 +92,20 @@ void SSD1306::RunImpl()
 {
 	perf_begin(_cycle_perf);
 
-	watts_battery_status_s battery;
+	if (_shutting_down) {
+		perf_end(_cycle_perf);
+		return;
+	}
 
+	if (_shutdown_sub.updated()) {
+		// Shut down imminenet, disable OLED
+		resetDisplay();
+		_shutting_down = true;
+		perf_end(_cycle_perf);
+		return;
+	}
+
+	watts_battery_status_s battery;
 	if (_battery_sub.update(&battery)) {
 		updateStatus(battery);
 	}

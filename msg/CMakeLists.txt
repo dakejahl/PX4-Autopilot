@@ -52,7 +52,6 @@ set(msg_files
 	airspeed_wind.msg
 	autotune_attitude_control_status.msg
 	battery_status.msg
-	watts_battery_status.msg
 	button_event.msg
 	camera_capture.msg
 	camera_status.msg
@@ -206,6 +205,8 @@ set(msg_files
 	wheel_encoders.msg
 	wind.msg
 	yaw_estimator_status.msg
+	watts_battery_status.msg
+	shutdown.msg
 )
 
 if(NOT px4_constrained_flash_build)

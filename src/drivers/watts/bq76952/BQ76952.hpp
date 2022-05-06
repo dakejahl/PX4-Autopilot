@@ -43,6 +43,7 @@
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/topics/watts_battery_status.h>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/shutdown.h>
 #include <uORB/PublicationMulti.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 
@@ -83,6 +84,12 @@ using namespace time_literals;
 #define ADDR_PROTECTIONS_B      0x9262 // 1 byte
 #define ADDR_PROTECTIONS_C      0x9263 // 1 byte
 
+#define ADDR_CHG_FET_Protections_A      0x9265 // 1 byte
+#define ADDR_CHG_FET_Protections_B      0x9266 // 1 byte
+#define ADDR_CHG_FET_Protections_C      0x9267 // 1 byte
+#define ADDR_DSG_FET_Protections_A      0x9269 // 1 byte
+#define ADDR_DSG_FET_Protections_B      0x926A // 1 byte
+#define ADDR_DSG_FET_Protections_C      0x926B // 1 byte
 
 // Register Bitmasks
 #define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
@@ -113,8 +120,12 @@ private:
 
     void handle_button();
     void handle_idle_current_detection();
+    void handle_automatic_protections();
+
     bool check_button_held();
     void shutdown();
+
+    void collect_and_publish();
 
     void configure_protections();
     void enable_protections();
@@ -141,7 +152,7 @@ private:
 
     uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
-	// uORB::Publication<battery_status_s>	_battery_status_pub {ORB_ID(battery_status)};
+	uORB::Publication<shutdown_s>	_shutdown_pub {ORB_ID(shutdown)};
     uORB::PublicationMulti<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
 
 	perf_counter_t _cycle_perf;
@@ -151,6 +162,13 @@ private:
     hrt_abstime _pressed_start_time{0};
     bool _button_pressed{false};
     bool _booted{false};
+
+    bool _below_idle_current{false};
+    hrt_abstime _idle_start_time{0};
+
+    bool _protections_enabled{true};
+
+    bool _shutting_down{false};
 
     DEFINE_PARAMETERS(
         (ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,

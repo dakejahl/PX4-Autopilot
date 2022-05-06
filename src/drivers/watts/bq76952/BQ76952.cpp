@@ -75,15 +75,200 @@ void BQ76952::exit_and_cleanup()
 	I2CSPIDriverBase::exit_and_cleanup();
 }
 
-void BQ76952::update_params(const bool force)
+void BQ76952::RunImpl()
 {
-	if (_parameter_update_sub.updated() || force) {
-		// clear update
-		parameter_update_s param_update;
-		_parameter_update_sub.copy(&param_update);
+	if (should_exit()) {
+		PX4_INFO("exiting");
+		return;
+	}
 
-		// update parameters from storage
-		ModuleParams::updateParams();
+	if (_shutting_down) {
+		// Wait until button is released
+		if (px4_arch_gpioread(GPIO_N_BTN)) {
+			shutdown();
+		}
+		return;
+	}
+
+	perf_begin(_cycle_perf);
+
+	update_params();
+
+	// Detect button presses and handle corresponding behavior
+	handle_button();
+	// If drawing a very low amount of power for some amount of time, automatically turn pack off
+	handle_idle_current_detection();
+	// Automatically enable/disable protections
+	handle_automatic_protections();
+
+	// TODO: check if we are armed/disarmed and enable/disable protections
+	bool current_above_threshold = false;
+	if (current_above_threshold) {
+
+	}
+
+	collect_and_publish();
+
+	perf_end(_cycle_perf);
+}
+
+void BQ76952::collect_and_publish()
+{
+	watts_battery_status_s battery_status = {};
+	battery_status.timestamp = hrt_absolute_time();
+
+	int ret = PX4_OK;
+
+	// Read temperature
+	int16_t temperature = {};
+	ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
+	battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+	// PX4_INFO("temperature: %f", double(battery_status.temperature));
+
+	// Read current (centi-amp resolution 327amps +/-)
+	int16_t current = {};
+	ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
+	px4_usleep(50);
+	battery_status.current = (float)current / 100.0f;
+	// PX4_INFO("current: %f", double(battery_status.current_a));
+
+	// Read stack voltage
+	int16_t stack_voltage = {};
+	ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
+	px4_usleep(50);
+	battery_status.voltage = (float)stack_voltage / 100.0f;
+
+	// ignore capacity consumed
+
+	// Read capacity remaining
+	battery_status.capacity_remaining = _bq34->read_remaining_capacity();
+	// PX4_INFO("capacity_remaining (mAh) %lu", capacity_remaining);
+
+	// Read cell voltages
+	int16_t cell_voltages_mv[12] = {};
+	ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
+	px4_usleep(50);
+
+	for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
+		battery_status.cell_voltages[i] = cell_voltages_mv[i] / 1000.0f;
+		// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
+	}
+
+	// Read design capacity
+	battery_status.design_capacity = _bq34->read_design_capacity();
+	// Read actual_capacity
+	battery_status.actual_capacity = _bq34->read_full_charge_capacity();
+	// Read cycle count
+	battery_status.cycle_count = _bq34->read_cycle_count();
+	// Read state of health
+	battery_status.state_of_health = _bq34->read_state_of_health();
+
+	// Read bq76 faults (0x12 Battery Status())
+	// uint32_t status_flags = {};
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	// Publish to uORB
+	_battery_status_pub.publish(battery_status);
+}
+
+void BQ76952::handle_automatic_protections()
+{
+	bool auto_protect = _param_auto_protect.get();
+
+	if (!auto_protect) {
+		return;
+	}
+
+	int16_t data = {};
+	int ret = direct_command(CMD_READ_CC2_CURRENT, &data, sizeof(data));
+
+	if (ret != PX4_OK) {
+		return;
+	}
+
+	float current = (float)data / 100.0f;
+	float protect_current = _param_protect_current.get();
+
+	if (current > protect_current) {
+		if (_protections_enabled) {
+			// Disable protections
+			PX4_INFO("Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
+			_protections_enabled = false;
+		}
+	} else {
+		if (!_protections_enabled) {
+			// Enable protections
+			PX4_INFO("Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
+			_protections_enabled = true;
+		}
+	}
+}
+
+void BQ76952::handle_idle_current_detection()
+{
+	int32_t idle_timeout = _param_idle_timeout.get();
+	if ( idle_timeout == 0) {
+		return;
+	}
+
+	int16_t data = {};
+	int ret = direct_command(CMD_READ_CC2_CURRENT, &data, sizeof(data));
+	float current = (float)data / 100.0f;
+
+	if (ret != PX4_OK) {
+		return;
+	}
+
+	hrt_abstime now = hrt_absolute_time();
+	if (current < _param_idle_current.get()) {
+		if (!_below_idle_current) {
+			_below_idle_current = true;
+			_idle_start_time = now;
+		}
+
+		if (now > _idle_start_time + (hrt_abstime)idle_timeout) {
+			PX4_INFO("Battery has been idle for %lu, shutting down", idle_timeout);
+			// TODO: actually shut down
+			_shutdown_pub.publish(shutdown_s{});
+			_shutting_down = true;
+		}
+
+	} else {
+		_below_idle_current = false;
+	}
+	// 0 disables timeout
+}
+
+void BQ76952::handle_button()
+{
+	if (!_booted) {
+		bool held = check_button_held();
+
+		if (held) {
+			PX4_INFO("Button was held, turning on FETs");
+			_booted = true;
+			enable_fets();
+		}
+
+		// Check if 5 seconds has elapsed, power off
+		if (hrt_absolute_time() > 5_s) {
+			PX4_INFO("Button not held");
+			_shutdown_pub.publish(shutdown_s{});
+			_shutting_down = true;
+		}
+
+	} else {
+		bool held = check_button_held();
+
+		if (held) {
+			PX4_INFO("Button was held, disabling FETs");
+			// Notify shutdown
+			_shutdown_pub.publish(shutdown_s{});
+			_shutting_down = true;
+		}
 	}
 }
 
@@ -116,123 +301,19 @@ void BQ76952::shutdown()
 	PX4_INFO("Good bye!");
 	px4_usleep(50000);
 	stm32_gpiowrite(GPIO_PWR_EN, false);
-	while(1){}; // never exits
+	px4_usleep(50000);
 }
 
-void BQ76952::handle_button()
+void BQ76952::update_params(const bool force)
 {
-	if (!_booted) {
-		bool held = check_button_held();
+	if (_parameter_update_sub.updated() || force) {
+		// clear update
+		parameter_update_s param_update;
+		_parameter_update_sub.copy(&param_update);
 
-		if (held) {
-			PX4_INFO("Button was held, turning on FETs");
-			_booted = true;
-			enable_fets();
-		}
-
-		// Check if 5 seconds has elapsed, power off
-		if (hrt_absolute_time() > 5_s) {
-			PX4_INFO("Button not held");
-			shutdown();
-		}
-
-	} else {
-		bool held = check_button_held();
-
-		if (held) {
-			PX4_INFO("Button was held, disabling FETs and powering down!");
-			shutdown();
-		}
+		// update parameters from storage
+		ModuleParams::updateParams();
 	}
-}
-
-void BQ76952::RunImpl()
-{
-	if (should_exit()) {
-		PX4_INFO("exiting");
-		return;
-	}
-
-	perf_begin(_cycle_perf);
-
-	update_params();
-
-	// Detect button presses and handle corresponding behavior
-	handle_button();
-	// If drawing a very low amount of power for some amount of time, automatically turn pack off
-	handle_idle_current_detection();
-
-	// TODO: check if we are armed/disarmed and enable/disable protections
-	bool current_above_threshold = false;
-	if (current_above_threshold) {
-
-	}
-
-	// Collect data and publish on uORB --> UAVCAN
-	{
-		watts_battery_status_s battery_status = {};
-		battery_status.timestamp = hrt_absolute_time();
-
-		int ret = PX4_OK;
-
-
-		// Read temperature
-		int16_t temperature = {};
-		ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
-		battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
-		// PX4_INFO("temperature: %f", double(battery_status.temperature));
-
-		// Read current (centi-amp resolution 327amps +/-)
-		int16_t current = {};
-		ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
-		px4_usleep(50);
-		battery_status.current = (float)current / 100.0f;
-		// PX4_INFO("current: %f", double(battery_status.current_a));
-
-		// Read stack voltage
-		int16_t stack_voltage = {};
-		ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
-		px4_usleep(50);
-		battery_status.voltage = (float)stack_voltage / 100.0f;
-
-		// ignore capacity consumed
-
-		// Read capacity remaining
-		battery_status.capacity_remaining = _bq34->read_remaining_capacity();
-		// PX4_INFO("capacity_remaining (mAh) %lu", capacity_remaining);
-
-		// Read cell voltages
-		int16_t cell_voltages_mv[12] = {};
-		ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
-		px4_usleep(50);
-
-		for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
-			battery_status.cell_voltages[i] = cell_voltages_mv[i] / 1000.0f;
-			// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
-		}
-
-		// Read design capacity
-		battery_status.design_capacity = _bq34->read_design_capacity();
-		// Read actual_capacity
-		battery_status.actual_capacity = _bq34->read_full_charge_capacity();
-		// Read cycle count
-		battery_status.cycle_count = _bq34->read_cycle_count();
-		// Read state of health
-		battery_status.state_of_health = _bq34->read_state_of_health();
-
-
-		// Read bq76 faults (0x12 Battery Status())
-
-
-		if (ret != PX4_OK) {
-			perf_count(_comms_errors);
-		}
-
-		// Publish to uORB
-		_battery_status_pub.publish(battery_status);
-	}
-
-	perf_end(_cycle_perf);
 }
 
 void BQ76952::print_usage()
@@ -307,8 +388,10 @@ int BQ76952::init()
 	uint16_t mfg_status_flags = sub_command_response16(0);
 	print_mfg_status_flags(mfg_status_flags);
 
-	// Enable the outputs
-	// enable_fets();
+	// Configure protections
+	configure_protections();
+	// enable_protections();
+	disable_protections();
 
 	// Enable the BQ34
 	_bq34 = new BQ34Z100();
@@ -346,16 +429,19 @@ void BQ76952::configure_protections()
 		byte |= 1 << 7;
 
 		// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
+		// byte |= 1 << 6;
 
 		// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
+		// byte |= 1 << 5;
 
 		// 4 OCC 0 Overcurrent in Charge Protection
+		// byte |= 1 << 4;
 
 		// 3 COV 1 Cell Overvoltage Protection
 		byte |= 1 << 3;
 
 		// 2 CUV 0 Cell Undervoltage Protection
-		byte |= 1 << 2;
+		// byte |= 1 << 2;
 
 		write_memory8(ADDR_PROTECTIONS_A, byte);
 	}
@@ -365,18 +451,26 @@ void BQ76952::configure_protections()
 		uint8_t byte = {};
 
 		// 7 OTF 0 FET Overtemperature
+		// byte |= 1 << 7;
 
 		// 6 OTINT 0 Internal Overtemperature
+		// byte |= 1 << 6;
 
 		// 5 OTD 0 Overtemperature in Discharge
+		// byte |= 1 << 5;
 
 		// 4 OTC 0 Overtemperature in Charge
+		// byte |= 1 << 4;
 
 		// 2 UTINT 0 Internal Undertemperature
+		// byte |= 1 << 2;
 
 		// 1 UTD 0 Undertemperature in Discharge
+		// byte |= 1 << 1;
 
 		// 0 UTC 0 Undertemperature in Charge
+		// byte |= 1 << 0;
+
 		write_memory8(ADDR_PROTECTIONS_B, byte);
 	}
 
@@ -385,11 +479,23 @@ void BQ76952::configure_protections()
 		uint8_t byte = {};
 
 		// 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
+		// byte |= 1 << 7;
+
 		// 6 SCDL 0 Short Circuit in Discharge Latch
+		// byte |= 1 << 6;
+
 		// 5 OCDL 0 Overcurrent in Discharge Latch
+		// byte |= 1 << 5;
+
 		// 4 COVL 0 Cell Overvoltage Latch
+		// byte |= 1 << 4;
+
 		// 2 PTO 0 Precharge Timeout
+		// byte |= 1 << 2;
+
 		// 1 HWDF 0 Host Watchdog Fault
+		// byte |= 1 << 1;
+
 		write_memory8(ADDR_PROTECTIONS_C, byte);
 	}
 
@@ -398,19 +504,94 @@ void BQ76952::configure_protections()
 
 void BQ76952::enable_protections()
 {
+	// CHG FET Protections A
+	{
+		uint8_t byte = {};
 
+		// 7 SCD 1 Short Circuit in Discharge Protection
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 7);
+
+		// 4 OCC 1 Overcurrent in Charge Protection
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 4);
+
+		// 3 COV 1 Cell Overvoltage Protection
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 3);
+
+		write_memory8(ADDR_CHG_FET_Protections_A, byte);
+	}
+
+	// CHG FET Protections B
+	{
+		uint8_t byte = {};
+
+		// 7 OTF 1 FET Overtemperature
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 7);
+
+		// 6 OTINT 1 Internal Overtemperature
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 6);
+
+		// 4 OTC 1 Overtemperature in Charge
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 4);
+
+		// 2 UTINT 1 Internal Undertemperature
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 2);
+
+		// 0 UTC 1 Undertemperature in Charge
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 0);
+
+		write_memory8(ADDR_CHG_FET_Protections_B, byte);
+	}
+
+	// CHG FET Protections C
+	{
+		uint8_t byte = {};
+
+		// 6 SCDL 1 Short Circuit in Discharge Latch
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (6 << 0);
+
+		// 4 COVL 1 Cell Overvoltage Latch
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (4 << 0);
+
+		// 2 PTO 1 Precharge Timeout
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (2 << 0);
+
+		// 1 HWDF 1 Host Watchdog Fault
+		// 		0 = CHG FET is not disabled when protection is triggered.
+		// 		1 = CHG FET is disabled when protection is triggered.
+		byte |= (1 << 0);
+
+		write_memory8(ADDR_CHG_FET_Protections_C, byte);
+	}
 }
 
 void BQ76952::disable_protections()
 {
-
-}
-
-void BQ76952::handle_idle_current_detection()
-{
-	// TODO:
-
-	// 0 disables timeout
+	uint8_t byte = {};
+	write_memory8(ADDR_CHG_FET_Protections_A, byte);
+	write_memory8(ADDR_CHG_FET_Protections_B, byte);
+	write_memory8(ADDR_CHG_FET_Protections_C, byte);
 }
 
 void BQ76952::print_mfg_status_flags(uint16_t status)
