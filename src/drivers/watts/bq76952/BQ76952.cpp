@@ -54,6 +54,7 @@
 
 BQ76952::BQ76952(const I2CSPIDriverConfig &config) :
 	I2C(config),
+	ModuleParams(nullptr),
 	I2CSPIDriver(config),
 	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
 	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
@@ -72,6 +73,18 @@ BQ76952::~BQ76952()
 void BQ76952::exit_and_cleanup()
 {
 	I2CSPIDriverBase::exit_and_cleanup();
+}
+
+void BQ76952::update_params(const bool force)
+{
+	if (_parameter_update_sub.updated() || force) {
+		// clear update
+		parameter_update_s param_update;
+		_parameter_update_sub.copy(&param_update);
+
+		// update parameters from storage
+		ModuleParams::updateParams();
+	}
 }
 
 bool BQ76952::check_button_held()
@@ -142,7 +155,12 @@ void BQ76952::RunImpl()
 
 	perf_begin(_cycle_perf);
 
+	update_params();
+
+	// Detect button presses and handle corresponding behavior
 	handle_button();
+	// If drawing a very low amount of power for some amount of time, automatically turn pack off
+	handle_idle_current_detection();
 
 	// TODO: check if we are armed/disarmed and enable/disable protections
 	bool current_above_threshold = false;
@@ -248,6 +266,8 @@ int BQ76952::init()
 		return ret;
 	}
 
+	update_params(true);
+
 	// First disable LDOs if they are enabled
 	uint8_t value = 0b00001100;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
@@ -308,6 +328,91 @@ int BQ76952::init()
 	return PX4_OK;
 }
 
+void BQ76952::configure_protections()
+{
+	// ADDR_PROTECTION_CONFIG
+	// SCDL_CURR_RECOV -- 1 = SCDL recovers when current is greater than or equal to Protections:SCDL:RecoveryTime.
+	// OCDL_CURR_RECOV -- 1 = OCDL recovers when current is greater than or equal to Protections:OCDL:RecoveryTime
+	// PF_OTP -- If this bit is not set, Permanent Failure status will be lost on any reset
+
+	// 	The individual protections can be enabled by setting the related Settings:Protection:Enabled Protections
+	//  A – C configuration registers.
+
+	// Settings:Protection:Enabled Protections A
+	{
+		uint8_t byte = {};
+
+		// 7 SCD 1 Short Circuit in Discharge Protection
+		byte |= 1 << 7;
+
+		// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
+
+		// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
+
+		// 4 OCC 0 Overcurrent in Charge Protection
+
+		// 3 COV 1 Cell Overvoltage Protection
+		byte |= 1 << 3;
+
+		// 2 CUV 0 Cell Undervoltage Protection
+		byte |= 1 << 2;
+
+		write_memory8(ADDR_PROTECTIONS_A, byte);
+	}
+
+	// Settings:Protection:Enabled Protections B
+	{
+		uint8_t byte = {};
+
+		// 7 OTF 0 FET Overtemperature
+
+		// 6 OTINT 0 Internal Overtemperature
+
+		// 5 OTD 0 Overtemperature in Discharge
+
+		// 4 OTC 0 Overtemperature in Charge
+
+		// 2 UTINT 0 Internal Undertemperature
+
+		// 1 UTD 0 Undertemperature in Discharge
+
+		// 0 UTC 0 Undertemperature in Charge
+		write_memory8(ADDR_PROTECTIONS_B, byte);
+	}
+
+	// Settings:Protection:Enabled Protections C
+	{
+		uint8_t byte = {};
+
+		// 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
+		// 6 SCDL 0 Short Circuit in Discharge Latch
+		// 5 OCDL 0 Overcurrent in Discharge Latch
+		// 4 COVL 0 Cell Overvoltage Latch
+		// 2 PTO 0 Precharge Timeout
+		// 1 HWDF 0 Host Watchdog Fault
+		write_memory8(ADDR_PROTECTIONS_C, byte);
+	}
+
+	// Settings:Manufacturing:Mfg Status Init[FET_EN] -- autonomous control mode?
+}
+
+void BQ76952::enable_protections()
+{
+
+}
+
+void BQ76952::disable_protections()
+{
+
+}
+
+void BQ76952::handle_idle_current_detection()
+{
+	// TODO:
+
+	// 0 disables timeout
+}
+
 void BQ76952::print_mfg_status_flags(uint16_t status)
 {
 	PX4_INFO("mfg status: 0x%x", status);
@@ -329,42 +434,6 @@ void BQ76952::disable_fets()
 	px4_usleep(500);
 }
 
-int BQ76952::enter_config_update_mode()
-{
-	// Enter config udpate mode if not already in it and report status
-	uint8_t buf[2] = {};
-	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	px4_usleep(50);
-	if (!(buf[0] & 0x01)) {
-		sub_command(CMD_SET_CFGUPDATE, nullptr, 0);
-		px4_usleep(4000); // 2000us time to complete operation
-		direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-		px4_usleep(50);
-		if (buf[0] & 0x01) {
-			return PX4_OK;
-		}
-	} else {
-		// Already in config update mode
-		return PX4_OK;
-	}
-
-	return PX4_ERROR;
-}
-
-int BQ76952::exit_config_update_mode()
-{
-	sub_command(CMD_EXIT_CFG_UPDATE, nullptr, 0);
-	px4_usleep(2000); // 1000us time to complete operation
-
-	uint8_t buf[2] = {};
-	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	px4_usleep(50);
-	if (!(buf[0] & 0x01)) {
-		return PX4_OK;
-	}
-	return PX4_ERROR;
-}
-
 int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 {
 	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
@@ -382,14 +451,14 @@ int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 	uint8_t checksum = 0;
 	// Send the data
 	{
-		uint8_t buf[5] = {};
+		uint8_t buf[4] = {};
 		buf[0] = CMD_ADDR_SUBCMD_LOW;
 		buf[1] = uint8_t(addr & 0x00FF);
 		buf[2] = uint8_t((addr >> 8) & 0x00FF);
 		buf[3] = data;
 
 		transfer(buf, sizeof(buf), nullptr, 0);
-		for (size_t i = 1; i < 3 + 2; i++) {
+		for (size_t i = 1; i < sizeof(buf); i++) {
 			checksum += buf[i];
 		}
 	}
@@ -432,7 +501,7 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 		buf[4] = uint8_t((data >> 8) & 0x00FF);
 
 		transfer(buf, sizeof(buf), nullptr, 0);
-		for (size_t i = 1; i < 3 + 2; i++) {
+		for (size_t i = 1; i < sizeof(buf); i++) {
 			checksum += buf[i];
 		}
 	}
@@ -449,6 +518,42 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 	exit_config_update_mode();
 
 	return PX4_OK;
+}
+
+int BQ76952::enter_config_update_mode()
+{
+	// Enter config udpate mode if not already in it and report status
+	uint8_t buf[2] = {};
+	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+	px4_usleep(50);
+	if (!(buf[0] & 0x01)) {
+		sub_command(CMD_SET_CFGUPDATE, nullptr, 0);
+		px4_usleep(4000); // 2000us time to complete operation
+		direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+		px4_usleep(50);
+		if (buf[0] & 0x01) {
+			return PX4_OK;
+		}
+	} else {
+		// Already in config update mode
+		return PX4_OK;
+	}
+
+	return PX4_ERROR;
+}
+
+int BQ76952::exit_config_update_mode()
+{
+	sub_command(CMD_EXIT_CFG_UPDATE, nullptr, 0);
+	px4_usleep(2000); // 1000us time to complete operation
+
+	uint8_t buf[2] = {};
+	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+	px4_usleep(50);
+	if (!(buf[0] & 0x01)) {
+		return PX4_OK;
+	}
+	return PX4_ERROR;
 }
 
 int BQ76952::direct_command(uint8_t command, void* rx_buf, size_t rx_len)
@@ -490,3 +595,51 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 // 	memcpy(buffer + 1, buf, sizeof(uint8_t)*len);
 // 	return transfer(buffer, len + 1, nullptr, 0);
 // }
+
+void BQ76952::custom_method(const BusCLIArguments &cli)
+{
+	switch(cli.custom1) {
+		case 1:
+			PX4_INFO("custom command 1");
+			break;
+		default:
+			break;
+	}
+}
+
+extern "C" int bq76952_main(int argc, char *argv[])
+{
+	using ThisDriver = BQ76952;
+	BusCLIArguments cli{true, false};
+	cli.default_i2c_frequency = 400000;
+	cli.i2c_address = 0x08;
+
+	const char *verb = cli.parseDefaultArguments(argc, argv);
+
+	if (!verb) {
+		ThisDriver::print_usage();
+		return -1;
+	}
+
+	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_BQ76952);
+
+	if (!strcmp(verb, "start")) {
+		return ThisDriver::module_start(cli, iterator);
+	}
+
+	if (!strcmp(verb, "stop")) {
+		return ThisDriver::module_stop(iterator);
+	}
+
+	if (!strcmp(verb, "status")) {
+		return ThisDriver::module_status(iterator);
+	}
+
+	if (!strcmp(verb, "custom_command")) {
+		cli.custom1 = 1;
+		return ThisDriver::module_custom_method(cli, iterator);
+	}
+
+	ThisDriver::print_usage();
+	return -1;
+}

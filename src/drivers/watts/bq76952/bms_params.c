@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2020, 2021 PX4 Development Team. All rights reserved.
+ *   Copyright (C) 2014-2020 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,53 +31,41 @@
  *
  ****************************************************************************/
 
+/**
+ * Enable automatic protection control.
+ *
+ * System will disable protections when current rises above PROTECT_CURRENT.
+ * @min 0
+ * @max 1
+ *
+ * @group UAVCAN
+ */
+PARAM_DEFINE_INT32(AUTO_PROTECT, 0);
 
-#include "BQ76952.hpp"
+/**
+ * Current threshold to exceed for system to automatically disable protections.
+ *
+ * System will disable protections when current rises above PROTECT_CURRENT.
+ *
+ * @group UAVCAN
+ */
+PARAM_DEFINE_FLOAT(PROTECT_CURRENT, 5.0f);
 
-void BQ76952::custom_method(const BusCLIArguments &cli)
-{
-	switch(cli.custom1) {
-		case 1:
-			PX4_INFO("custom command 1");
-			break;
-		default:
-			break;
-	}
-}
+/**
+ * Timeout (s) after which the battery pack will turn itself off if current falls below IDLE_CURRENT.
+ *
+ * 0 disabled
+ *
+ * @min 0
+ * @max 1800
+ *
+ * @group UAVCAN
+ */
+PARAM_DEFINE_INT32(IDLE_TIMEOUT, 300);
 
-extern "C" int bq76952_main(int argc, char *argv[])
-{
-	using ThisDriver = BQ76952;
-	BusCLIArguments cli{true, false};
-	cli.default_i2c_frequency = 400000;
-	cli.i2c_address = 0x08;
-
-	const char *verb = cli.parseDefaultArguments(argc, argv);
-
-	if (!verb) {
-		ThisDriver::print_usage();
-		return -1;
-	}
-
-	BusInstanceIterator iterator(MODULE_NAME, cli, DRV_DEVTYPE_BQ76952);
-
-	if (!strcmp(verb, "start")) {
-		return ThisDriver::module_start(cli, iterator);
-	}
-
-	if (!strcmp(verb, "stop")) {
-		return ThisDriver::module_stop(iterator);
-	}
-
-	if (!strcmp(verb, "status")) {
-		return ThisDriver::module_status(iterator);
-	}
-
-	if (!strcmp(verb, "custom_command")) {
-		cli.custom1 = 1;
-		return ThisDriver::module_custom_method(cli, iterator);
-	}
-
-	ThisDriver::print_usage();
-	return -1;
-}
+/**
+ * Current (A) threshold below which system will automatically turn itself off.
+ *
+ * @group UAVCAN
+ */
+PARAM_DEFINE_FLOAT(IDLE_CURRENT, 0.25f);

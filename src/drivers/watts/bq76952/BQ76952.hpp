@@ -39,9 +39,12 @@
 #include <lib/perf/perf_counter.h>
 #include <lib/geo/geo.h>
 #include <px4_platform_common/module.h>
+#include <px4_platform_common/module_params.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/topics/watts_battery_status.h>
+#include <uORB/topics/parameter_update.h>
 #include <uORB/PublicationMulti.hpp>
+#include <uORB/SubscriptionInterval.hpp>
 
 #include "BQ34Z100.hpp"
 
@@ -75,11 +78,17 @@ using namespace time_literals;
 #define ADDR_REG0 			0x9237
 #define ADDR_DA_CONFIG      0x9303
 
+#define ADDR_PROTECTION_CONFIG  0x925F // 2 byte
+#define ADDR_PROTECTIONS_A      0x9261 // 1 byte
+#define ADDR_PROTECTIONS_B      0x9262 // 1 byte
+#define ADDR_PROTECTIONS_C      0x9263 // 1 byte
+
+
 // Register Bitmasks
 #define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
 #define REG1_ENABLE_3v3 0b00001101
 
-class BQ76952 : public device::I2C, public I2CSPIDriver<BQ76952>
+class BQ76952 : public device::I2C, public ModuleParams, public I2CSPIDriver<BQ76952>
 {
 public:
 	BQ76952(const I2CSPIDriverConfig &config);
@@ -94,27 +103,27 @@ public:
 	void custom_method(const BusCLIArguments &cli) override;
 
 protected:
-
 	void print_status() override;
-
 	void exit_and_cleanup() override;
 
 private:
 
     int probe() override;
-
+    void update_params(const bool force = false);
 
     void handle_button();
+    void handle_idle_current_detection();
     bool check_button_held();
-
     void shutdown();
 
+    void configure_protections();
+    void enable_protections();
+    void disable_protections();
 
     void enable_fets();
     void disable_fets();
 
     void print_mfg_status_flags(uint16_t status);
-
 
 	int enter_config_update_mode();
 	int exit_config_update_mode();
@@ -130,6 +139,8 @@ private:
 
     BQ34Z100* _bq34 {nullptr};
 
+    uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+
 	// uORB::Publication<battery_status_s>	_battery_status_pub {ORB_ID(battery_status)};
     uORB::PublicationMulti<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
 
@@ -140,4 +151,11 @@ private:
     hrt_abstime _pressed_start_time{0};
     bool _button_pressed{false};
     bool _booted{false};
+
+    DEFINE_PARAMETERS(
+        (ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
+        (ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
+        (ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
+        (ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current
+    );
 };
