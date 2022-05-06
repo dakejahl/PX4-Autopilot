@@ -44,6 +44,7 @@
 #include <uORB/topics/watts_battery_status.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/shutdown.h>
+#include <uORB/topics/button_pressed.h>
 #include <uORB/PublicationMulti.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 
@@ -98,6 +99,8 @@ using namespace time_literals;
 #define ADDR_DSG_FET_Protections_B      0x926A // 1 byte
 #define ADDR_DSG_FET_Protections_C      0x926B // 1 byte
 
+#define ADDR_MFG_STATUS_INIT 0x9343
+
 // Register Bitmasks
 #define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
 #define REG1_ENABLE_3v3 0b00001101
@@ -150,27 +153,32 @@ private:
 	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
 	int sub_command(uint16_t command, void* tx_buf, size_t tx_len);
 	uint16_t sub_command_response16(uint8_t offset);
+	uint8_t read_memory8(uint16_t addr);
+	uint16_t read_memory16(uint16_t addr);
+
 	int write_memory8(uint16_t addr, uint8_t data);
 	int write_memory16(uint16_t addr, uint16_t data);
 	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
 	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);
 private:
-	static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
+	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
 
-	BQ34Z100* _bq34 {nullptr};
+	BQ34Z100* _bq34{nullptr};
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
-	uORB::Publication<shutdown_s>   _shutdown_pub {ORB_ID(shutdown)};
+	uORB::Publication<shutdown_s> _shutdown_pub{ORB_ID(shutdown)};
+	uORB::Publication<button_pressed_s>	_button_pressed_pub{ORB_ID(button_pressed)};
 	uORB::PublicationMulti<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
 
-	perf_counter_t _cycle_perf;
-	perf_counter_t _comms_errors;
+	perf_counter_t _cycle_perf{};
+	perf_counter_t _comms_errors{};
 
 	// State variables
 	hrt_abstime _pressed_start_time{0};
 	bool _button_pressed{false};
 	bool _booted{false};
+	bool _booted_button_held{true};
 
 	bool _below_idle_current{false};
 	hrt_abstime _idle_start_time{0};

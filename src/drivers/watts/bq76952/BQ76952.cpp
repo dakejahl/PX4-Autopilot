@@ -128,14 +128,14 @@ void BQ76952::collect_and_publish()
 	// Read current (centi-amp resolution 327amps +/-)
 	int16_t current = {};
 	ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
-	px4_usleep(50);
+	px4_usleep(1_ms);
 	battery_status.current = (float)current / 100.0f;
 	// PX4_INFO("current: %f", double(battery_status.current_a));
 
 	// Read stack voltage
 	int16_t stack_voltage = {};
 	ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
-	px4_usleep(50);
+	px4_usleep(1_ms);
 	battery_status.voltage = (float)stack_voltage / 100.0f;
 
 	// ignore capacity consumed
@@ -147,7 +147,7 @@ void BQ76952::collect_and_publish()
 	// Read cell voltages
 	int16_t cell_voltages_mv[12] = {};
 	ret |= direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
-	px4_usleep(50);
+	px4_usleep(1_ms);
 
 	for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
 		battery_status.cell_voltages[i] = cell_voltages_mv[i] / 1000.0f;
@@ -382,6 +382,7 @@ void BQ76952::handle_button()
 		if (held) {
 			PX4_INFO("Button was held, enabling FETs");
 			_booted = true;
+			_booted_button_held = true;
 			enable_fets();
 		}
 
@@ -390,6 +391,13 @@ void BQ76952::handle_button()
 			PX4_INFO("Button not held");
 			_shutdown_pub.publish(shutdown_s{});
 			_shutting_down = true;
+		}
+
+	} else if (_booted && _booted_button_held) {
+		// We must make sure the button is released before we start monitoring for shutdown / screen toggle
+		if (px4_arch_gpioread(GPIO_N_BTN)) {
+			PX4_INFO("button released after boot");
+			_booted_button_held = false;
 		}
 
 	} else {
@@ -422,6 +430,16 @@ bool BQ76952::check_button_held()
 			return true;
 		}
 	} else {
+
+		// Button was previously pressed, check for how long
+		if (_button_pressed) {
+			hrt_abstime duration = now - _pressed_start_time;
+			if (duration > 10_ms) {
+				PX4_INFO("Button pressed for %f seconds", double((float)duration/1e6f));
+				_button_pressed_pub.publish(button_pressed_s{});
+			}
+		}
+
 		_button_pressed = false;
 	}
 
@@ -432,9 +450,9 @@ void BQ76952::shutdown()
 {
 	disable_fets();
 	PX4_INFO("Good bye!");
-	px4_usleep(50000);
+	px4_usleep(50_ms);
 	stm32_gpiowrite(GPIO_PWR_EN, false);
-	px4_usleep(50000);
+	px4_usleep(50_ms);
 }
 
 void BQ76952::update_params(const bool force)
@@ -492,7 +510,7 @@ int BQ76952::init()
 	// First disable LDOs if they are enabled
 	uint8_t value = 0b00001100;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(450);
+	px4_usleep(1_ms);
 
 	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
 
@@ -520,13 +538,14 @@ int BQ76952::init()
 	// Enable LDO at REG1
 	value = 0b00001101;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(450);
+	px4_usleep(5_ms);
 
 	// Check Manufacturing Status register
-	sub_command(CMD_MFG_STATUS, 0, 0);
-	px4_usleep(605);
-	uint16_t mfg_status_flags = sub_command_response16(0);
-	print_mfg_status_flags(mfg_status_flags);
+	// sub_command(CMD_MFG_STATUS, 0, 0);
+	// px4_usleep(5_ms);
+	// uint16_t mfg_status_flags = sub_command_response16(0);
+	uint16_t status = read_memory16(ADDR_MFG_STATUS_INIT);
+	print_mfg_status_flags(status);
 
 	// Configure protections
 	disable_protections();
@@ -753,19 +772,55 @@ void BQ76952::print_mfg_status_flags(uint16_t status)
 
 void BQ76952::enable_fets()
 {
-	px4_usleep(5000);
+	px4_usleep(5_ms);
 	sub_command(CMD_FET_ENABLE, 0, 0);
-	px4_usleep(5000);
+	px4_usleep(5_ms);
 	sub_command(CMD_ALL_FETS_ON, 0, 0);
-	px4_usleep(5000);
+	px4_usleep(5_ms);
 }
 
 void BQ76952::disable_fets()
 {
 	sub_command(CMD_FET_ENABLE, 0, 0);
-	px4_usleep(500);
+	px4_usleep(5_ms);
 	sub_command(CMD_ALL_FETS_OFF, 0, 0);
-	px4_usleep(500);
+	px4_usleep(5_ms);
+}
+
+uint8_t BQ76952::read_memory8(uint16_t addr)
+{
+	uint8_t buf[3] = {};
+	buf[0] = CMD_ADDR_SUBCMD_LOW;
+	buf[1] = addr & 0xFF;
+	buf[2] = (addr >> 8) & 0xFF;
+
+	uint8_t data = 0;
+	int ret = transfer(buf, sizeof(buf), &data, sizeof(data));
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	return data;
+}
+
+uint16_t BQ76952::read_memory16(uint16_t addr)
+{
+	uint8_t buf[3] = {};
+	buf[0] = CMD_ADDR_SUBCMD_LOW;
+	buf[1] = addr & 0xFF;
+	buf[2] = (addr >> 8) & 0xFF;
+
+	uint16_t data = 0;
+	// int ret = transfer(buf, sizeof(buf), (uint8_t*)&data, sizeof(data));
+	int ret = transfer(buf, sizeof(buf), nullptr, 0);
+	px4_usleep(5_ms);
+	ret = transfer(nullptr, 0, (uint8_t*)&data, sizeof(data));
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	return data;
 }
 
 int BQ76952::write_memory8(uint16_t addr, uint8_t data)
@@ -867,12 +922,12 @@ int BQ76952::enter_config_update_mode()
 	// Enter config udpate mode if not already in it and report status
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	px4_usleep(50);
+	px4_usleep(1_ms);
 	if (!(buf[0] & 0x01)) {
 		sub_command(CMD_SET_CFGUPDATE, nullptr, 0);
-		px4_usleep(4000); // 2000us time to complete operation
+		px4_usleep(5_ms); // 2000us time to complete operation
 		direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-		px4_usleep(50);
+		px4_usleep(5_ms);
 		if (buf[0] & 0x01) {
 			return PX4_OK;
 		}
@@ -887,11 +942,11 @@ int BQ76952::enter_config_update_mode()
 int BQ76952::exit_config_update_mode()
 {
 	sub_command(CMD_EXIT_CFG_UPDATE, nullptr, 0);
-	px4_usleep(2000); // 1000us time to complete operation
+	px4_usleep(2_ms); // 1000us time to complete operation
 
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	px4_usleep(50);
+	px4_usleep(5_ms);
 	if (!(buf[0] & 0x01)) {
 		return PX4_OK;
 	}
@@ -910,7 +965,7 @@ int BQ76952::direct_command(uint8_t command, void* rx_buf, size_t rx_len)
 int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 {
 	uint8_t buf[3 + tx_len] = {};
-	buf[0] = 0x3E;
+	buf[0] = CMD_ADDR_SUBCMD_LOW;
 	buf[1] = uint8_t(command & 0x00FF);
 	buf[2] = uint8_t((command >> 8) & 0x00FF);
 	memcpy(buf + 3, (uint8_t*)tx_buf, tx_len);
@@ -933,7 +988,9 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 		perf_count(_comms_errors);
 	}
 
-	return (buf[0] << 8) | buf[1];
+	return (buf[1] << 8) | buf[0];
+
+	// return (buf[0] << 8) | buf[1];
 }
 
 

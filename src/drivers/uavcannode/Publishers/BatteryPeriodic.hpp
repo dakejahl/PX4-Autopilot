@@ -34,24 +34,25 @@
 #pragma once
 
 #include "UavcanPublisherBase.hpp"
-#include <ardupilot/equipment/power/SmartBatteryContinuous.hpp>
+#include <ardupilot/equipment/power/SmartBatteryPeriodic.hpp>
 
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/topics/watts_battery_status.h>
+#include <drivers/drv_hrt.h>
 
 namespace uavcannode
 {
 
-class BatteryInfo :
+class BatteryPeriodic :
 	public UavcanPublisherBase,
 	private uORB::SubscriptionCallbackWorkItem,
-	private uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>
+	private uavcan::Publisher<ardupilot::equipment::power::SmartBatteryPeriodic>
 {
 public:
-	BatteryInfo(px4::WorkItem *work_item, uavcan::INode &node) :
-		UavcanPublisherBase(ardupilot::equipment::power::SmartBatteryContinuous::DefaultDataTypeID),
+	BatteryPeriodic(px4::WorkItem *work_item, uavcan::INode &node) :
+		UavcanPublisherBase(ardupilot::equipment::power::SmartBatteryPeriodic::DefaultDataTypeID),
 		uORB::SubscriptionCallbackWorkItem(work_item, ORB_ID(watts_battery_status)),
-		uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>(node)
+		uavcan::Publisher<ardupilot::equipment::power::SmartBatteryPeriodic>(node)
 	{
 		this->setPriority(uavcan::TransferPriority::MiddleLower);
 	}
@@ -61,46 +62,41 @@ public:
 		if (uORB::SubscriptionCallbackWorkItem::advertised()) {
 			printf("\t%s -> %s:%d\n",
 			       uORB::SubscriptionCallbackWorkItem::get_topic()->o_name,
-			       ardupilot::equipment::power::SmartBatteryContinuous::getDataTypeFullName(),
-			       ardupilot::equipment::power::SmartBatteryContinuous::DefaultDataTypeID);
+			       ardupilot::equipment::power::SmartBatteryPeriodic::getDataTypeFullName(),
+			       ardupilot::equipment::power::SmartBatteryPeriodic::DefaultDataTypeID);
 		}
 	}
 
 	void BroadcastAnyUpdates() override
 	{
-		// battery_status -> ardupilot::equipment::power::SmartBatteryContinuous
-		watts_battery_status_s status;
+		static constexpr hrt_abstime BROADCAST_INTERVAL = 500000; // 2hz
+		hrt_abstime now = hrt_absolute_time();
 
-		// Iterate over the watts_battery_status subscriptions and check that both are updated to send
+		if (now - _last_broadcast_time > BROADCAST_INTERVAL) {
 
-		if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
-			// Only handle Continuous data for now TODO: FIXME
-			// if (status.id != 1) {
-			// 	return;
-			// }
+			watts_battery_status_s status;
+			if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
 
-			ardupilot::equipment::power::SmartBatteryContinuous battery = {};
-			battery.temperature = status.temperature; // float16
-			battery.current = status.current; // float16
-			battery.voltage = status.voltage; // float16
-			battery.capacity_consumed = status.capacity_consumed;
-			// battery.remaining = status.remaining; // uint8
-			// battery.percent_remaining = 55; // uint8
-			battery.status_flags = 77; // uint8
+				ardupilot::equipment::power::SmartBatteryPeriodic battery = {};
+
+				battery.design_capacity = 0;
+				battery.actual_capacity = 0;
+				battery.cycle_count = 0;
+				battery.state_of_health_pct = 0;
+
+				battery.name = "WATTS";
+				battery.serial_number = "123456";
+				battery.manufacture_date = "5_6_2022";
 
 
-			// if (battery.current > 0.0f) {
-			// 	battery.status = ardupilot::equipment::power::SmartBatteryContinuous::STATUS_FLAG_CHARGING;
+				uavcan::Publisher<ardupilot::equipment::power::SmartBatteryPeriodic>::broadcast(battery);
 
-			// } else {
-			// 	battery.status = ardupilot::equipment::power::SmartBatteryContinuous::STATUS_FLAG_IN_USE;
-			// }
-
-			uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>::broadcast(battery);
-
-			// ensure callback is registered
-			uORB::SubscriptionCallbackWorkItem::registerCallback();
+				// ensure callback is registered
+				uORB::SubscriptionCallbackWorkItem::registerCallback();
+			}
 		}
 	}
+private:
+	hrt_abstime _last_broadcast_time{0};
 };
 } // namespace uavcan

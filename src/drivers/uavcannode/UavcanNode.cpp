@@ -40,7 +40,6 @@
 #include <lib/geo/geo.h>
 #include <lib/version/version.h>
 
-#include "Publishers/BatteryInfo.hpp"
 #include "Publishers/FlowMeasurement.hpp"
 #include "Publishers/GnssFix2.hpp"
 #include "Publishers/MagneticFieldStrength2.hpp"
@@ -51,6 +50,8 @@
 #include "Publishers/SafetyButton.hpp"
 #include "Publishers/StaticPressure.hpp"
 #include "Publishers/StaticTemperature.hpp"
+#include "Publishers/BatteryPeriodic.hpp"
+#include "Publishers/BatteryContinuous.hpp"
 
 #include "Subscribers/BeepCommand.hpp"
 #include "Subscribers/LightsCommand.hpp"
@@ -300,7 +301,8 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 	}
 
 	// TODO: make runtime (and build time?) configurable
-	_publisher_list.add(new BatteryInfo(this, _node));
+	_publisher_list.add(new BatteryPeriodic(this, _node));
+	_publisher_list.add(new BatteryContinuous(this, _node));
 	_publisher_list.add(new FlowMeasurement(this, _node));
 	_publisher_list.add(new GnssFix2(this, _node));
 	_publisher_list.add(new MagneticFieldStrength2(this, _node));

@@ -207,6 +207,7 @@ set(msg_files
 	yaw_estimator_status.msg
 	watts_battery_status.msg
 	shutdown.msg
+	button_pressed.msg
 )
 
 if(NOT px4_constrained_flash_build)

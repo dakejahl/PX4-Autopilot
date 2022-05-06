@@ -77,11 +77,10 @@ int SSD1306::init()
 		}
 	}
 
-	usleep(10000);
+	usleep(10_ms);
 	sendInitCommands();
 	resetDisplay();
-
-	usleep(10000);
+	usleep(10_ms);
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
@@ -105,9 +104,49 @@ void SSD1306::RunImpl()
 		return;
 	}
 
+	bool button_pressed = false;
+	button_pressed_s button = {};
+	if (_button_pressed_sub.update(&button)) {
+		button_pressed = true;
+		_display_page++;
+		if (_display_page == 4) {
+			_display_page = 0;
+		}
+	}
+
 	watts_battery_status_s battery;
-	if (_battery_sub.update(&battery)) {
-		updateStatus(battery);
+	bool updated = _battery_sub.update(&battery);
+
+	static constexpr hrt_abstime UPDATE_INTERVAL = 500_ms; // 2Hz
+	hrt_abstime now = hrt_absolute_time();
+	bool interval_elapsed = now - _last_update > UPDATE_INTERVAL;
+
+	if ((updated && interval_elapsed) || button_pressed) {
+		_last_update = now;
+		switch (_display_page) {
+			case 0:
+			{
+				display_page_0(battery);
+				break;
+			}
+			case 1:
+			{
+				display_page_1(battery);
+				break;
+			}
+			case 2:
+			{
+				display_page_2(battery);
+				break;
+			}
+			case 3:
+			{
+				display_page_3(battery);
+				break;
+			}
+			default:
+				break;
+		}
 	}
 
 	// TODO: implement a mechanism to safely shut down -- SEE button_task.cpp
@@ -121,7 +160,7 @@ void SSD1306::RunImpl()
 	perf_end(_cycle_perf);
 }
 
-void SSD1306::updateStatus(const watts_battery_status_s& data)
+void SSD1306::display_page_0(const watts_battery_status_s& data)
 {
 	clear();
 
@@ -142,6 +181,52 @@ void SSD1306::updateStatus(const watts_battery_status_s& data)
 	snprintf(text_temp, sizeof(text_temp), "mAh used: %u", (int)data.capacity_consumed);
 	str = text_temp;
 	drawString(0, 48, str);
+
+	// % remaining
+	snprintf(text_temp, sizeof(text_temp), "Remaining: %u%%", (int)(100.0f * (float)data.capacity_remaining / (float)data.actual_capacity));
+	str = text_temp;
+	drawString(0, 32, str);
+
+	display();
+}
+
+void SSD1306::display_page_1(const watts_battery_status_s& data)
+{
+	clear();
+
+	char text_temp[20] = {};
+	const char* str;
+
+	// Voltage
+	snprintf(text_temp, sizeof(text_temp), "Voltage: %2.2f", double(data.voltage));
+	str = text_temp;
+	drawString(0, 0, str);
+
+
+	display();
+}
+
+void SSD1306::display_page_2(const watts_battery_status_s& data)
+{
+	clear();
+
+	char text_temp[20] = {};
+	const char* str;
+
+	// Current
+	snprintf(text_temp, sizeof(text_temp), "Current: %3.2f", double(data.current));
+	str = text_temp;
+	drawString(0, 16, str);
+
+	display();
+}
+
+void SSD1306::display_page_3(const watts_battery_status_s& data)
+{
+	clear();
+
+	char text_temp[20] = {};
+	const char* str;
 
 	// % remaining
 	snprintf(text_temp, sizeof(text_temp), "Remaining: %u%%", (int)(100.0f * (float)data.capacity_remaining / (float)data.actual_capacity));
