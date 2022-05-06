@@ -389,6 +389,8 @@ int BQ76952::init()
 	print_mfg_status_flags(mfg_status_flags);
 
 	// Configure protections
+	disable_protections();
+
 	configure_protections();
 	// enable_protections();
 	disable_protections();
@@ -592,6 +594,9 @@ void BQ76952::disable_protections()
 	write_memory8(ADDR_CHG_FET_Protections_A, byte);
 	write_memory8(ADDR_CHG_FET_Protections_B, byte);
 	write_memory8(ADDR_CHG_FET_Protections_C, byte);
+	write_memory8(ADDR_DSG_FET_Protections_A, byte);
+	write_memory8(ADDR_DSG_FET_Protections_B, byte);
+	write_memory8(ADDR_DSG_FET_Protections_C, byte);
 }
 
 void BQ76952::print_mfg_status_flags(uint16_t status)
@@ -601,10 +606,11 @@ void BQ76952::print_mfg_status_flags(uint16_t status)
 
 void BQ76952::enable_fets()
 {
+	px4_usleep(5000);
 	sub_command(CMD_FET_ENABLE, 0, 0);
-	px4_usleep(1000);
+	px4_usleep(5000);
 	sub_command(CMD_ALL_FETS_ON, 0, 0);
-	px4_usleep(1000);
+	px4_usleep(5000);
 }
 
 void BQ76952::disable_fets()

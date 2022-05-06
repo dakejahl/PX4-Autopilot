@@ -52,6 +52,10 @@
 using namespace time_literals;
 
 // Direct commands(1 byte)
+#define CMD_SAFETY_STATUS_A     0x03
+#define CMD_SAFETY_STATUS_B     0x05
+#define CMD_SAFETY_STATUS_C     0x07
+
 #define CMD_BATTERY_STATUS 		0x12
 #define CMD_READ_CELL_VOLTAGE   0x14
 #define CMD_READ_STACK_VOLTAGE 	0x34
@@ -146,7 +150,7 @@ private:
     // int readReg(uint8_t addr, uint8_t *buf, size_t len);
     // int writeReg(uint8_t addr, uint8_t *buf, size_t len);
 private:
-    static const hrt_abstime    SAMPLE_INTERVAL {500_ms};
+    static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
 
     BQ34Z100* _bq34 {nullptr};
 
