@@ -39,8 +39,8 @@
 
 #include "sensor_bridge.hpp"
 #include <uORB/topics/battery_status.h>
-#include <uavcan/equipment/power/BatteryInfo.hpp>
-#include <ardupilot/equipment/power/BatteryInfoAux.hpp>
+#include <ardupilot/equipment/power/BatteryContinuous.hpp>
+#include <ardupilot/equipment/power/BatteryPeriodic.hpp>
 #include <drivers/drv_hrt.h>
 #include <px4_platform_common/module_params.h>
 
@@ -57,22 +57,23 @@ public:
 
 private:
 
-	void battery_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::power::BatteryInfo> &msg);
-	void battery_aux_sub_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryInfoAux> &msg);
+	void battery_sub_continuous_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryContinuous> &msg);
+	void battery_sub_periodic_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryPeriodic> &msg);
 	void sumDischarged(hrt_abstime timestamp, float current_a);
 	void determineWarning(float remaining);
 
 	typedef uavcan::MethodBinder < UavcanBatteryBridge *,
 		void (UavcanBatteryBridge::*)
-		(const uavcan::ReceivedDataStructure<uavcan::equipment::power::BatteryInfo> &) >
-		BatteryInfoCbBinder;
+		(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryContinuous> &) >
+		BatteryContinuousCbBinder;
+
 	typedef uavcan::MethodBinder < UavcanBatteryBridge *,
 		void (UavcanBatteryBridge::*)
-		(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryInfoAux> &) >
-		BatteryInfoAuxCbBinder;
+		(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryPeriodic> &) >
+		BatteryPeriodicCbBinder;
 
-	uavcan::Subscriber<uavcan::equipment::power::BatteryInfo, BatteryInfoCbBinder> _sub_battery;
-	uavcan::Subscriber<ardupilot::equipment::power::BatteryInfoAux, BatteryInfoAuxCbBinder> _sub_battery_aux;
+	uavcan::Subscriber<ardupilot::equipment::power::BatteryContinuous, BatteryContinuousCbBinder> _sub_continuous;
+	uavcan::Subscriber<ardupilot::equipment::power::BatteryPeriodic, BatteryPeriodicCbBinder> _sub_periodic;
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::BAT_LOW_THR>) _param_bat_low_thr,
@@ -84,6 +85,5 @@ private:
 	float _discharged_mah_loop = 0.f;
 	uint8_t _warning;
 	hrt_abstime _last_timestamp;
-	battery_status_s battery_status[battery_status_s::MAX_INSTANCES] {};
-	bool battery_aux_support[battery_status_s::MAX_INSTANCES] {};
+	battery_status_s _battery_status[battery_status_s::MAX_INSTANCES] {};
 };

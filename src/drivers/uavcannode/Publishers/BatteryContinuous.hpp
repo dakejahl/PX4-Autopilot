@@ -34,7 +34,7 @@
 #pragma once
 
 #include "UavcanPublisherBase.hpp"
-#include <ardupilot/equipment/power/SmartBatteryContinuous.hpp>
+#include <ardupilot/equipment/power/BatteryContinuous.hpp>
 
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/topics/watts_battery_status.h>
@@ -47,13 +47,13 @@ namespace uavcannode
 class BatteryContinuous :
 	public UavcanPublisherBase,
 	private uORB::SubscriptionCallbackWorkItem,
-	private uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>
+	private uavcan::Publisher<ardupilot::equipment::power::BatteryContinuous>
 {
 public:
 	BatteryContinuous(px4::WorkItem *work_item, uavcan::INode &node) :
-		UavcanPublisherBase(ardupilot::equipment::power::SmartBatteryContinuous::DefaultDataTypeID),
+		UavcanPublisherBase(ardupilot::equipment::power::BatteryContinuous::DefaultDataTypeID),
 		uORB::SubscriptionCallbackWorkItem(work_item, ORB_ID(watts_battery_status)),
-		uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>(node)
+		uavcan::Publisher<ardupilot::equipment::power::BatteryContinuous>(node)
 	{
 		this->setPriority(uavcan::TransferPriority::MiddleLower);
 	}
@@ -63,8 +63,8 @@ public:
 		if (uORB::SubscriptionCallbackWorkItem::advertised()) {
 			printf("\t%s -> %s:%d\n",
 			       uORB::SubscriptionCallbackWorkItem::get_topic()->o_name,
-			       ardupilot::equipment::power::SmartBatteryContinuous::getDataTypeFullName(),
-			       ardupilot::equipment::power::SmartBatteryContinuous::DefaultDataTypeID);
+			       ardupilot::equipment::power::BatteryContinuous::getDataTypeFullName(),
+			       ardupilot::equipment::power::BatteryContinuous::DefaultDataTypeID);
 		}
 	}
 
@@ -78,24 +78,24 @@ public:
 			watts_battery_status_s status;
 			if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
 
-				ardupilot::equipment::power::SmartBatteryContinuous battery = {};
+				ardupilot::equipment::power::BatteryContinuous battery = {};
 				battery.temperature = status.temperature; // float16
 				battery.current = status.current; // float16
 				battery.voltage = status.voltage; // float16
 				battery.capacity_consumed = status.capacity_consumed;
-				// battery.remaining = status.remaining; // uint8
-				// battery.percent_remaining = 55; // uint8
-				battery.status_flags = 77; // uint8
+				battery.capacity_remaining = status.capacity_remaining;
+				battery.full_charge_capacity = status.actual_capacity;
+				battery.status_flags = status.status_flags;
 
 
 				// if (battery.current > 0.0f) {
-				// 	battery.status = ardupilot::equipment::power::SmartBatteryContinuous::STATUS_FLAG_CHARGING;
+				// 	battery.status = ardupilot::equipment::power::BatteryContinuous::STATUS_FLAG_CHARGING;
 
 				// } else {
-				// 	battery.status = ardupilot::equipment::power::SmartBatteryContinuous::STATUS_FLAG_IN_USE;
+				// 	battery.status = ardupilot::equipment::power::BatteryContinuous::STATUS_FLAG_IN_USE;
 				// }
 
-				uavcan::Publisher<ardupilot::equipment::power::SmartBatteryContinuous>::broadcast(battery);
+				uavcan::Publisher<ardupilot::equipment::power::BatteryContinuous>::broadcast(battery);
 				_last_broadcast_time = now;
 				// ensure callback is registered
 				uORB::SubscriptionCallbackWorkItem::registerCallback();

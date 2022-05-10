@@ -94,6 +94,10 @@ int BQ34Z100::init()
 // 	return read_register8(REG_ADDR_SOC);
 // }
 
+
+// TODO: If you are reading anything in absolute mAh or mWh from the BQ34 you will need to multiply by
+// our scale factor. Which I'm using 7 right now
+
 float BQ34Z100::read_voltage()
 {
 	static constexpr uint8_t REG_ADDR_VOLTAGE = 0x08;

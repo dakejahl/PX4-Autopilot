@@ -547,8 +547,7 @@ int BQ76952::init()
 	uint16_t status = read_memory16(ADDR_MFG_STATUS_INIT);
 	print_mfg_status_flags(status);
 
-	// Configure protections
-	disable_protections();
+	// TODO: cell low voltage cutoff in-air and on-ground
 
 	configure_protections();
 	// enable_protections();

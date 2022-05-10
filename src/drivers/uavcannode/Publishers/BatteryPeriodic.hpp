@@ -34,7 +34,7 @@
 #pragma once
 
 #include "UavcanPublisherBase.hpp"
-#include <ardupilot/equipment/power/SmartBatteryPeriodic.hpp>
+#include <ardupilot/equipment/power/BatteryPeriodic.hpp>
 
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/topics/watts_battery_status.h>
@@ -46,13 +46,13 @@ namespace uavcannode
 class BatteryPeriodic :
 	public UavcanPublisherBase,
 	private uORB::SubscriptionCallbackWorkItem,
-	private uavcan::Publisher<ardupilot::equipment::power::SmartBatteryPeriodic>
+	private uavcan::Publisher<ardupilot::equipment::power::BatteryPeriodic>
 {
 public:
 	BatteryPeriodic(px4::WorkItem *work_item, uavcan::INode &node) :
-		UavcanPublisherBase(ardupilot::equipment::power::SmartBatteryPeriodic::DefaultDataTypeID),
+		UavcanPublisherBase(ardupilot::equipment::power::BatteryPeriodic::DefaultDataTypeID),
 		uORB::SubscriptionCallbackWorkItem(work_item, ORB_ID(watts_battery_status)),
-		uavcan::Publisher<ardupilot::equipment::power::SmartBatteryPeriodic>(node)
+		uavcan::Publisher<ardupilot::equipment::power::BatteryPeriodic>(node)
 	{
 		this->setPriority(uavcan::TransferPriority::MiddleLower);
 	}
@@ -62,8 +62,8 @@ public:
 		if (uORB::SubscriptionCallbackWorkItem::advertised()) {
 			printf("\t%s -> %s:%d\n",
 			       uORB::SubscriptionCallbackWorkItem::get_topic()->o_name,
-			       ardupilot::equipment::power::SmartBatteryPeriodic::getDataTypeFullName(),
-			       ardupilot::equipment::power::SmartBatteryPeriodic::DefaultDataTypeID);
+			       ardupilot::equipment::power::BatteryPeriodic::getDataTypeFullName(),
+			       ardupilot::equipment::power::BatteryPeriodic::DefaultDataTypeID);
 		}
 	}
 
@@ -77,10 +77,9 @@ public:
 			watts_battery_status_s status;
 			if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
 
-				ardupilot::equipment::power::SmartBatteryPeriodic battery = {};
+				ardupilot::equipment::power::BatteryPeriodic battery = {};
 
 				battery.design_capacity = 0;
-				battery.actual_capacity = 0;
 				battery.cycle_count = 0;
 				battery.state_of_health_pct = 0;
 
@@ -89,7 +88,7 @@ public:
 				battery.manufacture_date = "5_6_2022";
 
 
-				uavcan::Publisher<ardupilot::equipment::power::SmartBatteryPeriodic>::broadcast(battery);
+				uavcan::Publisher<ardupilot::equipment::power::BatteryPeriodic>::broadcast(battery);
 
 				// ensure callback is registered
 				uORB::SubscriptionCallbackWorkItem::registerCallback();
