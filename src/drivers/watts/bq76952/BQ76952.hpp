@@ -71,7 +71,9 @@ using namespace time_literals;
 
 #define CMD_FET_ENABLE          0x0022
 #define CMD_ENTER_CFG_UPDATE    0x0034 // The device will then automatically disable the protection FETs if they are enabled.
-#define CMD_MFG_STATUS          0x0057 // pg 118
+#define CMD_MFG_STATUS          0x0057 // pg 119
+#define CMD_MANU_DATA          	0x0070
+
 #define CMD_SET_CFGUPDATE       0x0090 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_EXIT_CFG_UPDATE     0x0092 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_ALL_FETS_OFF        0x0095
@@ -150,9 +152,12 @@ private:
 
 	int enter_config_update_mode();
 	int exit_config_update_mode();
+
 	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
-	int sub_command(uint16_t command, void* tx_buf, size_t tx_len);
+	int sub_command(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
 	uint16_t sub_command_response16(uint8_t offset);
+	int sub_command_response_buffer(uint8_t* buf, size_t length);
+
 	uint8_t read_memory8(uint16_t addr);
 	uint16_t read_memory16(uint16_t addr);
 

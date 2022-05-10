@@ -507,11 +507,6 @@ int BQ76952::init()
 
 	update_params(true);
 
-	// First disable LDOs if they are enabled
-	uint8_t value = 0b00001100;
-	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(1_ms);
-
 	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
 
 	// Set current and voltage resolution (DA Configuration: USER_AMPS_0 and USER_AMPS_1)
@@ -535,15 +530,15 @@ int BQ76952::init()
 		return PX4_ERROR;
 	}
 
-	// Enable LDO at REG1
-	value = 0b00001101;
+	// Enable LDO at REG1 if it's not already enabled
+	uint8_t value = 0b00001101;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
 	px4_usleep(5_ms);
 
 	// Check Manufacturing Status register
-	// sub_command(CMD_MFG_STATUS, 0, 0);
+	// sub_command(CMD_MFG_STATUS);
 	// px4_usleep(5_ms);
-	// uint16_t mfg_status_flags = sub_command_response16(0);
+	// uint16_t status = sub_command_response16(0);
 	uint16_t status = read_memory16(ADDR_MFG_STATUS_INIT);
 	print_mfg_status_flags(status);
 
@@ -750,7 +745,16 @@ void BQ76952::enable_protections()
 
 void BQ76952::read_mfg_scratchpad()
 {
-	PX4_INFO("TODO: read_mfg_scratchpad");
+	PX4_INFO("read_mfg_scratchpad");
+	// Read MANU_DATA
+	uint8_t manu_data[32] = {};
+	sub_command(CMD_MANU_DATA);
+	sub_command_response_buffer(manu_data, sizeof(manu_data));
+
+	for (size_t i = 0; i < sizeof(manu_data); i++) {
+		printf("%c", manu_data[i]);
+	}
+	printf("\n");
 }
 
 void BQ76952::disable_protections()
@@ -772,17 +776,17 @@ void BQ76952::print_mfg_status_flags(uint16_t status)
 void BQ76952::enable_fets()
 {
 	px4_usleep(5_ms);
-	sub_command(CMD_FET_ENABLE, 0, 0);
+	sub_command(CMD_FET_ENABLE);
 	px4_usleep(5_ms);
-	sub_command(CMD_ALL_FETS_ON, 0, 0);
+	sub_command(CMD_ALL_FETS_ON);
 	px4_usleep(5_ms);
 }
 
 void BQ76952::disable_fets()
 {
-	sub_command(CMD_FET_ENABLE, 0, 0);
+	sub_command(CMD_FET_ENABLE);
 	px4_usleep(5_ms);
-	sub_command(CMD_ALL_FETS_OFF, 0, 0);
+	sub_command(CMD_ALL_FETS_OFF);
 	px4_usleep(5_ms);
 }
 
@@ -923,7 +927,7 @@ int BQ76952::enter_config_update_mode()
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
 	px4_usleep(1_ms);
 	if (!(buf[0] & 0x01)) {
-		sub_command(CMD_SET_CFGUPDATE, nullptr, 0);
+		sub_command(CMD_SET_CFGUPDATE);
 		px4_usleep(5_ms); // 2000us time to complete operation
 		direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
 		px4_usleep(5_ms);
@@ -940,7 +944,7 @@ int BQ76952::enter_config_update_mode()
 
 int BQ76952::exit_config_update_mode()
 {
-	sub_command(CMD_EXIT_CFG_UPDATE, nullptr, 0);
+	sub_command(CMD_EXIT_CFG_UPDATE);
 	px4_usleep(2_ms); // 1000us time to complete operation
 
 	uint8_t buf[2] = {};
@@ -967,9 +971,12 @@ int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 	buf[0] = CMD_ADDR_SUBCMD_LOW;
 	buf[1] = uint8_t(command & 0x00FF);
 	buf[2] = uint8_t((command >> 8) & 0x00FF);
-	memcpy(buf + 3, (uint8_t*)tx_buf, tx_len);
 
-	int ret = transfer(buf, sizeof(buf), nullptr, 0);
+	if (tx_buf != nullptr && tx_len != 0) {
+		memcpy(buf + 3, (uint8_t*)tx_buf, tx_len);
+	}
+
+	int ret = transfer(buf, 3 + tx_len, nullptr, 0);
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
@@ -990,6 +997,19 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 	return (buf[1] << 8) | buf[0];
 
 	// return (buf[0] << 8) | buf[1];
+}
+
+int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
+{
+	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER;
+
+	int ret = transfer(&addr, 1, buf, length);
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	return ret;
 }
 
 
