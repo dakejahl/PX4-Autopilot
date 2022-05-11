@@ -75,6 +75,83 @@ void BQ76952::exit_and_cleanup()
 	I2CSPIDriverBase::exit_and_cleanup();
 }
 
+int BQ76952::init()
+{
+	PX4_INFO("Initializing BQ76952");
+	int ret = I2C::init();
+
+	if (ret != PX4_OK) {
+		PX4_ERR("I2C init failed");
+		return ret;
+	}
+
+	update_params(true);
+
+	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
+
+	// Set current and voltage resolution (DA Configuration: USER_AMPS_0 and USER_AMPS_1)
+	ret = write_memory8(ADDR_DA_CONFIG, DA_CONFIG_CENTIVOLT_CENTIAMP);
+	if (ret != PX4_OK) {
+		PX4_ERR("writing DA_CONFIG failed");
+		return PX4_ERROR;
+	}
+
+	// Set REG1 voltage to 3.3v
+	ret = write_memory8(ADDR_REG12_CONFIG, REG1_ENABLE_3v3);
+	if (ret != PX4_OK) {
+		PX4_ERR("writing REG12 failed");
+		return PX4_ERROR;
+	}
+
+	// Enable regulator(s)
+	ret = write_memory8(ADDR_REG0, 0x01); // Enable the bq32z100
+	if (ret != PX4_OK) {
+		PX4_ERR("writing REG0 failed");
+		return PX4_ERROR;
+	}
+
+	// Enable LDO at REG1 if it's not already enabled
+	uint8_t value = 0b00001101;
+	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
+	px4_usleep(5_ms);
+
+	// Check Manufacturing Status register
+	sub_command(CMD_MFG_STATUS);
+	px4_usleep(5_ms);
+	uint16_t status = sub_command_response16(0);
+	PX4_INFO("mfg status: 0x%x", status);
+
+	// Set FET "normal mode" if not already set
+	if (!(status & (1 << 4))) {
+		PX4_INFO("Enabling FET normal mode");
+		sub_command(CMD_FET_ENABLE);
+	}
+
+	// TODO: cell low voltage cutoff in-air and on-ground
+
+	configure_protections();
+	disable_protections();
+
+	read_mfg_scratchpad();
+
+	// Enable the BQ34
+	_bq34 = new BQ34Z100();
+
+	if (!_bq34) {
+		PX4_INFO("failed to create BQ34Z100");
+		return PX4_ERROR;
+	}
+
+	if (_bq34->init() != PX4_OK) {
+		PX4_INFO("failed to initialize BQ34Z100");
+		return PX4_ERROR;
+	}
+
+	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
+
+	return PX4_OK;
+}
+
 void BQ76952::RunImpl()
 {
 	if (should_exit()) {
@@ -495,79 +572,6 @@ int BQ76952::probe()
 	return ret;
 }
 
-int BQ76952::init()
-{
-	PX4_INFO("Initializing BQ76952");
-	int ret = I2C::init();
-
-	if (ret != PX4_OK) {
-		PX4_ERR("I2C init failed");
-		return ret;
-	}
-
-	update_params(true);
-
-	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
-
-	// Set current and voltage resolution (DA Configuration: USER_AMPS_0 and USER_AMPS_1)
-	ret = write_memory8(ADDR_DA_CONFIG, DA_CONFIG_CENTIVOLT_CENTIAMP);
-	if (ret != PX4_OK) {
-		PX4_ERR("writing DA_CONFIG failed");
-		return PX4_ERROR;
-	}
-
-	// Set REG1 voltage to 3.3v
-	ret = write_memory8(ADDR_REG12_CONFIG, REG1_ENABLE_3v3);
-	if (ret != PX4_OK) {
-		PX4_ERR("writing REG12 failed");
-		return PX4_ERROR;
-	}
-
-	// Enable regulator(s)
-	ret = write_memory8(ADDR_REG0, 0x01); // Enable the bq32z100
-	if (ret != PX4_OK) {
-		PX4_ERR("writing REG0 failed");
-		return PX4_ERROR;
-	}
-
-	// Enable LDO at REG1 if it's not already enabled
-	uint8_t value = 0b00001101;
-	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(5_ms);
-
-	// Check Manufacturing Status register
-	// sub_command(CMD_MFG_STATUS);
-	// px4_usleep(5_ms);
-	// uint16_t status = sub_command_response16(0);
-	uint16_t status = read_memory16(ADDR_MFG_STATUS_INIT);
-	print_mfg_status_flags(status);
-
-	// TODO: cell low voltage cutoff in-air and on-ground
-
-	configure_protections();
-	// enable_protections();
-	disable_protections();
-
-	read_mfg_scratchpad();
-
-	// Enable the BQ34
-	_bq34 = new BQ34Z100();
-
-	if (!_bq34) {
-		PX4_INFO("failed to create BQ34Z100");
-		return PX4_ERROR;
-	}
-
-	if (_bq34->init() != PX4_OK) {
-		PX4_INFO("failed to initialize BQ34Z100");
-		return PX4_ERROR;
-	}
-
-	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
-
-	return PX4_OK;
-}
-
 void BQ76952::configure_protections()
 {
 	// ADDR_PROTECTION_CONFIG
@@ -748,11 +752,13 @@ void BQ76952::read_mfg_scratchpad()
 	PX4_INFO("read_mfg_scratchpad");
 	// Read MANU_DATA
 	uint8_t manu_data[32] = {};
+	px4_usleep(5_ms);
 	sub_command(CMD_MANU_DATA);
+	// px4_usleep(500_ms);
 	sub_command_response_buffer(manu_data, sizeof(manu_data));
 
 	for (size_t i = 0; i < sizeof(manu_data); i++) {
-		printf("%c", manu_data[i]);
+		printf("%u", manu_data[i]);
 	}
 	printf("\n");
 }
@@ -768,24 +774,14 @@ void BQ76952::disable_protections()
 	write_memory8(ADDR_DSG_FET_Protections_C, byte);
 }
 
-void BQ76952::print_mfg_status_flags(uint16_t status)
-{
-	PX4_INFO("mfg status: 0x%x", status);
-}
-
 void BQ76952::enable_fets()
 {
-	px4_usleep(5_ms);
-	sub_command(CMD_FET_ENABLE);
-	px4_usleep(5_ms);
 	sub_command(CMD_ALL_FETS_ON);
 	px4_usleep(5_ms);
 }
 
 void BQ76952::disable_fets()
 {
-	sub_command(CMD_FET_ENABLE);
-	px4_usleep(5_ms);
 	sub_command(CMD_ALL_FETS_OFF);
 	px4_usleep(5_ms);
 }
@@ -977,6 +973,13 @@ int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 	}
 
 	int ret = transfer(buf, 3 + tx_len, nullptr, 0);
+
+	printf("transfer: ");
+	for (size_t i = 0; i < sizeof(buf); i++) {
+		printf("%2x ", buf[i]);
+	}
+	printf("\n");
+
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
@@ -1001,9 +1004,30 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 
 int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 {
-	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER;
+	// TODO: handle timeout
+	uint16_t command = CMD_MANU_DATA;
+	uint8_t low_byte = uint8_t(command & 0x00FF);
+	uint8_t high_byte = uint8_t((command >> 8) & 0x00FF);
+	while (1) {
+		uint8_t byte = CMD_ADDR_SUBCMD_LOW;
+		uint8_t resp[2] = {};
+		transfer(&byte, 1, resp, 2);
 
-	int ret = transfer(&addr, 1, buf, length);
+		if ((resp[0] == low_byte) && (resp[1] == high_byte)) {
+			break;
+		}
+	}
+
+	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER;
+	// int ret = transfer(&addr, 1, buf, length);
+
+	// int ret = transfer(&addr, 1, nullptr, 0);
+	// ret |= transfer(nullptr, 0, buf, length);
+
+	uint8_t tx[2] = {addr, 0x32};
+	int ret = transfer(tx, 2, buf, length);
+	// int ret = transfer(tx, 2, nullptr, 0);
+	// ret |= transfer(nullptr, 0, buf, length);
 
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);

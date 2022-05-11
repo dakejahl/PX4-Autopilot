@@ -148,8 +148,6 @@ private:
 	void enable_fets();
 	void disable_fets();
 
-	void print_mfg_status_flags(uint16_t status);
-
 	int enter_config_update_mode();
 	int exit_config_update_mode();
 
