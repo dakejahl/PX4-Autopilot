@@ -79,6 +79,7 @@ using namespace time_literals;
 #define CMD_ALL_FETS_OFF        0x0095
 #define CMD_ALL_FETS_ON         0x0096
 #define CMD_REG12_CONTROL       0x0098
+#define CMD_OTP_WR_CHECK        0x00A0
 
 // 7-bit Command Addresses
 #define CMD_ADDR_TRANSFER_BUFFER 0x40 // 32-byte transfer buffer
@@ -140,7 +141,7 @@ private:
 	void collect_and_publish();
 	uint32_t get_status_flags();
 
-	void read_mfg_scratchpad();
+	void read_manu_data();
 	void configure_protections();
 	void enable_protections();
 	void disable_protections();
@@ -153,6 +154,8 @@ private:
 
 	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
 	int sub_command(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
+
+	uint8_t sub_command_response8(uint8_t offset);
 	uint16_t sub_command_response16(uint8_t offset);
 	int sub_command_response_buffer(uint8_t* buf, size_t length);
 

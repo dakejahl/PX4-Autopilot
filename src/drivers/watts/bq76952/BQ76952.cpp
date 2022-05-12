@@ -116,15 +116,17 @@ int BQ76952::init()
 	px4_usleep(5_ms);
 
 	// Check Manufacturing Status register
-	sub_command(CMD_MFG_STATUS);
-	px4_usleep(5_ms);
-	uint16_t status = sub_command_response16(0);
-	PX4_INFO("mfg status: 0x%x", status);
+	{
+		sub_command(CMD_MFG_STATUS);
+		px4_usleep(5_ms);
+		uint16_t status = sub_command_response16(0);
+		PX4_INFO("mfg status: 0x%x", status);
 
-	// Set FET "normal mode" if not already set
-	if (!(status & (1 << 4))) {
-		PX4_INFO("Enabling FET normal mode");
-		sub_command(CMD_FET_ENABLE);
+		// Set FET "normal mode" if not already set
+		if (!(status & (1 << 4))) {
+			PX4_INFO("Enabling FET normal mode");
+			sub_command(CMD_FET_ENABLE);
+		}
 	}
 
 	// TODO: cell low voltage cutoff in-air and on-ground
@@ -132,7 +134,7 @@ int BQ76952::init()
 	configure_protections();
 	disable_protections();
 
-	read_mfg_scratchpad();
+	read_manu_data();
 
 	// Enable the BQ34
 	_bq34 = new BQ34Z100();
@@ -747,9 +749,9 @@ void BQ76952::enable_protections()
 	}
 }
 
-void BQ76952::read_mfg_scratchpad()
+void BQ76952::read_manu_data()
 {
-	PX4_INFO("read_mfg_scratchpad");
+	PX4_INFO("read_manu_data");
 	// Read MANU_DATA
 	uint8_t manu_data[32] = {};
 	px4_usleep(5_ms);
@@ -758,7 +760,8 @@ void BQ76952::read_mfg_scratchpad()
 	sub_command_response_buffer(manu_data, sizeof(manu_data));
 
 	for (size_t i = 0; i < sizeof(manu_data); i++) {
-		printf("%u", manu_data[i]);
+		// printf("0x%x ", manu_data[i]);
+		printf("%c ", manu_data[i]);
 	}
 	printf("\n");
 }
@@ -963,27 +966,52 @@ int BQ76952::direct_command(uint8_t command, void* rx_buf, size_t rx_len)
 
 int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 {
-	uint8_t buf[3 + tx_len] = {};
+	// Send the sub command
+	uint8_t buf[3] = {};
 	buf[0] = CMD_ADDR_SUBCMD_LOW;
 	buf[1] = uint8_t(command & 0x00FF);
 	buf[2] = uint8_t((command >> 8) & 0x00FF);
+	int ret = transfer(buf, sizeof(buf), nullptr, 0);
 
+	// Write data to the transfer buffer
 	if (tx_buf != nullptr && tx_len != 0) {
-		memcpy(buf + 3, (uint8_t*)tx_buf, tx_len);
-	}
+		uint8_t data_buf[tx_len + 1] = {}; // data + checksum + length
+		data_buf[0] = CMD_ADDR_TRANSFER_BUFFER;
+		memcpy(data_buf + 1, (uint8_t*)tx_buf, tx_len);
+		ret |= transfer(data_buf, sizeof(data_buf), nullptr, 0);
 
-	int ret = transfer(buf, 3 + tx_len, nullptr, 0);
+		// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
+		// number of bytes used in the transfer buffer, then the result is bitwise inverted.
+		uint8_t crc_buf[3] = {}; // data + checksum + length
+		uint8_t checksum = buf[1] + buf[2];
+		for (size_t i = 0; i < tx_len; i++) {
+			checksum += data_buf[i];
+		}
+		crc_buf[0] = CMD_ADDR_RESP_CHKSUM;
+		crc_buf[1] = ~checksum;
+		crc_buf[2] = 2 + tx_len + 2; // length: 2 addr bytes, data len, 1 crc, 1 length
 
-	printf("transfer: ");
-	for (size_t i = 0; i < sizeof(buf); i++) {
-		printf("%2x ", buf[i]);
+		ret |= transfer(crc_buf, sizeof(crc_buf), nullptr, 0);
 	}
-	printf("\n");
 
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
 	return ret;
+}
+
+uint8_t BQ76952::sub_command_response8(uint8_t offset)
+{
+	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER + offset;
+	uint8_t resp = {};
+
+	int ret = transfer(&addr, 1, &resp, 1);
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	return resp;
 }
 
 uint16_t BQ76952::sub_command_response16(uint8_t offset)
@@ -1005,27 +1033,27 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 {
 	// TODO: handle timeout
-	uint16_t command = CMD_MANU_DATA;
-	uint8_t low_byte = uint8_t(command & 0x00FF);
-	uint8_t high_byte = uint8_t((command >> 8) & 0x00FF);
-	while (1) {
-		uint8_t byte = CMD_ADDR_SUBCMD_LOW;
-		uint8_t resp[2] = {};
-		transfer(&byte, 1, resp, 2);
+	// uint16_t command = CMD_MANU_DATA;
+	// uint8_t low_byte = uint8_t(command & 0x00FF);
+	// uint8_t high_byte = uint8_t((command >> 8) & 0x00FF);
+	// while (1) {
+	// 	uint8_t byte = CMD_ADDR_SUBCMD_LOW;
+	// 	uint8_t resp[2] = {};
+	// 	transfer(&byte, 1, resp, 2);
 
-		if ((resp[0] == low_byte) && (resp[1] == high_byte)) {
-			break;
-		}
-	}
+	// 	if ((resp[0] == low_byte) && (resp[1] == high_byte)) {
+	// 		break;
+	// 	}
+	// }
 
 	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER;
-	// int ret = transfer(&addr, 1, buf, length);
+	int ret = transfer(&addr, 1, buf, length);
 
 	// int ret = transfer(&addr, 1, nullptr, 0);
 	// ret |= transfer(nullptr, 0, buf, length);
 
-	uint8_t tx[2] = {addr, 0x32};
-	int ret = transfer(tx, 2, buf, length);
+	// uint8_t tx[2] = {addr, 0x32};
+	// int ret = transfer(tx, 2, buf, length);
 	// int ret = transfer(tx, 2, nullptr, 0);
 	// ret |= transfer(nullptr, 0, buf, length);
 
@@ -1054,8 +1082,54 @@ void BQ76952::custom_method(const BusCLIArguments &cli)
 {
 	switch(cli.custom1) {
 		case 1:
-			PX4_INFO("custom command 1");
+		{
+			enter_config_update_mode();
+			sub_command(CMD_OTP_WR_CHECK);
+			px4_usleep(5_ms);
+			uint16_t status = sub_command_response8(0);
+
+			if (status & (1 << 7)) {
+				PX4_INFO("OTP writes enabled");
+			} else {
+				PX4_INFO("OTP writes disabled");
+			}
+
+			uint8_t buf[2] = {};
+			direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+			uint16_t battery_status = (buf[1] << 8) + buf[0];
+			PX4_INFO("battery status: 0x%x", battery_status);
+			// 0000 1001 1000 0101
+			if (battery_status & (1 << 7)) {
+				PX4_INFO("OTP writes blocked due to voltage/temperature");
+			}
+
+			exit_config_update_mode();
 			break;
+		}
+		case 2:
+		{
+			read_manu_data();
+			break;
+		}
+		case 3:
+		{
+			PX4_INFO("Trying to write MANU_DATA");
+			enter_config_update_mode();
+			sub_command(CMD_OTP_WR_CHECK);
+			px4_usleep(5_ms);
+			uint16_t status = sub_command_response8(0);
+			if (status & (1 << 7)) {
+				const char* str = "this is a test";
+				PX4_INFO("Writing %s", str);
+				sub_command(CMD_MANU_DATA, (void*)str, sizeof(str));
+				px4_usleep(50_ms);
+			} else {
+				PX4_INFO("OTP writes disabled");
+			}
+
+			exit_config_update_mode();
+			break;
+		}
 		default:
 			break;
 	}
@@ -1089,8 +1163,18 @@ extern "C" int bq76952_main(int argc, char *argv[])
 		return ThisDriver::module_status(iterator);
 	}
 
-	if (!strcmp(verb, "custom_command")) {
+	if (!strcmp(verb, "otp_check")) {
 		cli.custom1 = 1;
+		return ThisDriver::module_custom_method(cli, iterator);
+	}
+
+	if (!strcmp(verb, "read_manu")) {
+		cli.custom1 = 2;
+		return ThisDriver::module_custom_method(cli, iterator);
+	}
+
+	if (!strcmp(verb, "write_manu")) {
+		cli.custom1 = 3;
 		return ThisDriver::module_custom_method(cli, iterator);
 	}
 
