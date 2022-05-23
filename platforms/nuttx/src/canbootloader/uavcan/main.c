@@ -1185,11 +1185,7 @@ __EXPORT int main(int argc, char *argv[])
 
 	} else {
 
-		// JAKE: It is a regular boot, so we should just jump straight to the app because
-		// the battery is always powered on before the flight controller.
-		// Except in dual battery systems... In which case.. what happens?
-
-		// If app is already valid, jump straight to app
+		// If app is already valid, jump straight to app (will be invalid if not flashed by FC)
 		if (bootloader.app_valid) {
 			common.node_id = 0; // For normal boots there is nothing connected, we need to do dynamic ID allocation
 			goto boot;

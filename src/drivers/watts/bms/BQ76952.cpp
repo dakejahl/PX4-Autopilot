@@ -90,6 +90,16 @@ int BQ76952::init()
 
 	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
 
+	// TODO: Set TS3 config for use with 10k external thermistor
+	// xxxxxx
+	// 00: 18k pull-up
+	// 00: 18k temp model
+	// 01: thermistor temperature measurement, used for cell temperature protections
+	// xx
+	// 11: ADC Input or Thermistor
+	uint8_t ts3_config = 0b00000111;
+	ret = write_memory8(ADDR_TS3_CONFIG, ts3_config);
+
 	// Set current and voltage resolution (DA Configuration: USER_AMPS_0 and USER_AMPS_1)
 	ret = write_memory8(ADDR_DA_CONFIG, DA_CONFIG_CENTIVOLT_CENTIAMP);
 	if (ret != PX4_OK) {
@@ -116,21 +126,6 @@ int BQ76952::init()
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
 	px4_usleep(5_ms);
 
-	// Check Manufacturing Status register
-	{
-		// TODO: Alex's is at 0x10
-		sub_command(CMD_MFG_STATUS);
-		px4_usleep(5_ms);
-		uint16_t status = sub_command_response16(0);
-		PX4_INFO("mfg status: 0x%x", status);
-
-		// Set FET "normal mode" if not already set
-		if (!(status & (1 << 4))) {
-			PX4_INFO("Enabling FET normal mode");
-			sub_command(CMD_FET_ENABLE);
-		}
-	}
-
 	// TODO: cell low voltage cutoff in-air and on-ground
 
 	configure_protections();
@@ -149,6 +144,21 @@ int BQ76952::init()
 	if (_bq34->init() != PX4_OK) {
 		PX4_INFO("failed to initialize BQ34Z100");
 		return PX4_ERROR;
+	}
+
+	// Check Manufacturing Status register
+	{
+		// TODO: Alex's is at 0x10
+		sub_command(CMD_MFG_STATUS);
+		px4_usleep(5_ms);
+		uint16_t status = sub_command_response16(0);
+		PX4_INFO("mfg status: 0x%x", status);
+
+		// Set FET "normal mode" if not already set
+		if (!(status & (1 << 4))) {
+			PX4_INFO("Enabling FET normal mode");
+			sub_command(CMD_FET_ENABLE);
+		}
 	}
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
@@ -194,30 +204,26 @@ void BQ76952::collect_and_publish()
 
 	int ret = PX4_OK;
 
-	// Read temperature
+	// Read external thermistor on TS3 -- TODO: values are wrong
 	int16_t temperature = {};
-	ret |= direct_command(CMD_READ_CFETOFF_TEMP, &temperature, sizeof(temperature));
-	battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
-	// PX4_INFO("temperature: %f", double(battery_status.temperature));
+	ret |= direct_command(CMD_READ_TS3_TEMP, &temperature, sizeof(temperature));
+	// raw value
+	battery_status.temperature = temperature; // Convert from 0.1K to C
+	// battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
 
-	// Read current (centi-amp resolution 327amps +/-)
 	int16_t current = {};
 	ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
 	px4_usleep(1_ms);
-	battery_status.current = (float)current / 100.0f;
-	// PX4_INFO("current: %f", double(battery_status.current_a));
+	battery_status.current = (float)current / 100.0f; // centi-amp resolution 327amps +/-
 
-	// Read stack voltage
 	int16_t stack_voltage = {};
 	ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
 	px4_usleep(1_ms);
 	battery_status.voltage = (float)stack_voltage / 100.0f;
 
 	// ignore capacity consumed
-
 	// Read capacity remaining
 	battery_status.capacity_remaining = _bq34->read_remaining_capacity();
-	// PX4_INFO("capacity_remaining (mAh) %lu", capacity_remaining);
 
 	// Read cell voltages
 	int16_t cell_voltages_mv[12] = {};
@@ -226,21 +232,15 @@ void BQ76952::collect_and_publish()
 
 	for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
 		battery_status.cell_voltages[i] = cell_voltages_mv[i] / 1000.0f;
-		// PX4_INFO("cellv%zu: %f", i, double(battery_status.voltage_cell_v[i]));
 	}
 
-	// Read design capacity
 	battery_status.design_capacity = _bq34->read_design_capacity();
-	// Read actual_capacity
 	battery_status.actual_capacity = _bq34->read_full_charge_capacity();
-	// Read cycle count
 	battery_status.cycle_count = _bq34->read_cycle_count();
-	// Read state of health
 	battery_status.state_of_health = _bq34->read_state_of_health();
 
 	battery_status.status_flags = get_status_flags();
 
-	// Publish to uORB
 	_battery_status_pub.publish(battery_status);
 }
 

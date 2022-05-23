@@ -66,6 +66,7 @@ using namespace time_literals;
 #define CMD_READ_PACK_PIN_VOLTAGE  0x36
 #define CMD_READ_CC2_CURRENT    0x3A
 #define CMD_READ_CFETOFF_TEMP   0x6A
+#define CMD_READ_TS3_TEMP   	0x74 // units of 0.1K (signed 2 bytes)
 
 // Subcommands (2 bytes)
 #define CMD_ADDR_SUBCMD_LOW     0x3E
@@ -95,6 +96,8 @@ using namespace time_literals;
 #define ADDR_PROTECTIONS_A      0x9261 // 1 byte
 #define ADDR_PROTECTIONS_B      0x9262 // 1 byte
 #define ADDR_PROTECTIONS_C      0x9263 // 1 byte
+
+#define ADDR_TS3_CONFIG      	0x92FF // 1 byte
 
 #define ADDR_CHG_FET_Protections_A      0x9265 // 1 byte
 #define ADDR_CHG_FET_Protections_B      0x9266 // 1 byte
