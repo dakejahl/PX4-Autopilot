@@ -31,8 +31,8 @@
 #
 ############################################################################
 px4_add_module(
-	MODULE drivers__bq76952
-	MAIN bq76952
+	MODULE drivers__bms
+	MAIN bms
 	COMPILE_FLAGS
 		-DDEBUG_BUILD
 	SRCS

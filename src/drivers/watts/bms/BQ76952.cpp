@@ -68,6 +68,7 @@ BQ76952::~BQ76952()
 	perf_free(_cycle_perf);
 	perf_free(_comms_errors);
 	_battery_status_pub.unadvertise();
+	if (_bq34) delete _bq34;
 }
 
 void BQ76952::exit_and_cleanup()
@@ -117,6 +118,7 @@ int BQ76952::init()
 
 	// Check Manufacturing Status register
 	{
+		// TODO: Alex's is at 0x10
 		sub_command(CMD_MFG_STATUS);
 		px4_usleep(5_ms);
 		uint16_t status = sub_command_response16(0);
@@ -161,7 +163,7 @@ void BQ76952::RunImpl()
 		return;
 	}
 
-	if (_shutting_down) {
+	if (_shutdown) {
 		// Wait until button is released
 		if (px4_arch_gpioread(GPIO_N_BTN)) {
 			shutdown();
@@ -174,17 +176,11 @@ void BQ76952::RunImpl()
 	update_params();
 
 	// Detect button presses and handle corresponding behavior
-	handle_button();
+	handle_button_and_boot();
 	// If drawing a very low amount of power for some amount of time, automatically turn pack off
 	handle_idle_current_detection();
 	// Automatically enable/disable protections
 	handle_automatic_protections();
-
-	// TODO: check if we are armed/disarmed and enable/disable protections
-	bool current_above_threshold = false;
-	if (current_above_threshold) {
-
-	}
 
 	collect_and_publish();
 
@@ -421,7 +417,7 @@ void BQ76952::handle_automatic_protections()
 void BQ76952::handle_idle_current_detection()
 {
 	int32_t idle_timeout = _param_idle_timeout.get();
-	if ( idle_timeout == 0) {
+	if (idle_timeout == 0) {
 		return;
 	}
 
@@ -440,36 +436,45 @@ void BQ76952::handle_idle_current_detection()
 			_idle_start_time = now;
 		}
 
-		if (now > _idle_start_time + (hrt_abstime)idle_timeout) {
-			PX4_INFO("Battery has been idle for %lu, shutting down", idle_timeout);
-			// TODO: actually shut down
+		hrt_abstime timeout = (hrt_abstime)idle_timeout * 1e6;
+		if (now > _idle_start_time + timeout) {
+			PX4_INFO("Battery has been idle for %llu, shutting down", timeout);
 			_shutdown_pub.publish(shutdown_s{});
-			_shutting_down = true;
+			_shutdown = true;
 		}
 
 	} else {
 		_below_idle_current = false;
 	}
-	// 0 disables timeout
 }
 
-void BQ76952::handle_button()
+void BQ76952::handle_button_and_boot()
 {
 	if (!_booted) {
-		bool held = check_button_held();
-
-		if (held) {
+		if (check_button_held()) {
 			PX4_INFO("Button was held, enabling FETs");
 			_booted = true;
 			_booted_button_held = true;
 			enable_fets();
 		}
 
+		// Check if PACK voltage is high
+		int16_t pack_voltage = {};
+		direct_command(CMD_READ_PACK_PIN_VOLTAGE, &pack_voltage, sizeof(pack_voltage));
+		px4_usleep(1_ms);
+		float pack_voltage_f = pack_voltage / 100.0f;
+		float voltage_threshold = _param_parallel_voltage.get();
+		if (pack_voltage_f >= voltage_threshold) {
+			PX4_INFO("PACK voltage (%fv) above threshold (%fv), booting", double(pack_voltage_f), double(voltage_threshold));
+			_booted = true;
+			return;
+		}
+
 		// Check if 5 seconds has elapsed, power off
 		if (hrt_absolute_time() > 5_s) {
 			PX4_INFO("Button not held");
 			_shutdown_pub.publish(shutdown_s{});
-			_shutting_down = true;
+			_shutdown = true;
 		}
 
 	} else if (_booted && _booted_button_held) {
@@ -480,14 +485,12 @@ void BQ76952::handle_button()
 		}
 
 	} else {
-		bool held = check_button_held();
-
-		if (held) {
+		if (check_button_held()) {
 			PX4_INFO("Button was held, disabling FETs");
 			disable_fets();
 			// Notify shutdown
 			_shutdown_pub.publish(shutdown_s{});
-			_shutting_down = true;
+			_shutdown = true;
 		}
 	}
 }
@@ -509,7 +512,6 @@ bool BQ76952::check_button_held()
 			return true;
 		}
 	} else {
-
 		// Button was previously pressed, check for how long
 		if (_button_pressed) {
 			hrt_abstime duration = now - _pressed_start_time;
@@ -540,7 +542,6 @@ void BQ76952::update_params(const bool force)
 		// clear update
 		parameter_update_s param_update;
 		_parameter_update_sub.copy(&param_update);
-
 		// update parameters from storage
 		ModuleParams::updateParams();
 	}
@@ -564,9 +565,7 @@ void BQ76952::print_status()
 int BQ76952::probe()
 {
 	uint8_t val = {};
-
 	int ret = transfer(&val, sizeof(val), nullptr, 0);
-
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
@@ -760,7 +759,6 @@ void BQ76952::read_manu_data()
 	sub_command_response_buffer(manu_data, sizeof(manu_data));
 
 	for (size_t i = 0; i < sizeof(manu_data); i++) {
-		// printf("0x%x ", manu_data[i]);
 		printf("%c ", manu_data[i]);
 	}
 	printf("\n");
@@ -1089,9 +1087,9 @@ void BQ76952::custom_method(const BusCLIArguments &cli)
 			uint16_t status = sub_command_response8(0);
 
 			if (status & (1 << 7)) {
-				PX4_INFO("OTP writes enabled");
+				PX4_INFO("OTP writes enabled: %x", status);
 			} else {
-				PX4_INFO("OTP writes disabled");
+				PX4_INFO("OTP writes disabled: %x", status);
 			}
 
 			uint8_t buf[2] = {};
@@ -1130,12 +1128,20 @@ void BQ76952::custom_method(const BusCLIArguments &cli)
 			exit_config_update_mode();
 			break;
 		}
+		case 4:
+		{
+			sub_command(CMD_MFG_STATUS);
+			px4_usleep(5_ms);
+			uint16_t status = sub_command_response16(0);
+			PX4_INFO("mfg status: 0x%x", status);
+			break;
+		}
 		default:
 			break;
 	}
 }
 
-extern "C" int bq76952_main(int argc, char *argv[])
+extern "C" int bms_main(int argc, char *argv[])
 {
 	using ThisDriver = BQ76952;
 	BusCLIArguments cli{true, false};
@@ -1175,6 +1181,11 @@ extern "C" int bq76952_main(int argc, char *argv[])
 
 	if (!strcmp(verb, "write_manu")) {
 		cli.custom1 = 3;
+		return ThisDriver::module_custom_method(cli, iterator);
+	}
+
+	if (!strcmp(verb, "mfg")) {
+		cli.custom1 = 4;
 		return ThisDriver::module_custom_method(cli, iterator);
 	}
 

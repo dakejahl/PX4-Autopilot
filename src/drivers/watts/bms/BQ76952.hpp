@@ -63,6 +63,7 @@ using namespace time_literals;
 #define CMD_BATTERY_STATUS      0x12
 #define CMD_READ_CELL_VOLTAGE   0x14
 #define CMD_READ_STACK_VOLTAGE  0x34
+#define CMD_READ_PACK_PIN_VOLTAGE  0x36
 #define CMD_READ_CC2_CURRENT    0x3A
 #define CMD_READ_CFETOFF_TEMP   0x6A
 
@@ -131,7 +132,7 @@ private:
 	int probe() override;
 	void update_params(const bool force = false);
 
-	void handle_button();
+	void handle_button_and_boot();
 	void handle_idle_current_detection();
 	void handle_automatic_protections();
 
@@ -191,7 +192,7 @@ private:
 
 	bool _protections_enabled{true};
 
-	bool _shutting_down{false};
+	bool _shutdown{false};
 
 	char _manu_data[32]{0};
 
@@ -199,6 +200,7 @@ private:
 		(ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
 		(ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
 		(ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
-		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current
+		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current,
+		(ParamFloat<px4::params::PARALLEL_VOLTAGE>)    _param_parallel_voltage
 	);
 };

@@ -1,5 +1,0 @@
-menuconfig DRIVERS_WATTS_BQ76952
-	bool "bq76952"
-	default n
-	---help---
-		Enable support for bq76952

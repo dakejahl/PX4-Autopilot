@@ -69,3 +69,10 @@ PARAM_DEFINE_INT32(IDLE_TIMEOUT, 300);
  * @group UAVCAN
  */
 PARAM_DEFINE_FLOAT(IDLE_CURRENT, 0.25f);
+
+/**
+ * Voltage (V) threshold for detection of a battery in parallel.
+ *
+ * @group UAVCAN
+ */
+PARAM_DEFINE_FLOAT(PARALLEL_VOLTAGE, 37.2f);
