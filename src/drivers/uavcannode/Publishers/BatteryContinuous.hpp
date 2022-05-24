@@ -85,7 +85,7 @@ public:
 				battery.capacity_consumed = status.capacity_consumed;
 				battery.capacity_remaining = status.capacity_remaining;
 				battery.full_charge_capacity = status.actual_capacity;
-				battery.status_flags = status.status_flags;
+				battery.status_flags = status.status_flags; // uORB <--> DroneCAN <--> Mavlink BatteryV2
 
 
 				// if (battery.current > 0.0f) {

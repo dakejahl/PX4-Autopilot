@@ -129,7 +129,7 @@ int BQ76952::init()
 	// TODO: cell low voltage cutoff in-air and on-ground
 
 	configure_protections();
-	disable_protections();
+	// disable_protections();
 
 	read_manu_data();
 
@@ -401,14 +401,14 @@ void BQ76952::handle_automatic_protections()
 
 	if (current > protect_current) {
 		if (_protections_enabled) {
-			// Disable protections
 			PX4_INFO("TODO: Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
+			// disable_protections();
 			_protections_enabled = false;
 		}
 	} else {
 		if (!_protections_enabled) {
-			// Enable protections
 			PX4_INFO("TODO: Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
+			// enable_protections();
 			_protections_enabled = true;
 		}
 	}
@@ -465,8 +465,9 @@ void BQ76952::handle_button_and_boot()
 		float pack_voltage_f = pack_voltage / 100.0f;
 		float voltage_threshold = _param_parallel_voltage.get();
 		if (pack_voltage_f >= voltage_threshold) {
-			PX4_INFO("PACK voltage (%fv) above threshold (%fv), booting", double(pack_voltage_f), double(voltage_threshold));
+			PX4_INFO("PACK voltage (%fv) above threshold (%fv), enabling FETs", double(pack_voltage_f), double(voltage_threshold));
 			_booted = true;
+			enable_fets();
 			return;
 		}
 
@@ -573,6 +574,22 @@ int BQ76952::probe()
 	return ret;
 }
 
+void BQ76952::read_manu_data()
+{
+	PX4_INFO("read_manu_data");
+	// Read MANU_DATA
+	uint8_t manu_data[32] = {};
+	px4_usleep(5_ms);
+	sub_command(CMD_MANU_DATA);
+	// px4_usleep(500_ms);
+	sub_command_response_buffer(manu_data, sizeof(manu_data));
+
+	for (size_t i = 0; i < sizeof(manu_data); i++) {
+		printf("%c ", manu_data[i]);
+	}
+	printf("\n");
+}
+
 void BQ76952::configure_protections()
 {
 	// ADDR_PROTECTION_CONFIG
@@ -666,6 +683,8 @@ void BQ76952::configure_protections()
 
 void BQ76952::enable_protections()
 {
+	PX4_INFO("Enabling protections");
+
 	// CHG FET Protections A
 	{
 		uint8_t byte = {};
@@ -748,24 +767,9 @@ void BQ76952::enable_protections()
 	}
 }
 
-void BQ76952::read_manu_data()
-{
-	PX4_INFO("read_manu_data");
-	// Read MANU_DATA
-	uint8_t manu_data[32] = {};
-	px4_usleep(5_ms);
-	sub_command(CMD_MANU_DATA);
-	// px4_usleep(500_ms);
-	sub_command_response_buffer(manu_data, sizeof(manu_data));
-
-	for (size_t i = 0; i < sizeof(manu_data); i++) {
-		printf("%c ", manu_data[i]);
-	}
-	printf("\n");
-}
-
 void BQ76952::disable_protections()
 {
+	PX4_INFO("Disabling protections");
 	uint8_t byte = {};
 	write_memory8(ADDR_CHG_FET_Protections_A, byte);
 	write_memory8(ADDR_CHG_FET_Protections_B, byte);
@@ -777,12 +781,14 @@ void BQ76952::disable_protections()
 
 void BQ76952::enable_fets()
 {
+	PX4_INFO("Enabling FETs");
 	sub_command(CMD_ALL_FETS_ON);
 	px4_usleep(5_ms);
 }
 
 void BQ76952::disable_fets()
 {
+	PX4_INFO("Disabling FETs");
 	sub_command(CMD_ALL_FETS_OFF);
 	px4_usleep(5_ms);
 }

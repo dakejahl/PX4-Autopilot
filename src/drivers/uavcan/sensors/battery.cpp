@@ -129,10 +129,14 @@ UavcanBatteryBridge::battery_sub_periodic_cb(const uavcan::ReceivedDataStructure
 	}
 
 	_battery_status[instance].timestamp = hrt_absolute_time();
-	_battery_status[instance].state_of_health = msg.state_of_health_pct;
-	_battery_status[instance].cycle_count = msg.cycle_count;
-	// _battery_status[instance].serial_number = (uint16_t)msg.serial_number; // TODO:
 	_battery_status[instance].design_capacity = msg.design_capacity;
+	_battery_status[instance].cycle_count = msg.cycle_count;
+	_battery_status[instance].state_of_health = msg.state_of_health_pct;
+	// name
+	// serial_number
+	// manufacture_date // formated as: Day + Month×32 + (Year–1980)×512
+
+	// _battery_status[instance].serial_number = (uint16_t)msg.serial_number; // TODO:
 	// _battery_status[instance].average_time_to_empty = msg.time_remaining;
 
 
