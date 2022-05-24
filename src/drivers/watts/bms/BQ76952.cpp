@@ -90,6 +90,17 @@ int BQ76952::init()
 
 	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
 
+	// TODO: S1 config to 0x0f for FET temp monitoring
+	// xxxxxx
+	// 00: 18k pull-up
+	// 00: 18k temp model
+	// 01: thermistor temperature measurement, used for cell temperature protections
+	// 11 = thermistor temperature measurement, used for FET temperature protection
+	// xx
+	// 11: ADC Input or Thermistor
+	uint8_t ts1_config = 0b00001111;
+	ret = write_memory8(ADDR_TS1_CONFIG, ts1_config);
+
 	// TODO: Set TS3 config for use with 10k external thermistor
 	// xxxxxx
 	// 00: 18k pull-up

@@ -97,6 +97,7 @@ using namespace time_literals;
 #define ADDR_PROTECTIONS_B      0x9262 // 1 byte
 #define ADDR_PROTECTIONS_C      0x9263 // 1 byte
 
+#define ADDR_TS1_CONFIG      	0x92FD // 1 byte
 #define ADDR_TS3_CONFIG      	0x92FF // 1 byte
 
 #define ADDR_CHG_FET_Protections_A      0x9265 // 1 byte
