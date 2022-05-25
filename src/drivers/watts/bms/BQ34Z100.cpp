@@ -45,13 +45,11 @@
 
 BQ34Z100::BQ34Z100() :
 	I2C(DRV_DEVTYPE_BQ34Z100, "BQ34Z100", 1, 0x55, 400000),
-	_cycle_perf(perf_alloc(PC_ELAPSED, "BQ34Z100: single-sample")),
 	_comms_errors(perf_alloc(PC_COUNT, "BQ34Z100: comm errors"))
 {}
 
 BQ34Z100::~BQ34Z100()
 {
-	perf_free(_cycle_perf);
 	perf_free(_comms_errors);
 }
 
@@ -79,9 +77,6 @@ int BQ34Z100::init()
 		PX4_ERR("I2C init failed");
 		return ret;
 	}
-
-	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
-	// TODO?
 
 	return PX4_OK;
 }

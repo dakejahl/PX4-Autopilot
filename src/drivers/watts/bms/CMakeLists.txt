@@ -36,6 +36,7 @@ px4_add_module(
 	COMPILE_FLAGS
 		-DDEBUG_BUILD
 	SRCS
+		Bms.cpp
 		BQ76952.cpp
 		BQ34Z100.cpp
 	DEPENDS

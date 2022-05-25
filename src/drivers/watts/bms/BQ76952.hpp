@@ -112,37 +112,15 @@ using namespace time_literals;
 // Register Bitmasks
 #define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
 
-class BQ76952 : public device::I2C, public ModuleParams, public I2CSPIDriver<BQ76952>
+class BQ76952 : public device::I2C
 {
 public:
-	BQ76952(const I2CSPIDriverConfig &config);
+	BQ76952();
 	~BQ76952() override;
 
-	int init() override;
-
-	static void print_usage();
-
-	void RunImpl();
-
-	void custom_method(const BusCLIArguments &cli) override;
-
-protected:
-	void print_status() override;
-	void exit_and_cleanup() override;
-
-private:
-
+	int init();
 	int probe() override;
-	void update_params(const bool force = false);
 
-	void handle_button_and_boot();
-	void handle_idle_current_detection();
-	void handle_automatic_protections();
-
-	bool check_button_held();
-	void shutdown();
-
-	void collect_and_publish();
 	uint32_t get_status_flags();
 	void read_manu_data();
 
@@ -154,7 +132,6 @@ private:
 	// Control things
 	void enable_protections();
 	void disable_protections();
-	int initialize_bq34();
 	void enable_fets();
 	void disable_fets();
 
@@ -173,42 +150,11 @@ private:
 
 	int write_memory8(uint16_t addr, uint8_t data);
 	int write_memory16(uint16_t addr, uint16_t data);
-	// int readReg(uint8_t addr, uint8_t *buf, size_t len);
-	// int writeReg(uint8_t addr, uint8_t *buf, size_t len);
+
 private:
 	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
 
-	BQ34Z100* _bq34{nullptr};
-
-	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
-
-	uORB::Publication<shutdown_s> _shutdown_pub{ORB_ID(shutdown)};
-	uORB::Publication<button_pressed_s>	_button_pressed_pub{ORB_ID(button_pressed)};
-	uORB::PublicationMulti<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
-
-	perf_counter_t _cycle_perf{};
 	perf_counter_t _comms_errors{};
 
-	// State variables
-	hrt_abstime _pressed_start_time{0};
-	bool _button_pressed{false};
-	bool _booted{false};
-	bool _booted_button_held{true};
-
-	bool _below_idle_current{false};
-	hrt_abstime _idle_start_time{0};
-
-	bool _protections_enabled{true};
-
-	bool _shutdown{false};
-
 	char _manu_data[32]{0};
-
-	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
-		(ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
-		(ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
-		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current,
-		(ParamFloat<px4::params::PARALLEL_VOLTAGE>)    _param_parallel_voltage
-	);
 };

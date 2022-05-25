@@ -71,6 +71,5 @@ public:
 private:
     // This repo is quite good
     // https://github.com/xkam1x/BQ34Z100G1/blob/master/bq34z100g1.cpp
-	perf_counter_t _cycle_perf;
 	perf_counter_t _comms_errors;
 };
