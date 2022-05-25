@@ -56,8 +56,8 @@ BQ76952::BQ76952(const I2CSPIDriverConfig &config) :
 	I2C(config),
 	ModuleParams(nullptr),
 	I2CSPIDriver(config),
-	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": single-sample")),
-	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comm errors"))
+	_cycle_perf(perf_alloc(PC_ELAPSED, "BQ76952: single-sample")),
+	_comms_errors(perf_alloc(PC_COUNT, "BQ76952: comm errors"))
 {
 	_battery_status_pub.advertise();
 }
@@ -76,105 +76,90 @@ void BQ76952::exit_and_cleanup()
 	I2CSPIDriverBase::exit_and_cleanup();
 }
 
-int BQ76952::init()
+int BQ76952::configure_settings()
 {
-	PX4_INFO("Initializing BQ76952");
-	int ret = I2C::init();
-
-	if (ret != PX4_OK) {
-		PX4_ERR("I2C init failed");
-		return ret;
-	}
-
-	update_params(true);
-
-	///// WRITE SETTINGS INTO PERMANENT MEMORY /////
-
-	// TODO: S1 config to 0x0f for FET temp monitoring
-	// xxxxxx
-	// 00: 18k pull-up
-	// 00: 18k temp model
-	// 01: thermistor temperature measurement, used for cell temperature protections
-	// 11 = thermistor temperature measurement, used for FET temperature protection
-	// xx
-	// 11: ADC Input or Thermistor
-	uint8_t ts1_config = 0b00001111;
-	ret = write_memory8(ADDR_TS1_CONFIG, ts1_config);
-
-	// TODO: Set TS3 config for use with 10k external thermistor
-	// xxxxxx
-	// 00: 18k pull-up
-	// 00: 18k temp model
-	// 01: thermistor temperature measurement, used for cell temperature protections
-	// xx
-	// 11: ADC Input or Thermistor
-	uint8_t ts3_config = 0b00000111;
-	ret = write_memory8(ADDR_TS3_CONFIG, ts3_config);
-
-	// Set current and voltage resolution (DA Configuration: USER_AMPS_0 and USER_AMPS_1)
-	ret = write_memory8(ADDR_DA_CONFIG, DA_CONFIG_CENTIVOLT_CENTIAMP);
-	if (ret != PX4_OK) {
-		PX4_ERR("writing DA_CONFIG failed");
-		return PX4_ERROR;
-	}
-
-	// Set REG1 voltage to 3.3v
-	ret = write_memory8(ADDR_REG12_CONFIG, REG1_ENABLE_3v3);
+	int ret = PX4_OK;
+	ret = write_memory8(ADDR_REG12_CONFIG, 0x0d); // Enable 3.3V for REG1
 	if (ret != PX4_OK) {
 		PX4_ERR("writing REG12 failed");
 		return PX4_ERROR;
 	}
 
-	// Enable regulator(s)
-	ret = write_memory8(ADDR_REG0, 0x01); // Enable the bq32z100
+	ret = write_memory8(ADDR_REG0, 0x01); // Enable the pre-regulator to turn on bq34z100
 	if (ret != PX4_OK) {
 		PX4_ERR("writing REG0 failed");
 		return PX4_ERROR;
 	}
 
-	// Enable LDO at REG1 if it's not already enabled
-	uint8_t value = 0b00001101;
-	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(5_ms);
+	ret = write_memory8(ADDR_TS1_CONFIG, 0x0f); // FET temp monitoring
+	if (ret != PX4_OK) {
+		PX4_ERR("writing TS1_CONFIG failed");
+		return PX4_ERROR;
+	}
 
-	// TODO: cell low voltage cutoff in-air and on-ground
+	ret = write_memory8(ADDR_TS3_CONFIG, 0x07); // Cell temp monitoring
+	if (ret != PX4_OK) {
+		PX4_ERR("writing TS3_CONFIG failed");
+		return PX4_ERROR;
+	}
+	ret = write_memory8(ADDR_DA_CONFIG, 0x06); // Centi-volt and centi-amp
+	if (ret != PX4_OK) {
+		PX4_ERR("writing DA_CONFIG failed");
+		return PX4_ERROR;
+	}
+	return PX4_OK;
+}
 
-	configure_protections();
-	// disable_protections();
+int BQ76952::init()
+{
+	PX4_INFO("Initializing BQ76952");
 
+	if (I2C::init() != PX4_OK) {
+		PX4_ERR("I2C init failed");
+		return PX4_ERROR;
+	}
+
+	update_params(true);
+
+	///// Write settings -- these need to made defaults that are baked into ASIC /////
+	if (configure_settings() != PX4_OK) {
+		return PX4_ERROR;
+	}
+
+	if (initialize_bq34() != PX4_OK) {
+		return PX4_ERROR;
+	}
+
+	// Set FET mode to normal and configure FET actions when protections are tripped
+	configure_fets();
+
+	// should we let the auto protection enable do this?
+	enable_protections();
+
+	// TODO: just a test right now
 	read_manu_data();
-
-	// Enable the BQ34
-	_bq34 = new BQ34Z100();
-
-	if (!_bq34) {
-		PX4_INFO("failed to create BQ34Z100");
-		return PX4_ERROR;
-	}
-
-	if (_bq34->init() != PX4_OK) {
-		PX4_INFO("failed to initialize BQ34Z100");
-		return PX4_ERROR;
-	}
-
-	// Check Manufacturing Status register
-	{
-		// TODO: Alex's is at 0x10
-		sub_command(CMD_MFG_STATUS);
-		px4_usleep(5_ms);
-		uint16_t status = sub_command_response16(0);
-		PX4_INFO("mfg status: 0x%x", status);
-
-		// Set FET "normal mode" if not already set
-		if (!(status & (1 << 4))) {
-			PX4_INFO("Enabling FET normal mode");
-			sub_command(CMD_FET_ENABLE);
-		}
-	}
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
 	return PX4_OK;
+}
+
+void BQ76952::configure_fets()
+{
+	// Check Manufacturing Status register and set FET mode if needed
+	sub_command(CMD_MFG_STATUS);
+	px4_usleep(5_ms);
+	uint16_t status = sub_command_response16(0);
+	PX4_INFO("mfg status: 0x%x", status);
+
+	// Set FET "normal mode" if not already set
+	if (!(status & (1 << 4))) {
+		PX4_INFO("Enabling FET normal mode");
+		sub_command(CMD_FET_ENABLE);
+	}
+
+	// Set FET Protection action
+	configure_protections_fet_action();
 }
 
 void BQ76952::RunImpl()
@@ -198,8 +183,10 @@ void BQ76952::RunImpl()
 
 	// Detect button presses and handle corresponding behavior
 	handle_button_and_boot();
+
 	// If drawing a very low amount of power for some amount of time, automatically turn pack off
 	handle_idle_current_detection();
+
 	// Automatically enable/disable protections
 	handle_automatic_protections();
 
@@ -215,12 +202,12 @@ void BQ76952::collect_and_publish()
 
 	int ret = PX4_OK;
 
-	// Read external thermistor on TS3 -- TODO: values are wrong
+	// Read external thermistor on TS3
+	// TODO: sporadic erroneous values come from the BQ34 having TS enabled in the TEMPS bit mask in the Pack Configuration Register
 	int16_t temperature = {};
 	ret |= direct_command(CMD_READ_TS3_TEMP, &temperature, sizeof(temperature));
-	// raw value
-	battery_status.temperature = temperature; // Convert from 0.1K to C
-	// battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+	px4_usleep(1_ms);
+	battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
 
 	int16_t current = {};
 	ret |= direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
@@ -230,7 +217,7 @@ void BQ76952::collect_and_publish()
 	int16_t stack_voltage = {};
 	ret |= direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
 	px4_usleep(1_ms);
-	battery_status.voltage = (float)stack_voltage / 100.0f;
+	battery_status.voltage = (float)stack_voltage / 100.0f; // centi-volt
 
 	// ignore capacity consumed
 	// Read capacity remaining
@@ -410,6 +397,8 @@ void BQ76952::handle_automatic_protections()
 	float current = (float)data / 100.0f;
 	float protect_current = _param_protect_current.get();
 
+	// TODO: current > threshold for X seconds
+
 	if (current > protect_current) {
 		if (_protections_enabled) {
 			PX4_INFO("TODO: Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
@@ -484,7 +473,7 @@ void BQ76952::handle_button_and_boot()
 
 		// Check if 5 seconds has elapsed, power off
 		if (hrt_absolute_time() > 5_s) {
-			PX4_INFO("Button not held");
+			PX4_INFO("Button not held, shutting down");
 			_shutdown_pub.publish(shutdown_s{});
 			_shutdown = true;
 		}
@@ -498,8 +487,7 @@ void BQ76952::handle_button_and_boot()
 
 	} else {
 		if (check_button_held()) {
-			PX4_INFO("Button was held, disabling FETs");
-			disable_fets();
+			PX4_INFO("Button was held, shutting down");
 			// Notify shutdown
 			_shutdown_pub.publish(shutdown_s{});
 			_shutdown = true;
@@ -559,32 +547,6 @@ void BQ76952::update_params(const bool force)
 	}
 }
 
-void BQ76952::print_usage()
-{
-	PRINT_MODULE_USAGE_NAME("bq76952", "driver");
-	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(true, false);
-	PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(0x48);
-	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
-}
-
-void BQ76952::print_status()
-{
-	I2CSPIDriverBase::print_status();
-	perf_print_counter(_cycle_perf);
-}
-
-int BQ76952::probe()
-{
-	uint8_t val = {};
-	int ret = transfer(&val, sizeof(val), nullptr, 0);
-	if (ret != PX4_OK) {
-		perf_count(_comms_errors);
-	}
-
-	return ret;
-}
-
 void BQ76952::read_manu_data()
 {
 	PX4_INFO("read_manu_data");
@@ -601,9 +563,10 @@ void BQ76952::read_manu_data()
 	printf("\n");
 }
 
-void BQ76952::configure_protections()
+void BQ76952::enable_protections()
 {
-	// ADDR_PROTECTION_CONFIG
+	PX4_INFO("Enabling protections");
+	// ADDR_PROTECTION_CONFIG -- default looks good
 	// SCDL_CURR_RECOV -- 1 = SCDL recovers when current is greater than or equal to Protections:SCDL:RecoveryTime.
 	// OCDL_CURR_RECOV -- 1 = OCDL recovers when current is greater than or equal to Protections:OCDL:RecoveryTime
 	// PF_OTP -- If this bit is not set, Permanent Failure status will be lost on any reset
@@ -615,23 +578,22 @@ void BQ76952::configure_protections()
 	{
 		uint8_t byte = {};
 
-		// 7 SCD 1 Short Circuit in Discharge Protection
-		byte |= 1 << 7;
+		byte |= 1 << 7; 	// 7 SCD 1 Short Circuit in Discharge Protection
+							// TODO: set the threshold
 
-		// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
-		// byte |= 1 << 6;
+		// byte |= 1 << 6; 	// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
 
-		// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
-		// byte |= 1 << 5;
+		byte |= 1 << 5; 	// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
+							// TODO: set the threshold
 
-		// 4 OCC 0 Overcurrent in Charge Protection
-		// byte |= 1 << 4;
+		byte |= 1 << 4; 	// 4 OCC 0 Overcurrent in Charge Protection
+							// TODO: set the threshold
 
-		// 3 COV 1 Cell Overvoltage Protection
-		byte |= 1 << 3;
+		byte |= 1 << 3; 	// 3 COV 1 Cell Overvoltage Protection
+							// TODO: set the threshold
 
-		// 2 CUV 0 Cell Undervoltage Protection
-		// byte |= 1 << 2;
+		byte |= 1 << 2; 	// 2 CUV 0 Cell Undervoltage Protection
+							// TODO: set the threshold
 
 		write_memory8(ADDR_PROTECTIONS_A, byte);
 	}
@@ -640,26 +602,19 @@ void BQ76952::configure_protections()
 	{
 		uint8_t byte = {};
 
-		// 7 OTF 0 FET Overtemperature
-		// byte |= 1 << 7;
+		byte |= 1 << 7; 	// 7 OTF 0 FET Overtemperature
 
-		// 6 OTINT 0 Internal Overtemperature
-		// byte |= 1 << 6;
+		byte |= 1 << 6; 	// 6 OTINT 0 Internal Overtemperature
 
-		// 5 OTD 0 Overtemperature in Discharge
-		// byte |= 1 << 5;
+		byte |= 1 << 5; 	// 5 OTD 0 Overtemperature in Discharge
 
-		// 4 OTC 0 Overtemperature in Charge
-		// byte |= 1 << 4;
+		byte |= 1 << 4; 	// 4 OTC 0 Overtemperature in Charge
 
-		// 2 UTINT 0 Internal Undertemperature
-		// byte |= 1 << 2;
+		byte |= 1 << 2; 	// 2 UTINT 0 Internal Undertemperature
 
-		// 1 UTD 0 Undertemperature in Discharge
-		// byte |= 1 << 1;
+		byte |= 1 << 1; 	// 1 UTD 0 Undertemperature in Discharge
 
-		// 0 UTC 0 Undertemperature in Charge
-		// byte |= 1 << 0;
+		byte |= 1 << 0; 	// 0 UTC 0 Undertemperature in Charge
 
 		write_memory8(ADDR_PROTECTIONS_B, byte);
 	}
@@ -668,33 +623,54 @@ void BQ76952::configure_protections()
 	{
 		uint8_t byte = {};
 
-		// 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
-		// byte |= 1 << 7;
+		// byte |= 1 << 7; // 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
 
-		// 6 SCDL 0 Short Circuit in Discharge Latch
-		// byte |= 1 << 6;
+		// byte |= 1 << 6; 	// 6 SCDL 0 Short Circuit in Discharge Latch
+							// TODO: do we want to use this feature?
 
-		// 5 OCDL 0 Overcurrent in Discharge Latch
-		// byte |= 1 << 5;
+		// byte |= 1 << 5; 	// 5 OCDL 0 Overcurrent in Discharge Latch
+							// TODO: do we want to use this feature?
 
-		// 4 COVL 0 Cell Overvoltage Latch
-		// byte |= 1 << 4;
+		// byte |= 1 << 4; 	// 4 COVL 0 Cell Overvoltage Latch
+							// TODO: do we want to use this feature?
 
-		// 2 PTO 0 Precharge Timeout
-		// byte |= 1 << 2;
+		// byte |= 1 << 2; 	// 2 PTO 0 Precharge Timeout
+							// TODO: do we want to use this feature?
 
-		// 1 HWDF 0 Host Watchdog Fault
-		// byte |= 1 << 1;
+		// byte |= 1 << 1; // 1 HWDF 0 Host Watchdog Fault
 
 		write_memory8(ADDR_PROTECTIONS_C, byte);
 	}
-
-	// Settings:Manufacturing:Mfg Status Init[FET_EN] -- autonomous control mode?
 }
 
-void BQ76952::enable_protections()
+void BQ76952::disable_protections()
 {
-	PX4_INFO("Enabling protections");
+	// We disable all protections except for
+
+	// Cell overvoltage should probably always be on.
+	// Over temperature in charge we always want on
+	// Undertemperature in charge we always want on
+	PX4_INFO("Disabling protections");
+	// {
+	// 	uint8_t byte = {};
+	// 	byte |= 1 << 4; // Overcurrent in charge protection stays on
+	// 	write_memory8(ADDR_PROTECTIONS_A, byte);
+	// }
+	// {
+	// 	uint8_t byte = {};
+	// 	byte |= 1 << 4; // Overcurrent in charge protection stays on
+	// 	write_memory8(ADDR_PROTECTIONS_B, byte);
+	// }
+	// {
+	// 	uint8_t byte = {};
+	// 	byte |= 1 << 4; // Overcurrent in charge protection stays on
+	// 	write_memory8(ADDR_PROTECTIONS_C, byte);
+	// }
+}
+
+void BQ76952::configure_protections_fet_action()
+{
+	PX4_INFO("Configuring FET protection actions");
 
 	// CHG FET Protections A
 	{
@@ -703,7 +679,7 @@ void BQ76952::enable_protections()
 		// 7 SCD 1 Short Circuit in Discharge Protection
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (1 << 7);
+		// byte |= (1 << 7);
 
 		// 4 OCC 1 Overcurrent in Charge Protection
 		//      0 = CHG FET is not disabled when protection is triggered.
@@ -726,26 +702,31 @@ void BQ76952::enable_protections()
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 7);
+		// TODO: set threshold
 
 		// 6 OTINT 1 Internal Overtemperature
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 6);
+		// TODO: set threshold
 
 		// 4 OTC 1 Overtemperature in Charge
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 4);
+		// TODO: set threshold
 
 		// 2 UTINT 1 Internal Undertemperature
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 2);
+		// TODO: set threshold
 
 		// 0 UTC 1 Undertemperature in Charge
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 0);
+		// TODO: set threshold
 
 		write_memory8(ADDR_CHG_FET_Protections_B, byte);
 	}
@@ -757,37 +738,56 @@ void BQ76952::enable_protections()
 		// 6 SCDL 1 Short Circuit in Discharge Latch
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (6 << 0);
+		// byte |= (6 << 0);
 
 		// 4 COVL 1 Cell Overvoltage Latch
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (4 << 0);
+		// byte |= (4 << 0);
 
 		// 2 PTO 1 Precharge Timeout
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (2 << 0);
+		// byte |= (2 << 0);
 
 		// 1 HWDF 1 Host Watchdog Fault
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (1 << 0);
+		// byte |= (1 << 0);
+
+		// TODO: do we want to use these features? ^
 
 		write_memory8(ADDR_CHG_FET_Protections_C, byte);
 	}
+
+	// TODO:
+	// DSG FET Protections A
+	{
+		uint8_t byte = {};
+		write_memory8(ADDR_DSG_FET_Protections_A, byte);
+	}
 }
 
-void BQ76952::disable_protections()
+int BQ76952::initialize_bq34()
 {
-	PX4_INFO("Disabling protections");
-	uint8_t byte = {};
-	write_memory8(ADDR_CHG_FET_Protections_A, byte);
-	write_memory8(ADDR_CHG_FET_Protections_B, byte);
-	write_memory8(ADDR_CHG_FET_Protections_C, byte);
-	write_memory8(ADDR_DSG_FET_Protections_A, byte);
-	write_memory8(ADDR_DSG_FET_Protections_B, byte);
-	write_memory8(ADDR_DSG_FET_Protections_C, byte);
+	// Enable LDO at REG1 if it's not already enabled (turns on the bq34)
+	uint8_t value = 0b00001101;
+	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
+	px4_usleep(5_ms);
+
+	_bq34 = new BQ34Z100();
+
+	if (!_bq34) {
+		PX4_INFO("failed to create BQ34Z100");
+		return PX4_ERROR;
+	}
+
+	if (_bq34->init() != PX4_OK) {
+		PX4_INFO("failed to initialize BQ34Z100");
+		return PX4_ERROR;
+	}
+
+	return PX4_OK;
 }
 
 void BQ76952::enable_fets()
@@ -1079,7 +1079,6 @@ int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 	return ret;
 }
 
-
 // int BQ76952::readReg(uint8_t addr, uint8_t *buf, size_t len)
 // {
 //  return transfer(&addr, 1, buf, len);
@@ -1092,6 +1091,32 @@ int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 //  memcpy(buffer + 1, buf, sizeof(uint8_t)*len);
 //  return transfer(buffer, len + 1, nullptr, 0);
 // }
+
+int BQ76952::probe()
+{
+	uint8_t val = {};
+	int ret = transfer(&val, sizeof(val), nullptr, 0);
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+
+	return ret;
+}
+
+void BQ76952::print_status()
+{
+	I2CSPIDriverBase::print_status();
+	perf_print_counter(_cycle_perf);
+}
+
+void BQ76952::print_usage()
+{
+	PRINT_MODULE_USAGE_NAME("bq76952", "driver");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_PARAMS_I2C_SPI_DRIVER(true, false);
+	PRINT_MODULE_USAGE_PARAMS_I2C_ADDRESS(0x48);
+	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+}
 
 void BQ76952::custom_method(const BusCLIArguments &cli)
 {

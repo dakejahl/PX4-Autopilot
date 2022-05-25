@@ -111,7 +111,6 @@ using namespace time_literals;
 
 // Register Bitmasks
 #define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
-#define REG1_ENABLE_3v3 0b00001101
 
 class BQ76952 : public device::I2C, public ModuleParams, public I2CSPIDriver<BQ76952>
 {
@@ -145,12 +144,17 @@ private:
 
 	void collect_and_publish();
 	uint32_t get_status_flags();
-
 	void read_manu_data();
-	void configure_protections();
+
+	// Register Configuration
+	int configure_settings();
+	void configure_fets();
+	void configure_protections_fet_action();
+
+	// Control things
 	void enable_protections();
 	void disable_protections();
-
+	int initialize_bq34();
 	void enable_fets();
 	void disable_fets();
 
