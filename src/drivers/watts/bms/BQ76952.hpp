@@ -141,8 +141,17 @@ public:
 	int init();
 	int probe() override;
 
+	float temperature();
+	float current();
+	float voltage();
+	void cell_voltages(float* cells_array, size_t size);
+
 	uint32_t status_flags();
 	uint16_t mfg_status();
+	uint16_t battery_status();
+
+	uint8_t otp_wr_check();
+
 	void manu_data();
 
 	// Register Configuration

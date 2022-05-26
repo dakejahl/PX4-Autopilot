@@ -89,10 +89,8 @@ private:
 	int initialize_bq76();
 
 	// Shell commands
-	int otp_check();
 	int read_manu();
 	int write_manu();
-	int mfg();
 	int diagnostics();
 	int flags();
 	int on();

@@ -101,6 +101,54 @@ int BQ76952::configure_settings()
 	return PX4_OK;
 }
 
+float BQ76952::temperature()
+{
+	// Read external thermistor on TS3
+	// TODO: sporadic erroneous values come from the BQ34 having TS enabled in the TEMPS bit mask in the Pack Configuration Register
+	int16_t temperature = {};
+	if (direct_command(CMD_READ_TS3_TEMP, &temperature, sizeof(temperature)) != PX4_OK) {
+		PX4_ERR("Failed to read temperature");
+		return 0;
+	}
+	return ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+}
+
+float BQ76952::current()
+{
+	int16_t current = {};
+	if (direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current)) != PX4_OK) {
+		PX4_ERR("Failed to read current");
+		return 0;
+	}
+	return (float)current / 100.0f; // centi-amp resolution 327amps +/-
+}
+
+float BQ76952::voltage()
+{
+	int16_t stack_voltage = {};
+	if (direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage)) != PX4_OK) {
+		PX4_ERR("Failed to read voltage");
+		return 0;
+	}
+	return (float)stack_voltage / 100.0f; // centi-volt
+}
+
+void BQ76952::cell_voltages(float* cells_array, size_t size)
+{
+	int16_t cell_voltages_mv[12] = {};
+
+	if (size > 12) size = 12;
+
+	if (direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, size * sizeof(int16_t)) != PX4_OK) {
+		PX4_ERR("Failed to read cell voltages");
+		return;
+	}
+
+	for (size_t i = 0; i < size; i++) {
+		cells_array[i] = (float)cell_voltages_mv[i] / 1000.0f;
+	}
+}
+
 void BQ76952::configure_fets()
 {
 	// Check Manufacturing Status register and set FET mode if needed
@@ -124,6 +172,20 @@ uint16_t BQ76952::mfg_status()
 	sub_command(CMD_MFG_STATUS);
 	px4_usleep(5_ms);
 	return sub_command_response16(0);
+}
+
+uint8_t BQ76952::otp_wr_check()
+{
+	sub_command(CMD_OTP_WR_CHECK);
+	px4_usleep(10_ms);
+	return sub_command_response8(0);
+}
+
+uint16_t BQ76952::battery_status()
+{
+	uint8_t buf[2] = {};
+	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+	return (buf[1] << 8) + buf[0];
 }
 
 uint32_t BQ76952::status_flags()
@@ -498,14 +560,14 @@ uint16_t BQ76952::read_memory16(uint16_t addr)
 
 int BQ76952::write_memory8(uint16_t addr, uint8_t data)
 {
-	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
-
 	// Must be in config update mode to write to memory
 	int ret = enter_config_update_mode();
 	if (ret != PX4_OK) {
 		PX4_ERR("failed to enter config update mode");
 		return PX4_ERROR;
 	}
+
+	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
 
 	// See pg 13 of technical reference
 	// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
@@ -592,7 +654,7 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 
 int BQ76952::enter_config_update_mode()
 {
-	PX4_INFO("Entering CONFIG_UPDATE mode");
+	// PX4_INFO("Entering CONFIG_UPDATE mode");
 	// Enter config udpate mode if not already in it and report status
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
@@ -602,14 +664,14 @@ int BQ76952::enter_config_update_mode()
 	int retries = 0;
 	while (retries < 3) {
 
-		px4_usleep(1_ms);
+		px4_usleep(5_ms);
 		if (!(buf[0] & 0x01)) {
 			sub_command(CMD_SET_CFGUPDATE);
-			px4_usleep(5_ms); // 2000us time to complete operation
+			px4_usleep(10_ms); // 2000us time to complete operation
 			direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
 			px4_usleep(5_ms);
 			if (buf[0] & 0x01) {
-				PX4_INFO("Successfully went into config update mode");
+				// PX4_INFO("Successfully went into config update mode");
 				return PX4_OK;
 			}
 		} else {
@@ -627,14 +689,13 @@ int BQ76952::enter_config_update_mode()
 
 int BQ76952::exit_config_update_mode()
 {
-	PX4_INFO("Exiting CONFIG_UPDATE mode");
+	// PX4_INFO("Exiting CONFIG_UPDATE mode");
 
 	sub_command(CMD_EXIT_CFG_UPDATE);
-	px4_usleep(2_ms); // 1000us time to complete operation
+	px4_usleep(10_ms); // 1000us time to complete operation
 
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	px4_usleep(5_ms);
 	if (!(buf[0] & 0x01)) {
 		return PX4_OK;
 	}
@@ -649,6 +710,7 @@ int BQ76952::direct_command(uint8_t command, void* rx_buf, size_t rx_len)
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
 	}
+	px4_usleep(1_ms);
 	return ret;
 }
 

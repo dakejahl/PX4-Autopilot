@@ -152,7 +152,7 @@ void Bms::Run()
 	handle_button_and_boot();
 
 	// If drawing a very low amount of power for some amount of time, automatically turn pack off
-	handle_idle_current_detection();
+	// handle_idle_current_detection();
 
 	// Automatically enable/disable protections
 	handle_automatic_protections();
@@ -167,38 +167,12 @@ void Bms::collect_and_publish()
 	watts_battery_status_s battery_status = {};
 	battery_status.timestamp = hrt_absolute_time();
 
-	int ret = PX4_OK;
-
-	// Read external thermistor on TS3
-	// TODO: sporadic erroneous values come from the BQ34 having TS enabled in the TEMPS bit mask in the Pack Configuration Register
-	int16_t temperature = {};
-	ret |= _bq76->direct_command(CMD_READ_TS3_TEMP, &temperature, sizeof(temperature));
-	px4_usleep(1_ms);
-	battery_status.temperature = ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
-
-	int16_t current = {};
-	ret |= _bq76->direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current));
-	px4_usleep(1_ms);
-	battery_status.current = (float)current / 100.0f; // centi-amp resolution 327amps +/-
-
-	int16_t stack_voltage = {};
-	ret |= _bq76->direct_command(CMD_READ_STACK_VOLTAGE, &stack_voltage, sizeof(stack_voltage));
-	px4_usleep(1_ms);
-	battery_status.voltage = (float)stack_voltage / 100.0f; // centi-volt
-
+	battery_status.temperature = _bq76->temperature();
+	battery_status.current = _bq76->current();
+	battery_status.voltage = _bq76->voltage();
 	// ignore capacity consumed
-	// Read capacity remaining
 	battery_status.capacity_remaining = _bq34->read_remaining_capacity();
-
-	// Read cell voltages
-	int16_t cell_voltages_mv[12] = {};
-	ret |= _bq76->direct_command(CMD_READ_CELL_VOLTAGE, &cell_voltages_mv, sizeof(cell_voltages_mv));
-	px4_usleep(1_ms);
-
-	for (size_t i = 0; i < sizeof(cell_voltages_mv) / sizeof(cell_voltages_mv[0]); i++) {
-		battery_status.cell_voltages[i] = cell_voltages_mv[i] / 1000.0f;
-	}
-
+	_bq76->cell_voltages(battery_status.cell_voltages, 12);
 	battery_status.design_capacity = _bq34->read_design_capacity();
 	battery_status.actual_capacity = _bq34->read_full_charge_capacity();
 	battery_status.cycle_count = _bq34->read_cycle_count();
@@ -378,33 +352,6 @@ void Bms::update_params(const bool force)
 	}
 }
 
-int Bms::otp_check()
-{
-	_bq76->enter_config_update_mode();
-	px4_usleep(5_ms);
-	_bq76->sub_command(CMD_OTP_WR_CHECK);
-	px4_usleep(5_ms);
-	uint8_t status = _bq76->sub_command_response8(0);
-
-	if (status & (1 << 7)) {
-		PX4_INFO("OTP writes enabled: 0x%x", status);
-	} else {
-		PX4_INFO("OTP writes disabled: 0x%x", status);
-	}
-
-	uint8_t buf[2] = {};
-	_bq76->direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	uint16_t battery_status = (buf[1] << 8) + buf[0];
-	PX4_INFO("battery status: 0x%x", battery_status);
-	// 0000 1001 1000 0101
-	if (battery_status & (1 << 7)) {
-		PX4_INFO("OTP writes blocked due to voltage/temperature");
-	}
-
-	_bq76->exit_config_update_mode();
-	return PX4_OK;
-}
-
 int Bms::read_manu()
 {
 	_bq76->manu_data();
@@ -414,11 +361,8 @@ int Bms::read_manu()
 int Bms::write_manu()
 {
 	PX4_INFO("Trying to write MANU_DATA");
-	_bq76->enter_config_update_mode();
-	_bq76->sub_command(CMD_OTP_WR_CHECK);
-	px4_usleep(5_ms);
-	uint8_t status = _bq76->sub_command_response8(0);
-	if (status & (1 << 7)) {
+	uint8_t otp = _bq76->otp_wr_check();
+	if (otp & (1 << 7)) {
 		const char* str = "this is a test";
 		PX4_INFO("Writing %s", str);
 		_bq76->sub_command(CMD_MANU_DATA, (void*)str, sizeof(str));
@@ -428,13 +372,6 @@ int Bms::write_manu()
 	}
 
 	_bq76->exit_config_update_mode();
-	return PX4_OK;
-}
-
-int Bms::mfg()
-{
-	uint16_t status = _bq76->mfg_status();
-	PX4_INFO("mfg status: 0x%x", status);
 	return PX4_OK;
 }
 
@@ -584,6 +521,44 @@ int Bms::diagnostics()
 		} else {
 			PX4_INFO("No Permanent Fail fault has triggered.");
 		}
+		PX4_INFO("");
+	}
+
+	// OTP_WR_CHECK
+	{
+		uint8_t status = _bq76->otp_wr_check();
+
+		PX4_INFO("otp_wr_check: 0x%x", status);
+
+		if (status & (1 << 7)) {
+			PX4_INFO("OTP writes enabled");
+		} else {
+			PX4_INFO("OTP writes disabled");
+		}
+
+		if (status & (1 << 5)) {
+			PX4_INFO("The device is not in FULLACCESS and CONFIG_UPDATE mode, or the OTP Lock bit has been set to prevent further modification");
+		}
+
+		if (status & (1 << 4)) {
+			PX4_INFO("Signature cannot be written (indicating the signature has already been written too many times)");
+		}
+
+		if (status & (1 << 3)) {
+			PX4_INFO("Could not program data (indicating data has been programmed too many times; no XOR bits left)");
+		}
+
+		if (status & (1 << 2)) {
+			PX4_INFO("The measured internal temperature is above the allowed OTP programming temperature range");
+		}
+
+		if (status & (1 << 1)) {
+			PX4_INFO("The measured stack voltage is below the allowed OTP programming voltage");
+		}
+
+		if (status & (1 << 0)) {
+			PX4_INFO("The measured stack voltage is above the allowed OTP programming voltage");
+		}
 	}
 
 	_bq76->exit_config_update_mode();
@@ -607,14 +582,6 @@ int Bms::custom_command(int argc, char *argv[])
 {
 	const char *verb = argv[0];
 
-	if (!strcmp(verb, "otp_check")) {
-		if (is_running()) {
-			return _object.load()->otp_check();
-		}
-
-		return PX4_ERROR;
-	}
-
 	if (!strcmp(verb, "read_manu")) {
 		if (is_running()) {
 			return _object.load()->read_manu();
@@ -626,14 +593,6 @@ int Bms::custom_command(int argc, char *argv[])
 	if (!strcmp(verb, "write_manu")) {
 		if (is_running()) {
 			return _object.load()->write_manu();
-		}
-
-		return PX4_ERROR;
-	}
-
-	if (!strcmp(verb, "mfg")) {
-		if (is_running()) {
-			return _object.load()->mfg();
 		}
 
 		return PX4_ERROR;
@@ -689,15 +648,12 @@ BMS driver.
 
 	PRINT_MODULE_USAGE_NAME("bms", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("otp_check", "Checks if the One Time Programmable memory on the bq76 is writable");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("read_manu", "Reads the 32 byte MANU_DATA area on bq76");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("write_manu", "Attempts to write \"this is a test\" to the MANU_DATA area on bq76");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("mfg", "Prints value of MFG_STATUS register");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("diag", "Prints a bunch of helpful diagnostic info");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("flags", "Prints bq76 safety fault flags");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("on", "Enables the output FETs");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("off", "Disables the output FETs");
-
 
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
