@@ -117,28 +117,10 @@ uint32_t BQ76952::get_status_flags()
 {
 	uint32_t status_flags = {};
 
-	// static constexpr uint32_t STATUS_FLAG_IN_USE               = 1;
-	// static constexpr uint32_t STATUS_FLAG_READY_TO_USE         = 2;
-	// static constexpr uint32_t STATUS_FLAG_CHARGING             = 4;
-	static constexpr uint32_t STATUS_FLAG_OVER_TEMP            = 8;
-	static constexpr uint32_t STATUS_FLAG_UNDER_TEMP           = 16;
-	static constexpr uint32_t STATUS_FLAG_OVER_VOLT            = 32;
-	static constexpr uint32_t STATUS_FLAG_UNDER_VOLT           = 64;
-	static constexpr uint32_t STATUS_FLAG_OVER_CURRENT         = 128;
-	static constexpr uint32_t STATUS_FLAG_SHORT_CIRCUIT        = 256;
-	static constexpr uint32_t STATUS_FLAG_SAFETY_FAULT         = 512;
-	// static constexpr uint32_t STATUS_FLAG_CELL_IMBALANCE       = 1024;
-	// static constexpr uint32_t STATUS_FLAG_CELL_BALANCING       = 2048;
-	// static constexpr uint32_t STATUS_FLAG_CELL_FAULT           = 4096;
-	// static constexpr uint32_t STATUS_FLAG_PROTECTIONS_ENABLED  = 8192;
-	static constexpr uint32_t STATUS_FLAG_REQUIRES_SERVICE     = 16384;
-
 	// SAFETY ALERT/STATUS A
 	{
 		int ret = PX4_OK;
-		uint8_t safety_alert_a = {};
 		uint8_t safety_status_a = {};
-		ret |= direct_command(CMD_SAFETY_ALERT_A, &safety_alert_a, sizeof(safety_alert_a));
 		ret |= direct_command(CMD_SAFETY_STATUS_A, &safety_status_a, sizeof(safety_status_a));
 
 		if (ret != PX4_OK) {
@@ -147,45 +129,36 @@ uint32_t BQ76952::get_status_flags()
 		}
 
 		uint8_t under_volt_mask = (1 << 2);
-		if (safety_alert_a & under_volt_mask) {
-			status_flags |= STATUS_FLAG_UNDER_VOLT;
-			if (safety_status_a & under_volt_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_a & under_volt_mask) {
+			status_flags |= STATUS_FLAG_FAULT_UNDER_VOLT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t over_volt_mask = (1 << 3);
-		if (safety_alert_a & over_volt_mask) {
-			status_flags |= STATUS_FLAG_OVER_VOLT;
-			if (safety_status_a & over_volt_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_a & over_volt_mask) {
+			status_flags |= STATUS_FLAG_FAULT_OVER_VOLT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t over_current_mask = (1 << 4) | (1 << 5) | (1 << 6);
-		if (safety_alert_a & over_current_mask) {
-			status_flags |= STATUS_FLAG_OVER_CURRENT;
-			if (safety_status_a & over_current_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_a & over_current_mask) {
+			status_flags |= STATUS_FLAG_FAULT_OVER_CURRENT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t short_circuit_mask = (1 << 7);
-		if (safety_alert_a & short_circuit_mask) {
-			status_flags |= STATUS_FLAG_SHORT_CIRCUIT;
-			if (safety_status_a & short_circuit_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_a & short_circuit_mask) {
+			status_flags |= STATUS_FLAG_FAULT_SHORT_CIRCUIT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 	}
 
 	// SAFETY ALERT/STATUS B
 	{
 		int ret = PX4_OK;
-		uint8_t safety_alert_b = {};
 		uint8_t safety_status_b = {};
-		ret |= direct_command(CMD_SAFETY_ALERT_B, &safety_alert_b, sizeof(safety_alert_b));
 		ret |= direct_command(CMD_SAFETY_STATUS_B, &safety_status_b, sizeof(safety_status_b));
+
 
 		if (ret != PX4_OK) {
 			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
@@ -193,28 +166,22 @@ uint32_t BQ76952::get_status_flags()
 		}
 
 		uint8_t over_temp_mask = (1 << 7) | (1 << 6) | (1 << 5) | (1 << 4);
-		if (safety_alert_b & over_temp_mask) {
-			status_flags |= STATUS_FLAG_OVER_TEMP;
-			if (safety_status_b & over_temp_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_b & over_temp_mask) {
+			status_flags |= STATUS_FLAG_FAULT_OVER_TEMP;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t under_temp_mask = (1 << 0) | (1 << 1) | (1 << 2);
-		if (safety_alert_b & under_temp_mask) {
-			status_flags |= STATUS_FLAG_UNDER_TEMP;
-			if (safety_status_b & under_temp_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_b & under_temp_mask) {
+			status_flags |= STATUS_FLAG_FAULT_UNDER_TEMP;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 	}
 
 	// SAFETY ALERT/STATUS C
 	{
 		int ret = PX4_OK;
-		uint8_t safety_alert_c = {};
 		uint8_t safety_status_c = {};
-		ret |= direct_command(CMD_SAFETY_ALERT_C, &safety_alert_c, sizeof(safety_alert_c));
 		ret |= direct_command(CMD_SAFETY_STATUS_C, &safety_status_c, sizeof(safety_status_c));
 
 		if (ret != PX4_OK) {
@@ -223,27 +190,21 @@ uint32_t BQ76952::get_status_flags()
 		}
 
 		uint8_t over_current_mask = (1 << 7) | (1 << 5);
-		if (safety_alert_c & over_current_mask) {
-			status_flags |= STATUS_FLAG_OVER_CURRENT;
-			if (safety_status_c & over_current_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_c & over_current_mask) {
+			status_flags |= STATUS_FLAG_FAULT_OVER_CURRENT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t short_circuit_mask = (1 << 6);
-		if (safety_alert_c & short_circuit_mask) {
-			status_flags |= STATUS_FLAG_SHORT_CIRCUIT;
-			if (safety_status_c & short_circuit_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_c & short_circuit_mask) {
+			status_flags |= STATUS_FLAG_FAULT_SHORT_CIRCUIT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t over_volt_mask = (1 << 4);
-		if (safety_alert_c & over_volt_mask) {
-			status_flags |= STATUS_FLAG_OVER_VOLT;
-			if (safety_status_c & over_volt_mask) {
-				status_flags |= STATUS_FLAG_SAFETY_FAULT;
-			}
+		if (safety_status_c & over_volt_mask) {
+			status_flags |= STATUS_FLAG_FAULT_OVER_VOLT;
+			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 	}
 
@@ -618,6 +579,7 @@ int BQ76952::write_memory16(uint16_t addr, uint16_t data)
 
 int BQ76952::enter_config_update_mode()
 {
+	PX4_INFO("Entering CONFIG_UPDATE mode");
 	// Enter config udpate mode if not already in it and report status
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
@@ -635,11 +597,14 @@ int BQ76952::enter_config_update_mode()
 		return PX4_OK;
 	}
 
+	PX4_INFO("FAILED to enter CONFIG_UPDATE mode");
 	return PX4_ERROR;
 }
 
 int BQ76952::exit_config_update_mode()
 {
+	PX4_INFO("Exiting CONFIG_UPDATE mode");
+
 	sub_command(CMD_EXIT_CFG_UPDATE);
 	px4_usleep(2_ms); // 1000us time to complete operation
 
@@ -649,6 +614,8 @@ int BQ76952::exit_config_update_mode()
 	if (!(buf[0] & 0x01)) {
 		return PX4_OK;
 	}
+
+	PX4_INFO("FAILED to exit CONFIG_UPDATE mode");
 	return PX4_ERROR;
 }
 

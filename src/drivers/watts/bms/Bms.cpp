@@ -393,14 +393,15 @@ int Bms::initialize_bq34()
 int Bms::otp_check()
 {
 	_bq76->enter_config_update_mode();
+	px4_usleep(5_ms);
 	_bq76->sub_command(CMD_OTP_WR_CHECK);
 	px4_usleep(5_ms);
-	uint16_t status = _bq76->sub_command_response8(0);
+	uint8_t status = _bq76->sub_command_response8(0);
 
 	if (status & (1 << 7)) {
-		PX4_INFO("OTP writes enabled: %x", status);
+		PX4_INFO("OTP writes enabled: 0x%x", status);
 	} else {
-		PX4_INFO("OTP writes disabled: %x", status);
+		PX4_INFO("OTP writes disabled: 0x%x", status);
 	}
 
 	uint8_t buf[2] = {};
@@ -428,7 +429,7 @@ int Bms::write_manu()
 	_bq76->enter_config_update_mode();
 	_bq76->sub_command(CMD_OTP_WR_CHECK);
 	px4_usleep(5_ms);
-	uint16_t status = _bq76->sub_command_response8(0);
+	uint8_t status = _bq76->sub_command_response8(0);
 	if (status & (1 << 7)) {
 		const char* str = "this is a test";
 		PX4_INFO("Writing %s", str);
@@ -450,6 +451,162 @@ int Bms::mfg()
 	PX4_INFO("mfg status: 0x%x", status);
 	return PX4_OK;
 }
+
+int Bms::flags()
+{
+	uint32_t flags = _bq76->get_status_flags();
+	PX4_INFO("flags: 0x%08lx", flags);
+
+	if (flags & STATUS_FLAG_READY_TO_USE) {
+		PX4_INFO("Ready to use");
+	} else {
+		PX4_INFO("Not ready to use");
+	}
+
+	if (flags & STATUS_FLAG_CHARGING) {
+		PX4_INFO("Charging");
+	} else {
+		PX4_INFO("Discharging");
+	}
+
+	if (flags & STATUS_FLAG_CELL_BALANCING) {
+		PX4_INFO("Balancing");
+	}
+
+	if (flags & STATUS_FLAG_AUTO_DISCHARGING) {
+		PX4_INFO("Auto discharging");
+	}
+
+	if (flags & STATUS_FLAG_REQUIRES_SERVICE) {
+		PX4_INFO("Requires service");
+	}
+
+	if (flags & STATUS_FLAG_BAD_BATTERY) {
+		PX4_INFO("Bad battery");
+	}
+
+	if (flags & STATUS_FLAG_PROTECTIONS_ENABLED) {
+		PX4_INFO("Protections enabled");
+	} else {
+		PX4_INFO("Protections disabled");
+	}
+
+	// Faults
+	if (flags & STATUS_FLAG_FAULT_PROTECTION_SYSTEM) {
+		PX4_INFO("--- SAFETY FAULT ---");
+	}
+	if (flags & STATUS_FLAG_FAULT_OVER_VOLT) {
+		PX4_INFO("Over volt");
+	}
+	if (flags & STATUS_FLAG_FAULT_UNDER_VOLT) {
+		PX4_INFO("Under volt");
+	}
+	if (flags & STATUS_FLAG_FAULT_OVER_TEMP) {
+		PX4_INFO("Over temp");
+	}
+	if (flags & STATUS_FLAG_FAULT_UNDER_TEMP) {
+		PX4_INFO("Under temp");
+	}
+	if (flags & STATUS_FLAG_FAULT_OVER_CURRENT) {
+		PX4_INFO("Over current");
+	}
+	if (flags & STATUS_FLAG_FAULT_SHORT_CIRCUIT) {
+		PX4_INFO("Short circuit");
+	}
+
+	return PX4_OK;
+}
+
+int Bms::diagnostics()
+{
+	_bq76->enter_config_update_mode();
+
+	// MFG STATUS
+	{
+		_bq76->sub_command(CMD_MFG_STATUS);
+		px4_usleep(5_ms);
+		uint16_t status = _bq76->sub_command_response16(0);
+		PX4_INFO("mfg status: 0x%x", status);
+
+		if (status & (1 << 4)) {
+			PX4_INFO("Normal FET control is enabled");
+		} else {
+			PX4_INFO("Normal FET control is disabled");
+		}
+
+		if (status & (1 << 6)) {
+			PX4_INFO("Permanent Failure checks are enabled");
+		} else {
+			PX4_INFO("Permanent Failure checks are disabled");
+		}
+
+		if (status & (1 << 7)) {
+			PX4_INFO("Device may program OTP during operation");
+		} else {
+			PX4_INFO("Device will not program OTP during operation");
+		}
+		PX4_INFO("");
+	}
+
+	// BATTERY STATUS
+	{
+		uint8_t buf[2] = {};
+		_bq76->direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+		uint16_t status = (buf[1] << 8) + buf[0];
+		PX4_INFO("battery status: 0x%x", status);
+
+		if (status & (1 << 0)) {
+			PX4_INFO("Device is in CONFIG_UPDATE mode");
+		} else {
+			PX4_INFO("Device is not in CONFIG_UPDATE mode");
+		}
+
+		if (status & (1 << 1)) {
+			PX4_INFO("Device is in PRECHARGE mode");
+		} else {
+			PX4_INFO("Device is not in PRECHARGE mode");
+		}
+
+		if (status & (1 << 6)) {
+			PX4_INFO("Writes to OTP are pending");
+		} else {
+			PX4_INFO("No writes to OTP are pending");
+		}
+
+		if (status & (1 << 7)) {
+			PX4_INFO("OTP writes are allowed");
+		} else {
+			PX4_INFO("OTP writes are blocked");
+		}
+
+		if ((status & (1 << 8)) && status & (1 << 9)) {
+			PX4_INFO("Device is in SEALED mode");
+		} else if (status & (1 << 8)) {
+			PX4_INFO("Device is in FULLACCESS mode");
+		} else if (status & (1 << 9)) {
+			PX4_INFO("Device is in UNSEALED mode");
+		} else {
+			PX4_INFO("Device has not initialized yet");
+		}
+
+		if (status & (1 << 11)) {
+			PX4_INFO("At least one enabled safety fault is triggered");
+		} else {
+			PX4_INFO("No safety fault is triggered");
+		}
+
+		if (status & (1 << 12)) {
+			PX4_INFO("At least one Permanent Fail fault has triggered.");
+		} else {
+			PX4_INFO("No Permanent Fail fault has triggered.");
+		}
+	}
+
+	_bq76->exit_config_update_mode();
+
+	return PX4_OK;
+}
+
 
 int Bms::custom_command(int argc, char *argv[])
 {
@@ -487,7 +644,50 @@ int Bms::custom_command(int argc, char *argv[])
 		return PX4_ERROR;
 	}
 
+	if (!strcmp(verb, "diag")) {
+		if (is_running()) {
+			return _object.load()->diagnostics();
+		}
+
+		return PX4_ERROR;
+	}
+
+	if (!strcmp(verb, "flags")) {
+		if (is_running()) {
+			return _object.load()->flags();
+		}
+
+		return PX4_ERROR;
+	}
+
 	return print_usage("unknown command");
+}
+
+int Bms::print_usage(const char *reason)
+{
+	if (reason) {
+		PX4_WARN("%s\n", reason);
+	}
+
+	PRINT_MODULE_DESCRIPTION(
+		R"DESCR_STR(
+### Description
+BMS driver.
+
+)DESCR_STR");
+
+	PRINT_MODULE_USAGE_NAME("bms", "driver");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("otp_check", "Checks if the One Time Programmable memory on the bq76 is writable");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("read_manu", "Reads the 32 byte MANU_DATA area on bq76");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("write_manu", "Attempts to write \"this is a test\" to the MANU_DATA area on bq76");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("mfg", "Prints value of MFG_STATUS register");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("diag", "Prints a bunch of helpful diagnostic info");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("flags", "Prints bq76 safety fault flags");
+
+	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+
+	return 0;
 }
 
 int Bms::task_spawn(int argc, char *argv[])
@@ -511,26 +711,6 @@ int Bms::task_spawn(int argc, char *argv[])
 	_task_id = -1;
 
 	return PX4_ERROR;
-}
-
-int Bms::print_usage(const char *reason)
-{
-	if (reason) {
-		PX4_WARN("%s\n", reason);
-	}
-
-	PRINT_MODULE_DESCRIPTION(
-		R"DESCR_STR(
-### Description
-BMS driver.
-
-)DESCR_STR");
-
-	PRINT_MODULE_USAGE_NAME("bms", "driver");
-	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
-
-	return 0;
 }
 
 extern "C" __EXPORT int bms_main(int argc, char *argv[])

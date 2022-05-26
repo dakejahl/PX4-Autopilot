@@ -93,6 +93,8 @@ private:
 	int read_manu();
 	int write_manu();
 	int mfg();
+	int diagnostics();
+	int flags();
 
 private:
 	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
