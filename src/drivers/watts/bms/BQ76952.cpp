@@ -226,8 +226,8 @@ uint32_t BQ76952::status_flags()
 
 void BQ76952::manu_data()
 {
+	// TODO: does this actually work?
 	PX4_INFO("manu_data");
-	// Read MANU_DATA
 	uint8_t manu_data[32] = {};
 	px4_usleep(5_ms);
 	sub_command(CMD_MANU_DATA);
@@ -596,21 +596,32 @@ int BQ76952::enter_config_update_mode()
 	// Enter config udpate mode if not already in it and report status
 	uint8_t buf[2] = {};
 	direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-	px4_usleep(1_ms);
-	if (!(buf[0] & 0x01)) {
-		sub_command(CMD_SET_CFGUPDATE);
-		px4_usleep(5_ms); // 2000us time to complete operation
-		direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-		px4_usleep(5_ms);
-		if (buf[0] & 0x01) {
+
+	// TODO: w/ new board and battery the firs time we enter CONFIG_UPDATE it fails, why???
+	// We will compensate by trying up to 3 times
+	int retries = 0;
+	while (retries < 3) {
+
+		px4_usleep(1_ms);
+		if (!(buf[0] & 0x01)) {
+			sub_command(CMD_SET_CFGUPDATE);
+			px4_usleep(5_ms); // 2000us time to complete operation
+			direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
+			px4_usleep(5_ms);
+			if (buf[0] & 0x01) {
+				PX4_INFO("Successfully went into config update mode");
+				return PX4_OK;
+			}
+		} else {
+			// Already in config update mode
+			PX4_INFO("Already in config update mode");
 			return PX4_OK;
 		}
-	} else {
-		// Already in config update mode
-		return PX4_OK;
+
+		PX4_INFO("FAILED to enter CONFIG_UPDATE mode");
+		retries++;
 	}
 
-	PX4_INFO("FAILED to enter CONFIG_UPDATE mode");
 	return PX4_ERROR;
 }
 
@@ -743,10 +754,14 @@ int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 
 int BQ76952::probe()
 {
-	uint8_t val = {};
-	int ret = transfer(&val, sizeof(val), nullptr, 0);
-	if (ret != PX4_OK) {
-		perf_count(_comms_errors);
+	// Check device number matches what we expect
+	int ret = sub_command(CMD_DEVICE_NUMBER);
+	px4_usleep(5_ms);
+	uint16_t number = sub_command_response16(0);
+	PX4_INFO("device number: 0x%x", number);
+
+	if (number != 0x7695) {
+		return PX4_ERROR;
 	}
 
 	return ret;

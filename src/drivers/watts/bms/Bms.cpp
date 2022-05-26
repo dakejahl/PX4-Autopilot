@@ -364,6 +364,7 @@ void Bms::shutdown()
 	px4_usleep(50_ms);
 	stm32_gpiowrite(GPIO_PWR_EN, false);
 	px4_usleep(50_ms);
+	ScheduleClear();
 }
 
 void Bms::update_params(const bool force)
@@ -590,6 +591,17 @@ int Bms::diagnostics()
 	return PX4_OK;
 }
 
+int Bms::on()
+{
+	_bq76->enable_fets();
+	return PX4_OK;
+}
+
+int Bms::off()
+{
+	_bq76->disable_fets();
+	return PX4_OK;
+}
 
 int Bms::custom_command(int argc, char *argv[])
 {
@@ -643,6 +655,22 @@ int Bms::custom_command(int argc, char *argv[])
 		return PX4_ERROR;
 	}
 
+	if (!strcmp(verb, "on")) {
+		if (is_running()) {
+			return _object.load()->on();
+		}
+
+		return PX4_ERROR;
+	}
+
+	if (!strcmp(verb, "off")) {
+		if (is_running()) {
+			return _object.load()->off();
+		}
+
+		return PX4_ERROR;
+	}
+
 	return print_usage("unknown command");
 }
 
@@ -667,6 +695,9 @@ BMS driver.
 	PRINT_MODULE_USAGE_COMMAND_DESCR("mfg", "Prints value of MFG_STATUS register");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("diag", "Prints a bunch of helpful diagnostic info");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("flags", "Prints bq76 safety fault flags");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("on", "Enables the output FETs");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("off", "Disables the output FETs");
+
 
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 

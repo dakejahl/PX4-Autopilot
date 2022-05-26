@@ -95,6 +95,8 @@ private:
 	int mfg();
 	int diagnostics();
 	int flags();
+	int on();
+	int off();
 
 private:
 	static const hrt_abstime SAMPLE_INTERVAL{50_ms};

@@ -71,6 +71,7 @@ using namespace time_literals;
 // Subcommands (2 bytes)
 #define CMD_ADDR_SUBCMD_LOW     0x3E
 
+#define CMD_DEVICE_NUMBER       0x0001
 #define CMD_FET_ENABLE          0x0022
 #define CMD_ENTER_CFG_UPDATE    0x0034 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_MFG_STATUS          0x0057 // pg 119
