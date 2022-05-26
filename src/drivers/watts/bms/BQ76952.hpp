@@ -140,8 +140,9 @@ public:
 	int init();
 	int probe() override;
 
-	uint32_t get_status_flags();
-	void read_manu_data();
+	uint32_t status_flags();
+	uint16_t mfg_status();
+	void manu_data();
 
 	// Register Configuration
 	int configure_settings();

@@ -95,7 +95,7 @@ int Bms::init()
 	_bq76->enable_protections();
 
 	// TODO: just a test right now
-	_bq76->read_manu_data();
+	_bq76->manu_data();
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
 
@@ -178,7 +178,7 @@ void Bms::collect_and_publish()
 	battery_status.cycle_count = _bq34->read_cycle_count();
 	battery_status.state_of_health = _bq34->read_state_of_health();
 
-	battery_status.status_flags = _bq76->get_status_flags();
+	battery_status.status_flags = _bq76->status_flags();
 
 	_battery_status_pub.publish(battery_status);
 }
@@ -419,7 +419,7 @@ int Bms::otp_check()
 
 int Bms::read_manu()
 {
-	_bq76->read_manu_data();
+	_bq76->manu_data();
 	return PX4_OK;
 }
 
@@ -445,16 +445,14 @@ int Bms::write_manu()
 
 int Bms::mfg()
 {
-	_bq76->sub_command(CMD_MFG_STATUS);
-	px4_usleep(5_ms);
-	uint16_t status = _bq76->sub_command_response16(0);
+	uint16_t status = _bq76->mfg_status();
 	PX4_INFO("mfg status: 0x%x", status);
 	return PX4_OK;
 }
 
 int Bms::flags()
 {
-	uint32_t flags = _bq76->get_status_flags();
+	uint32_t flags = _bq76->status_flags();
 	PX4_INFO("flags: 0x%08lx", flags);
 
 	if (flags & STATUS_FLAG_READY_TO_USE) {
@@ -523,9 +521,7 @@ int Bms::diagnostics()
 
 	// MFG STATUS
 	{
-		_bq76->sub_command(CMD_MFG_STATUS);
-		px4_usleep(5_ms);
-		uint16_t status = _bq76->sub_command_response16(0);
+		uint16_t status = _bq76->mfg_status();
 		PX4_INFO("mfg status: 0x%x", status);
 
 		if (status & (1 << 4)) {

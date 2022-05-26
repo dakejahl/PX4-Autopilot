@@ -113,7 +113,14 @@ void BQ76952::configure_fets()
 	configure_protections_fet_action();
 }
 
-uint32_t BQ76952::get_status_flags()
+uint16_t BQ76952::mfg_status()
+{
+	sub_command(CMD_MFG_STATUS);
+	px4_usleep(5_ms);
+	return sub_command_response16(0);
+}
+
+uint32_t BQ76952::status_flags()
 {
 	uint32_t status_flags = {};
 
@@ -211,9 +218,9 @@ uint32_t BQ76952::get_status_flags()
 	return status_flags;
 }
 
-void BQ76952::read_manu_data()
+void BQ76952::manu_data()
 {
-	PX4_INFO("read_manu_data");
+	PX4_INFO("manu_data");
 	// Read MANU_DATA
 	uint8_t manu_data[32] = {};
 	px4_usleep(5_ms);
