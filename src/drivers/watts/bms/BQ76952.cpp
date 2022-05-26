@@ -58,6 +58,12 @@ int BQ76952::init()
 		return ret;
 	}
 
+	configure_settings();
+	px4_usleep(100_ms); // Give time for settings to take
+
+	// Set FET mode to normal and configure FET actions when protections are tripped
+	configure_fets();
+
 	return PX4_OK;
 }
 

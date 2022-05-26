@@ -84,20 +84,46 @@ int Bms::init()
 		return PX4_ERROR;
 	}
 
-	if (_bq76->configure_settings() != PX4_OK) {
+	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
+
+	return PX4_OK;
+}
+
+int Bms::initialize_bq76()
+{
+	_bq76 = new BQ76952();
+
+	if (!_bq76) {
+		PX4_INFO("failed to create BQ76952");
 		return PX4_ERROR;
 	}
 
-	// Set FET mode to normal and configure FET actions when protections are tripped
-	_bq76->configure_fets();
+	if (_bq76->init() != PX4_OK) {
+		PX4_INFO("failed to initialize BQ76952");
+		return PX4_ERROR;
+	}
 
-	// should we let the auto protection enable do this?
-	_bq76->enable_protections();
+	return PX4_OK;
+}
 
-	// TODO: just a test right now
-	_bq76->manu_data();
+int Bms::initialize_bq34()
+{
+	// Enable LDO at REG1 if it's not already enabled (turns on the bq34)
+	uint8_t value = 0b00001101;
+	_bq76->sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
+	px4_usleep(5_ms);
 
-	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
+	_bq34 = new BQ34Z100();
+
+	if (!_bq34) {
+		PX4_INFO("failed to create BQ34Z100");
+		return PX4_ERROR;
+	}
+
+	if (_bq34->init() != PX4_OK) {
+		PX4_INFO("failed to initialize BQ34Z100");
+		return PX4_ERROR;
+	}
 
 	return PX4_OK;
 }
@@ -349,45 +375,6 @@ void Bms::update_params(const bool force)
 		// update parameters from storage
 		ModuleParams::updateParams();
 	}
-}
-
-int Bms::initialize_bq76()
-{
-	_bq76 = new BQ76952();
-
-	if (!_bq76) {
-		PX4_INFO("failed to create BQ76952");
-		return PX4_ERROR;
-	}
-
-	if (_bq76->init() != PX4_OK) {
-		PX4_INFO("failed to initialize BQ76952");
-		return PX4_ERROR;
-	}
-
-	return PX4_OK;
-}
-
-int Bms::initialize_bq34()
-{
-	// Enable LDO at REG1 if it's not already enabled (turns on the bq34)
-	uint8_t value = 0b00001101;
-	_bq76->sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(5_ms);
-
-	_bq34 = new BQ34Z100();
-
-	if (!_bq34) {
-		PX4_INFO("failed to create BQ34Z100");
-		return PX4_ERROR;
-	}
-
-	if (_bq34->init() != PX4_OK) {
-		PX4_INFO("failed to initialize BQ34Z100");
-		return PX4_ERROR;
-	}
-
-	return PX4_OK;
 }
 
 int Bms::otp_check()
