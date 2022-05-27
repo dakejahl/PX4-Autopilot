@@ -163,7 +163,6 @@ void BQ76952::configure_fets()
 		sub_command(CMD_FET_ENABLE);
 	}
 
-	// Set FET Protection action
 	configure_protections_fet_action();
 }
 
@@ -246,7 +245,7 @@ uint32_t BQ76952::status_flags()
 			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
-		uint8_t under_temp_mask = (1 << 0) | (1 << 1) | (1 << 2);
+		uint8_t under_temp_mask = (1 << 2) | (1 << 1) | (1 << 0);
 		if (safety_status_b & under_temp_mask) {
 			status_flags |= STATUS_FLAG_FAULT_UNDER_TEMP;
 			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
@@ -313,6 +312,8 @@ void BQ76952::write_manu_data()
 	// PX4_INFO("Writing %s", str);
 	// sub_command2(CMD_MANU_DATA, (void*)str, strlen(str) + 1);
 
+	// From the example here but still doesn't work...
+	// https://e2e.ti.com/support/power-management-group/power-management/f/power-management-forum/1084454/bq76952-cannot-program-manu_data
 	uint8_t data[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x11, 0x22, 0x33 ,0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x11, 0x22 };
 	sub_command2(CMD_MANU_DATA, (void*)data, sizeof(data));
 
@@ -406,27 +407,24 @@ void BQ76952::enable_protections()
 
 void BQ76952::disable_protections()
 {
-	// We disable all protections except for
-
-	// Cell overvoltage should probably always be on.
-	// Over temperature in charge we always want on
-	// Undertemperature in charge we always want on
 	PX4_INFO("Disabling protections");
-	// {
-	// 	uint8_t byte = {};
-	// 	byte |= 1 << 4; // Overcurrent in charge protection stays on
-	// 	write_memory8(ADDR_PROTECTIONS_A, byte);
-	// }
-	// {
-	// 	uint8_t byte = {};
-	// 	byte |= 1 << 4; // Overcurrent in charge protection stays on
-	// 	write_memory8(ADDR_PROTECTIONS_B, byte);
-	// }
-	// {
-	// 	uint8_t byte = {};
-	// 	byte |= 1 << 4; // Overcurrent in charge protection stays on
-	// 	write_memory8(ADDR_PROTECTIONS_C, byte);
-	// }
+	// Except these ones stay on
+	{
+		uint8_t byte = {};
+		byte |= 1 << 4; // Overcurrent in Charge Protection
+		byte |= 1 << 3; // Cell Overvoltage Protection
+		write_memory8(ADDR_PROTECTIONS_A, byte);
+	}
+	{
+		uint8_t byte = {};
+		byte |= 1 << 4; // Overtemperature in Charge
+		byte |= 1 << 0; // Undertemperature in Charge
+		write_memory8(ADDR_PROTECTIONS_B, byte);
+	}
+	{
+		uint8_t byte = {};
+		write_memory8(ADDR_PROTECTIONS_C, byte);
+	}
 }
 
 void BQ76952::configure_protections_fet_action()
@@ -521,14 +519,92 @@ void BQ76952::configure_protections_fet_action()
 		write_memory8(ADDR_CHG_FET_Protections_C, byte);
 	}
 
-	// TODO:
 	// DSG FET Protections A
 	{
 		uint8_t byte = {};
+
+		// 7 SCD 1 Short Circuit in Discharge Protection
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 7);
+
+
+		// 6 OCD2 1 Overcurrent in Discharge 2nd Tier Protection
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		// byte |= (1 << 6);
+
+		// 5 OCD1 1 Overcurrent in Discharge 1st Tier Protection
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 5);
+
+		// 2 CUV 1 Cell Undervoltage Protection
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 2);
+
 		write_memory8(ADDR_DSG_FET_Protections_A, byte);
 	}
-}
 
+	// DSG FET Protections B
+	{
+		uint8_t byte = {};
+
+		// 7 OTF 1 FET Overtemperature
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 7);
+
+		// 6 OTINT 1 Internal Overtemperature
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 6);
+
+		// 5 OTD 1 Overtemperature in Discharge
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 5);
+
+		// 2 UTINT 1 Internal Undertemperature
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 2);
+
+		// 1 UTD 1 Undertemperature in Discharge
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		byte |= (1 << 1);
+
+		write_memory8(ADDR_DSG_FET_Protections_B, byte);
+	}
+
+	// DSG FET Protections C
+	{
+		uint8_t byte = {};
+		// 7 OCD3 1 Overcurrent in Discharge 3rd Tier Protection
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		// byte |= (1 << 7);
+
+		// 6 SCDL 1 Short Circuit in Discharge Latch
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		// byte |= (1 << 6);
+
+		// 5 OCDL 1 Overcurrent in Discharge Latch
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		// byte |= (1 << 5);
+
+		// 1 HWDF 1 Host Watchdog Fault
+		// 		0 = DSG FET is not disabled when protection is triggered.
+		// 		1 = DSG FET is disabled when protection is triggered.
+		// byte |= (1 << 1);
+
+		write_memory8(ADDR_DSG_FET_Protections_C, byte);
+	}
+}
 
 void BQ76952::enable_fets()
 {
