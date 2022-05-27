@@ -295,6 +295,8 @@ void Bms::handle_button_and_boot()
 			// Notify shutdown
 			_shutdown_pub.publish(shutdown_s{});
 			_shutdown = true;
+			// We disable FETs here as well so that the user sees something happen
+			_bq76->disable_fets();
 		}
 	}
 }
