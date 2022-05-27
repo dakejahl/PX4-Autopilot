@@ -79,7 +79,10 @@ public:
 			if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
 
 				ardupilot::equipment::power::BatteryContinuous battery = {};
-				battery.temperature = status.temperature; // float16
+				battery.temperature_cells = status.temperature; // float16
+				// TODO:
+				// battery.temperature_pcb
+				// battery.temperature_other
 				battery.current = status.current; // float16
 				battery.voltage = status.voltage; // float16
 				battery.capacity_consumed = status.capacity_consumed;
