@@ -356,24 +356,13 @@ void Bms::update_params(const bool force)
 
 int Bms::read_manu()
 {
-	_bq76->manu_data();
+	_bq76->read_manu_data();
 	return PX4_OK;
 }
 
 int Bms::write_manu()
 {
-	PX4_INFO("Trying to write MANU_DATA");
-	uint8_t otp = _bq76->otp_wr_check();
-	if (otp & (1 << 7)) {
-		const char* str = "this is a test";
-		PX4_INFO("Writing %s", str);
-		_bq76->sub_command(CMD_MANU_DATA, (void*)str, sizeof(str));
-		px4_usleep(50_ms);
-	} else {
-		PX4_INFO("OTP writes disabled");
-	}
-
-	_bq76->exit_config_update_mode();
+	_bq76->write_manu_data();
 	return PX4_OK;
 }
 

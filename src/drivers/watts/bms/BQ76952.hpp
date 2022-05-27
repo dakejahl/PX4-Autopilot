@@ -152,7 +152,8 @@ public:
 
 	uint8_t otp_wr_check();
 
-	void manu_data();
+	void read_manu_data();
+	void write_manu_data();
 
 	// Register Configuration
 	int configure_settings();
@@ -170,6 +171,7 @@ public:
 
 	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
 	int sub_command(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
+	int sub_command2(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
 
 	uint8_t sub_command_response8(uint8_t offset);
 	uint16_t sub_command_response16(uint8_t offset);

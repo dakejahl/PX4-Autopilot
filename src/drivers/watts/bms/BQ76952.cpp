@@ -286,20 +286,42 @@ uint32_t BQ76952::status_flags()
 	return status_flags;
 }
 
-void BQ76952::manu_data()
+void BQ76952::read_manu_data()
 {
 	// TODO: does this actually work?
 	PX4_INFO("manu_data");
 	uint8_t manu_data[32] = {};
-	px4_usleep(5_ms);
+	px4_usleep(50_ms);
 	sub_command(CMD_MANU_DATA);
-	// px4_usleep(500_ms);
+
+	px4_usleep(50_ms);
 	sub_command_response_buffer(manu_data, sizeof(manu_data));
 
 	for (size_t i = 0; i < sizeof(manu_data); i++) {
 		printf("%c ", manu_data[i]);
 	}
 	printf("\n");
+}
+
+void BQ76952::write_manu_data()
+{
+	PX4_INFO("Trying to write MANU_DATA");
+
+	enter_config_update_mode();
+
+	// const char* str = "this is a test";
+	// PX4_INFO("Writing %s", str);
+	// sub_command2(CMD_MANU_DATA, (void*)str, strlen(str) + 1);
+
+	uint8_t data[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x11, 0x22, 0x33 ,0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x11, 0x22 };
+	sub_command2(CMD_MANU_DATA, (void*)data, sizeof(data));
+
+	// 125ms per byte
+	for (size_t i = 0; i < sizeof(data); i++) {
+		px4_usleep(150_ms);
+	}
+
+	exit_config_update_mode();
 }
 
 void BQ76952::enable_protections()
@@ -750,6 +772,68 @@ int BQ76952::sub_command(uint16_t command, void* tx_buf, size_t tx_len)
 	return ret;
 }
 
+int BQ76952::sub_command2(uint16_t command, void* tx_buf, size_t tx_len)
+{
+	// Send the sub command
+	uint8_t buf[3] = {};
+	buf[0] = CMD_ADDR_SUBCMD_LOW;
+	buf[1] = uint8_t(command & 0x00FF);
+	buf[2] = uint8_t((command >> 8) & 0x00FF);
+	int ret = transfer(buf, sizeof(buf), nullptr, 0);
+
+	// DEBUGGING
+	PX4_INFO("buf: ");
+	for (size_t i = 0; i < sizeof(buf); i++) {
+		PX4_INFO_RAW("%2x ", buf[i]);
+	}
+	PX4_INFO_RAW("\n");
+
+
+	// Write data to the transfer buffer
+	if (tx_buf != nullptr && tx_len != 0) {
+		// uint8_t data_buf[tx_len + 1] = {}; // command + data
+		// data_buf[0] = CMD_ADDR_TRANSFER_BUFFER;
+		// memcpy(data_buf + 1, (uint8_t*)tx_buf, tx_len);
+
+		uint8_t data_buf[tx_len] = {}; // command + data
+		memcpy(data_buf, (uint8_t*)tx_buf, tx_len);
+
+		ret |= transfer(data_buf, sizeof(data_buf), nullptr, 0);
+
+		// DEBUGGING
+		PX4_INFO("data_buf: ");
+		for (size_t i = 0; i < sizeof(data_buf); i++) {
+			PX4_INFO_RAW("%2x ", data_buf[i]);
+		}
+		PX4_INFO_RAW("\n");
+
+		// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
+		// number of bytes used in the transfer buffer, then the result is bitwise inverted.
+		uint8_t crc_buf[3] = {}; // command + checksum + length
+		uint8_t checksum = buf[1] + buf[2];
+		for (size_t i = 0; i < tx_len; i++) {
+			checksum += data_buf[i];
+		}
+		crc_buf[0] = CMD_ADDR_RESP_CHKSUM;
+		crc_buf[1] = ~checksum;
+		crc_buf[2] = 2 + tx_len + 2; // length: 2 addr bytes, data len, 1 crc, 1 length
+
+		ret |= transfer(crc_buf, sizeof(crc_buf), nullptr, 0);
+
+		// DEBUGGING
+		PX4_INFO("crc_buf: ");
+		for (size_t i = 0; i < sizeof(crc_buf); i++) {
+			PX4_INFO_RAW("%2x ", crc_buf[i]);
+		}
+		PX4_INFO_RAW("\n");
+	}
+
+	if (ret != PX4_OK) {
+		perf_count(_comms_errors);
+	}
+	return ret;
+}
+
 uint8_t BQ76952::sub_command_response8(uint8_t offset)
 {
 	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER + offset;
@@ -783,7 +867,7 @@ uint16_t BQ76952::sub_command_response16(uint8_t offset)
 int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 {
 	// TODO: handle timeout
-	// uint16_t command = CMD_MANU_DATA;
+	uint16_t command = CMD_MANU_DATA;
 	// uint8_t low_byte = uint8_t(command & 0x00FF);
 	// uint8_t high_byte = uint8_t((command >> 8) & 0x00FF);
 	// while (1) {
@@ -796,9 +880,34 @@ int BQ76952::sub_command_response_buffer(uint8_t* buf, size_t length)
 	// 	}
 	// }
 
-	uint8_t addr = CMD_ADDR_TRANSFER_BUFFER;
-	int ret = transfer(&addr, 1, buf, length);
+	// Send MANU_DATA
+	uint8_t txbuf[3] = {};
+	txbuf[0] = CMD_ADDR_SUBCMD_LOW;
+	txbuf[1] = uint8_t(command & 0x00FF);
+	txbuf[2] = uint8_t((command >> 8) & 0x00FF);
+	int ret = transfer(txbuf, sizeof(txbuf), nullptr, 0);
 
+	// DEBUGGING
+	PX4_INFO("txbuf: ");
+	for (size_t i = 0; i < sizeof(txbuf); i++) {
+		PX4_INFO_RAW("%2x ", txbuf[i]);
+	}
+	PX4_INFO_RAW("\n");
+
+	px4_usleep(50_ms);
+
+	txbuf[0] = CMD_ADDR_TRANSFER_BUFFER;
+	txbuf[1] = 0x32;
+
+	ret |= transfer(txbuf, 2, buf, length);
+
+
+	// DEBUGGING
+	PX4_INFO("txbuf: ");
+	for (size_t i = 0; i < 2; i++) {
+		PX4_INFO_RAW("%2x ", txbuf[i]);
+	}
+	PX4_INFO_RAW("\n");
 	// int ret = transfer(&addr, 1, nullptr, 0);
 	// ret |= transfer(nullptr, 0, buf, length);
 
