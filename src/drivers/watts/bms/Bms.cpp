@@ -108,11 +108,6 @@ int Bms::initialize_bq76()
 
 int Bms::initialize_bq34()
 {
-	// Enable LDO at REG1 if it's not already enabled (turns on the bq34)
-	uint8_t value = 0b00001101;
-	_bq76->sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
-	px4_usleep(5_ms);
-
 	_bq34 = new BQ34Z100();
 
 	if (!_bq34) {
@@ -172,7 +167,7 @@ void Bms::collect_and_publish()
 	battery_status.temperature_other = NAN; // unused
 
 	battery_status.current = _bq76->current();
-	battery_status.voltage = _bq76->voltage();
+	battery_status.voltage = _bq76->bat_voltage();
 
 	_bq76->cell_voltages(battery_status.cell_voltages, 12);
 
@@ -196,14 +191,7 @@ void Bms::handle_automatic_protections()
 		return;
 	}
 
-	int16_t data = {};
-	int ret = _bq76->direct_command(CMD_READ_CC2_CURRENT, &data, sizeof(data));
-
-	if (ret != PX4_OK) {
-		return;
-	}
-
-	float current = (float)data / 100.0f;
+	float current = _bq76->current();
 	float protect_current = _param_protect_current.get();
 
 	// TODO: current > threshold for X seconds
@@ -230,15 +218,9 @@ void Bms::handle_idle_current_detection()
 		return;
 	}
 
-	int16_t data = {};
-	int ret = _bq76->direct_command(CMD_READ_CC2_CURRENT, &data, sizeof(data));
-	float current = (float)data / 100.0f;
-
-	if (ret != PX4_OK) {
-		return;
-	}
-
+	float current = _bq76->current();
 	hrt_abstime now = hrt_absolute_time();
+
 	if (current < _param_idle_current.get()) {
 		if (!_below_idle_current) {
 			_below_idle_current = true;
@@ -268,13 +250,9 @@ void Bms::handle_button_and_boot()
 		}
 
 		// Check if PACK voltage is high
-		int16_t pack_voltage = {};
-		_bq76->direct_command(CMD_READ_PACK_PIN_VOLTAGE, &pack_voltage, sizeof(pack_voltage));
-		px4_usleep(1_ms);
-		float pack_voltage_f = pack_voltage / 100.0f;
-		float voltage_threshold = _param_parallel_voltage.get();
-		if (pack_voltage_f >= voltage_threshold) {
-			PX4_INFO("PACK voltage (%fv) above threshold (%fv), enabling FETs", double(pack_voltage_f), double(voltage_threshold));
+		float pack_voltage = _bq76->pack_voltage();
+		if (pack_voltage >= _param_parallel_voltage.get()) {
+			PX4_INFO("PACK voltage (%fv) above threshold (%fv), enabling FETs", double(pack_voltage), double(_param_parallel_voltage.get()));
 			_booted = true;
 			_bq76->enable_fets();
 			return;
@@ -357,18 +335,6 @@ void Bms::update_params(const bool force)
 		// update parameters from storage
 		ModuleParams::updateParams();
 	}
-}
-
-int Bms::read_manu()
-{
-	_bq76->read_manu_data();
-	return PX4_OK;
-}
-
-int Bms::write_manu()
-{
-	_bq76->write_manu_data();
-	return PX4_OK;
 }
 
 int Bms::flags()
@@ -467,9 +433,7 @@ int Bms::diagnostics()
 
 	// BATTERY STATUS
 	{
-		uint8_t buf[2] = {};
-		_bq76->direct_command(CMD_BATTERY_STATUS, buf, sizeof(buf));
-		uint16_t status = (buf[1] << 8) + buf[0];
+		uint16_t status = _bq76->battery_status();
 		PX4_INFO("battery status: 0x%x", status);
 
 		if (status & (1 << 0)) {
@@ -578,22 +542,6 @@ int Bms::custom_command(int argc, char *argv[])
 {
 	const char *verb = argv[0];
 
-	if (!strcmp(verb, "read_manu")) {
-		if (is_running()) {
-			return _object.load()->read_manu();
-		}
-
-		return PX4_ERROR;
-	}
-
-	if (!strcmp(verb, "write_manu")) {
-		if (is_running()) {
-			return _object.load()->write_manu();
-		}
-
-		return PX4_ERROR;
-	}
-
 	if (!strcmp(verb, "diag")) {
 		if (is_running()) {
 			return _object.load()->diagnostics();
@@ -644,8 +592,6 @@ BMS driver.
 
 	PRINT_MODULE_USAGE_NAME("bms", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("read_manu", "Reads the 32 byte MANU_DATA area on bq76");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("write_manu", "Attempts to write \"this is a test\" to the MANU_DATA area on bq76");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("diag", "Prints a bunch of helpful diagnostic info");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("flags", "Prints bq76 safety fault flags");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("on", "Enables the output FETs");

@@ -147,7 +147,9 @@ public:
 	float temperature_fets();
 
 	float current();
-	float voltage();
+	float bat_voltage();
+	float pack_voltage();
+
 	void cell_voltages(float* cells_array, size_t size);
 
 	uint32_t status_flags();
@@ -155,9 +157,6 @@ public:
 	uint16_t battery_status();
 
 	uint8_t otp_wr_check();
-
-	void read_manu_data();
-	void write_manu_data();
 
 	// Register Configuration
 	int configure_settings();
@@ -173,13 +172,12 @@ public:
 	int enter_config_update_mode();
 	int exit_config_update_mode();
 
+private:
 	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
 	int sub_command(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
-	int sub_command2(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
 
 	uint8_t sub_command_response8(uint8_t offset);
 	uint16_t sub_command_response16(uint8_t offset);
-	int sub_command_response_buffer(uint8_t* buf, size_t length);
 
 	uint8_t read_memory8(uint16_t addr);
 	uint16_t read_memory16(uint16_t addr);
@@ -187,7 +185,6 @@ public:
 	int write_memory8(uint16_t addr, uint8_t data);
 	int write_memory16(uint16_t addr, uint16_t data);
 
-private:
 	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
 
 	perf_counter_t _comms_errors{};
