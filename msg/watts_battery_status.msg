@@ -1,6 +1,8 @@
 uint64 timestamp            # time since system start (microseconds)
 
-float32 temperature             # [C]      : Pack mounted thermistor (preferably installed between cells), NAN: field not provided
+float32 temperature_cells       # [C]      : Pack mounted thermistor (preferably installed between cells), NAN: field not provided
+float32 temperature_pcb         # [C]      : Battery PCB temperature (likely output FET(s) or current sense resistor), NAN: field not provided
+float32 temperature_other       # [C]      : Application dependent, NAN: field not provided
 float32 current                 # [Ampere] : Positive: defined as a discharge current. Negitive: defined as a charging current, NAN: field not provided
 float32 voltage                 # [Volt]
 uint32 capacity_consumed        # [mAh]
@@ -36,3 +38,5 @@ uint32 STATUS_FLAG_FAULT_SHORT_CIRCUIT                      = 16384
 uint32 STATUS_FLAG_FAULT_INCOMPATIBLE_VOLTAGE               = 32768
 uint32 STATUS_FLAG_FAULT_INCOMPATIBLE_FIRMWARE              = 65536
 uint32 STATUS_FLAG_FAULT_INCOMPATIBLE_CELLS_CONFIGURATION   = 131072
+uint32 STATUS_FLAG_CAPACITY_RELATIVE_TO_FULL                = 262144
+

@@ -101,7 +101,7 @@ int BQ76952::configure_settings()
 	return PX4_OK;
 }
 
-float BQ76952::temperature()
+float BQ76952::temperature_cells()
 {
 	// Read external thermistor on TS3
 	// TODO: sporadic erroneous values come from the BQ34 having TS enabled in the TEMPS bit mask in the Pack Configuration Register
@@ -112,6 +112,18 @@ float BQ76952::temperature()
 	}
 	return ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
 }
+
+float BQ76952::temperature_fets()
+{
+	// Read board mounted resistor on TS1
+	int16_t temperature = {};
+	if (direct_command(CMD_READ_TS1_TEMP, &temperature, sizeof(temperature)) != PX4_OK) {
+		PX4_ERR("Failed to read temperature");
+		return 0;
+	}
+	return ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
+}
+
 
 float BQ76952::current()
 {

@@ -66,6 +66,8 @@ using namespace time_literals;
 #define CMD_READ_PACK_PIN_VOLTAGE  0x36
 #define CMD_READ_CC2_CURRENT    0x3A
 #define CMD_READ_CFETOFF_TEMP   0x6A
+
+#define CMD_READ_TS1_TEMP   	0x70 // units of 0.1K (signed 2 bytes)
 #define CMD_READ_TS3_TEMP   	0x74 // units of 0.1K (signed 2 bytes)
 
 // Subcommands (2 bytes)
@@ -141,7 +143,9 @@ public:
 	int init();
 	int probe() override;
 
-	float temperature();
+	float temperature_cells();
+	float temperature_fets();
+
 	float current();
 	float voltage();
 	void cell_voltages(float* cells_array, size_t size);

@@ -167,7 +167,10 @@ void Bms::collect_and_publish()
 	watts_battery_status_s battery_status = {};
 	battery_status.timestamp = hrt_absolute_time();
 
-	battery_status.temperature = _bq76->temperature();
+	battery_status.temperature_cells = _bq76->temperature_cells();
+	battery_status.temperature_pcb = _bq76->temperature_fets();
+	battery_status.temperature_other = NAN; // unused
+
 	battery_status.current = _bq76->current();
 	battery_status.voltage = _bq76->voltage();
 	// ignore capacity consumed
