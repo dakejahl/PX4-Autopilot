@@ -33,10 +33,8 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <drivers/drv_hrt.h>
 #include <lib/perf/perf_counter.h>
-#include <lib/geo/geo.h>
 
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/module_params.h>

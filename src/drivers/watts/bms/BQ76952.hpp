@@ -33,22 +33,9 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <drivers/device/i2c.h>
-#include <drivers/drv_hrt.h>
 #include <lib/perf/perf_counter.h>
 #include <lib/geo/geo.h>
-#include <px4_platform_common/module.h>
-#include <px4_platform_common/module_params.h>
-#include <px4_platform_common/i2c_spi_buses.h>
-#include <uORB/topics/watts_battery_status.h>
-#include <uORB/topics/parameter_update.h>
-#include <uORB/topics/shutdown.h>
-#include <uORB/topics/button_pressed.h>
-#include <uORB/PublicationMulti.hpp>
-#include <uORB/SubscriptionInterval.hpp>
-
-#include "BQ34Z100.hpp"
 
 using namespace time_literals;
 
@@ -140,28 +127,21 @@ public:
 	BQ76952();
 	~BQ76952() override;
 
+	// Initialize things
 	int init();
 	int probe() override;
 
+	// Monitor things
 	float temperature_cells();
 	float temperature_fets();
-
 	float current();
 	float bat_voltage();
 	float pack_voltage();
-
 	void cell_voltages(float* cells_array, size_t size);
-
 	uint32_t status_flags();
 	uint16_t mfg_status();
 	uint16_t battery_status();
-
 	uint8_t otp_wr_check();
-
-	// Register Configuration
-	int configure_settings();
-	void configure_fets();
-	void configure_protections_fet_action();
 
 	// Control things
 	void enable_protections();
@@ -169,19 +149,25 @@ public:
 	void enable_fets();
 	void disable_fets();
 
+private:
+	// Register Configuration
+	int configure_settings();
+	void configure_fets();
+	void configure_protections_fet_action();
+
+	// Modes
 	int enter_config_update_mode();
 	int exit_config_update_mode();
 
-private:
+	// Command and response
 	int direct_command(uint8_t command, void* rx_buf, size_t rx_len);
 	int sub_command(uint16_t command, void* tx_buf = nullptr, size_t tx_len = 0);
-
 	uint8_t sub_command_response8(uint8_t offset);
 	uint16_t sub_command_response16(uint8_t offset);
 
+	// Memory access
 	uint8_t read_memory8(uint16_t addr);
 	uint16_t read_memory16(uint16_t addr);
-
 	int write_memory8(uint16_t addr, uint8_t data);
 	int write_memory16(uint16_t addr, uint16_t data);
 

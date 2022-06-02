@@ -34,13 +34,6 @@
 // The bq34z100-G1 device is an Impedance Track™ fuel gauge for Li-Ion, PbA, NiMH, and NiCd batteries,
 // and works independently of battery series-cell configurations
 
-// FUNCTION OF THE BQ34Z100
-// Read current consumed
-// Read energy consumed
-// Read percent remaining
-// Read time remaining
-// Read mAh consumed
-
 #include "BQ34Z100.hpp"
 
 BQ34Z100::BQ34Z100() :
@@ -81,16 +74,6 @@ int BQ34Z100::init()
 	return PX4_OK;
 }
 
-// uint8_t BQ34Z100::read_soc()
-// {
-// 	static constexpr uint8_t REG_ADDR_SOC = 0x02;
-// 	return read_register8(REG_ADDR_SOC);
-// }
-
-
-// TODO: If you are reading anything in absolute mAh or mWh from the BQ34 you will need to multiply by
-// our scale factor. Which I'm using 7 right now
-
 float BQ34Z100::read_voltage()
 {
 	static constexpr uint8_t REG_ADDR_VOLTAGE = 0x08;
@@ -126,7 +109,6 @@ uint8_t BQ34Z100::read_state_of_health()
 	static constexpr uint8_t REG_ADDR_CYCLE_COUNT = 0x2E;
 	return uint8_t(read_register16(REG_ADDR_CYCLE_COUNT));
 }
-
 
 uint16_t BQ34Z100::read_device_type()
 {

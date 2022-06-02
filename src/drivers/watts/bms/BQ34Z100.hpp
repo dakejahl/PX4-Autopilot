@@ -33,15 +33,8 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <drivers/device/i2c.h>
-#include <drivers/drv_hrt.h>
 #include <lib/perf/perf_counter.h>
-#include <lib/geo/geo.h>
-#include <px4_platform_common/module.h>
-#include <px4_platform_common/i2c_spi_buses.h>
-#include <uORB/topics/watts_battery_status.h>
-#include <uORB/PublicationMulti.hpp>
 
 using namespace time_literals;
 
@@ -51,25 +44,24 @@ public:
 	BQ34Z100();
 	~BQ34Z100();
 
+    // Initialize things
 	int init();
     int probe() override;
 
-    // uint8_t read_soc();
+    // Monitor things
     float read_voltage();
     uint32_t read_remaining_capacity();
     uint32_t read_full_charge_capacity();
     uint32_t read_design_capacity();
     uint16_t read_cycle_count();
     uint8_t read_state_of_health();
-
     uint16_t read_device_type();
 
+    // Memory access
     uint16_t read_control(uint8_t addr_msb, uint8_t addr_lsb);
     uint8_t read_register8(uint8_t addr);
     uint16_t read_register16(uint8_t addr);
 
 private:
-    // This repo is quite good
-    // https://github.com/xkam1x/BQ34Z100G1/blob/master/bq34z100g1.cpp
 	perf_counter_t _comms_errors;
 };

@@ -36,20 +36,6 @@
 // system, a highly configurable protection subsystem, and support for autonomous or host controlled cell
 // balancing.
 
-// FUNCTION OF THE BQ76952
-// Enable bq34
-// Read temperature
-// Read cell voltages [12]
-// Read current
-// Read fault (Battery Status)
-
-// FUNCTION OF THE BQ34Z100
-// Read current consumed
-// Read energy consumed
-// Read percent remaining
-// Read time remaining
-// Read mAh consumed
-
 #include "Bms.hpp"
 
 Bms::Bms() :
@@ -199,13 +185,13 @@ void Bms::handle_automatic_protections()
 	if (current > protect_current) {
 		if (_protections_enabled) {
 			PX4_INFO("TODO: Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
-			// disable_protections();
+			// _bq76->disable_protections();
 			_protections_enabled = false;
 		}
 	} else {
 		if (!_protections_enabled) {
 			PX4_INFO("TODO: Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
-			// enable_protections();
+			// _bq76->enable_protections();
 			_protections_enabled = true;
 		}
 	}
@@ -404,8 +390,6 @@ int Bms::flags()
 
 int Bms::diagnostics()
 {
-	_bq76->enter_config_update_mode();
-
 	// MFG STATUS
 	{
 		uint16_t status = _bq76->mfg_status();
@@ -520,8 +504,6 @@ int Bms::diagnostics()
 			PX4_INFO("The measured stack voltage is above the allowed OTP programming voltage");
 		}
 	}
-
-	_bq76->exit_config_update_mode();
 
 	return PX4_OK;
 }
