@@ -173,11 +173,13 @@ void Bms::collect_and_publish()
 
 	battery_status.current = _bq76->current();
 	battery_status.voltage = _bq76->voltage();
-	// ignore capacity consumed
-	battery_status.capacity_remaining = _bq34->read_remaining_capacity();
+
 	_bq76->cell_voltages(battery_status.cell_voltages, 12);
-	battery_status.design_capacity = _bq34->read_design_capacity();
-	battery_status.actual_capacity = _bq34->read_full_charge_capacity();
+
+	battery_status.capacity_remaining = _bq34->read_remaining_capacity() * _param_capacity_scalar.get();
+	battery_status.design_capacity = _bq34->read_design_capacity() * _param_capacity_scalar.get();
+	battery_status.actual_capacity = _bq34->read_full_charge_capacity() * _param_capacity_scalar.get();
+
 	battery_status.cycle_count = _bq34->read_cycle_count();
 	battery_status.state_of_health = _bq34->read_state_of_health();
 

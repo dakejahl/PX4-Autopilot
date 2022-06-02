@@ -178,7 +178,7 @@ void SSD1306::display_page_0(const watts_battery_status_s& data)
 	drawString(0, 16, str);
 
 	// mAH consumed
-	snprintf(text_temp, sizeof(text_temp), "mAh used: %u", (int)data.capacity_consumed);
+	snprintf(text_temp, sizeof(text_temp), "Capacity: %u", (int)data.actual_capacity);
 	str = text_temp;
 	drawString(0, 48, str);
 

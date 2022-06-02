@@ -128,6 +128,8 @@ private:
 		(ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
 		(ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
 		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current,
-		(ParamFloat<px4::params::PARALLEL_VOLTAGE>)    _param_parallel_voltage
+		(ParamFloat<px4::params::PARALLEL_VOLTAGE>)    _param_parallel_voltage,
+		(ParamInt<px4::params::CAPACITY_SCALAR>)    _param_capacity_scalar
+
 	);
 };

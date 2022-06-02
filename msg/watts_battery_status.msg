@@ -5,7 +5,6 @@ float32 temperature_pcb         # [C]      : Battery PCB temperature (likely out
 float32 temperature_other       # [C]      : Application dependent, NAN: field not provided
 float32 current                 # [Ampere] : Positive: defined as a discharge current. Negitive: defined as a charging current, NAN: field not provided
 float32 voltage                 # [Volt]
-uint32 capacity_consumed        # [mAh]
 uint32 capacity_remaining       # [mAh]
 
 float32[12] cell_voltages       # [Volt]

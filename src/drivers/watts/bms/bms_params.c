@@ -76,3 +76,10 @@ PARAM_DEFINE_FLOAT(IDLE_CURRENT, 0.25f);
  * @group UAVCAN
  */
 PARAM_DEFINE_FLOAT(PARALLEL_VOLTAGE, 37.2f);
+
+/**
+ * Scalar for the BQ34 to scale the mAh capacity values
+ *
+ * @group UAVCAN
+ */
+PARAM_DEFINE_INT32(CAPACITY_SCALAR, 7);
