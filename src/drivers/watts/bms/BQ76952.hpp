@@ -189,6 +189,8 @@ private:
 	template <typename T>
 	int write_register(Register<T> reg)
 	{
+		PX4_INFO("Writing 0x%x to %s", (unsigned int)reg.value, reg.name);
+
 		int ret = PX4_OK;
 		// ret = write_memory8(reg.address, reg.value);
 		ret = write_memory<T>(reg.address, reg.value);
@@ -204,8 +206,6 @@ private:
 	int write_memory(uint16_t addr, T data)
 	{
 		int ret = PX4_OK;
-
-		PX4_INFO("Writing to 0x%x --> 0x%x", addr, (unsigned int)data);
 
 		// See pg 13 of technical reference
 		// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
