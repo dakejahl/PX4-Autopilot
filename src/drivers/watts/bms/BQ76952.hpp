@@ -78,6 +78,7 @@ using namespace time_literals;
 #define CMD_ADDR_RESP_CHKSUM     0x60
 
 // Memory Addresses
+#define ADDR_CELL_1_GAIN 	0x9180
 #define ADDR_REG12_CONFIG   0x9236
 #define ADDR_REG0           0x9237
 #define ADDR_DA_CONFIG      0x9303
@@ -121,6 +122,13 @@ static constexpr uint32_t STATUS_FLAG_FAULT_INCOMPATIBLE_VOLTAGE               =
 static constexpr uint32_t STATUS_FLAG_FAULT_INCOMPATIBLE_FIRMWARE              = 65536;
 static constexpr uint32_t STATUS_FLAG_FAULT_INCOMPATIBLE_CELLS_CONFIGURATION   = 131072;
 
+template <typename T>
+struct Register {
+	const char* name;
+	uint16_t address;
+	T value;
+};
+
 class BQ76952 : public device::I2C
 {
 public:
@@ -152,6 +160,7 @@ public:
 private:
 	// Register Configuration
 	int configure_settings();
+
 	void configure_fets();
 	void configure_protections_fet_action();
 
@@ -168,12 +177,67 @@ private:
 	// Memory access
 	uint8_t read_memory8(uint16_t addr);
 	uint16_t read_memory16(uint16_t addr);
-	int write_memory8(uint16_t addr, uint8_t data);
-	int write_memory16(uint16_t addr, uint16_t data);
 
 	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
 
 	perf_counter_t _comms_errors{};
 
 	char _manu_data[32]{0};
+
+// TEMPLATE FUNCTIONS
+private:
+	template <typename T>
+	int write_register(Register<T> reg)
+	{
+		int ret = PX4_OK;
+		// ret = write_memory8(reg.address, reg.value);
+		ret = write_memory<T>(reg.address, reg.value);
+
+		if (ret != PX4_OK) {
+			PX4_ERR("%s", reg.name);
+			return PX4_ERROR;
+		}
+		return PX4_OK;
+	}
+
+	template <typename T>
+	int write_memory(uint16_t addr, T data)
+	{
+		int ret = PX4_OK;
+
+		PX4_INFO("Writing to 0x%x --> 0x%x", addr, (unsigned int)data);
+
+		// See pg 13 of technical reference
+		// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
+		// number of bytes used in the transfer buffer, then the result is bitwise inverted
+		uint8_t checksum = 0;
+		// Send the data
+		{
+			uint8_t buf[3 + sizeof(data)] = {};
+			buf[0] = CMD_ADDR_SUBCMD_LOW;
+			buf[1] = uint8_t(addr & 0x00FF);
+			buf[2] = uint8_t((addr >> 8) & 0x00FF);
+			memcpy(&buf[3], &data, sizeof(data));
+
+			ret |= transfer(buf, sizeof(buf), nullptr, 0);
+			for (size_t i = 1; i < sizeof(buf); i++) {
+				checksum += buf[i];
+			}
+		}
+
+		// Send checksum and length
+		{
+			uint8_t buf[3] = {};
+			buf[0] = CMD_ADDR_RESP_CHKSUM;
+			buf[1] = ~checksum;
+			buf[2] = 2 + sizeof(data) + 1 + 1; // 2 bytes addr, N data, 1 byte checksum, 1 byte length
+			ret |= transfer(buf, sizeof(buf), nullptr, 0);
+		}
+
+		if (ret != PX4_OK) {
+			perf_count(_comms_errors);
+		}
+
+		return PX4_OK;
+	}
 };

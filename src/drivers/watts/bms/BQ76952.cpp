@@ -74,36 +74,86 @@ int BQ76952::init()
 
 int BQ76952::configure_settings()
 {
+	enter_config_update_mode();
+
 	int ret = PX4_OK;
-	ret = write_memory8(ADDR_REG12_CONFIG, 0x0d); // Enable 3.3V for REG1
-	if (ret != PX4_OK) {
-		PX4_ERR("writing REG12 failed");
-		return PX4_ERROR;
+	ret |= write_register(Register<int16_t>{"Cell 1 Gain", 0x9180, 12125});
+	ret |= write_register(Register<int16_t>{"Cell 2 Gain", 0x9182, 12127});
+	ret |= write_register(Register<int16_t>{"Cell 3 Gain", 0x9184, 12125});
+	ret |= write_register(Register<int16_t>{"Cell 4 Gain", 0x9186, 12124});
+	ret |= write_register(Register<int16_t>{"Cell 5 Gain", 0x9188, 12125});
+	ret |= write_register(Register<int16_t>{"Cell 6 Gain", 0x918A, 12124});
+	ret |= write_register(Register<int16_t>{"Cell 7 Gain", 0x918C, 12125});
+	ret |= write_register(Register<int16_t>{"Cell 8 Gain", 0x918E, 12125});
+	ret |= write_register(Register<int16_t>{"Cell 9 Gain", 0x9190, 12123});
+	ret |= write_register(Register<int16_t>{"Cell 10 Gain", 0x9192, 12123});
+	ret |= write_register(Register<int16_t>{"Cell 11 Gain", 0x9194, 12127});
+	ret |= write_register(Register<int16_t>{"Cell 12 Gain", 0x9196, 12144});
+
+	ret |= write_register(Register<uint16_t>{"Pack Gain", 0x91A0, 35130});
+	ret |= write_register(Register<uint16_t>{"TOS Gain", 0x91A2, 33345});
+
+	ret |= write_register(Register<uint16_t>{"LD Gain", 0x91A4, 34500});
+
+	ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
+
+	ret |= write_register(Register<float>{"Capacity Gain", 0x91AC, 0.310f});
+
+	ret |= write_register(Register<uint8_t>{"REG12 Config", 0x9236, 0x0d});
+	ret |= write_register(Register<uint8_t>{"REG12 Config", 0x9237, 0x01});
+
+	ret |= write_register(Register<uint8_t>{"TS1 Config", 0x92FD, 0x0f});
+
+	ret |= write_register(Register<uint8_t>{"TS3 Config", 0x92FF, 0x07});
+
+	ret |= write_register(Register<uint8_t>{"DA Configuration", 0x9303, 0x06});
+
+	ret |= write_register(Register<uint16_t>{"Vcell Mode", 0x9304, 0x0fff});
+
+	ret |= write_register(Register<uint16_t>{"Protection Configuration", 0x925F, 0x0000});
+
+	// NOTE: we set these in the enable_protections() and disable_protections() functions
+	// TODO: these don't match the settings I chose, please see the enable/disable functions
+	{
+		// "Settings","Protection","Protection Configuration","0000","Hex"
+		// "Settings","Protection","Enabled Protections A","9c","Hex"
+		// "Settings","Protection","Enabled Protections B","11","Hex"
+		// "Settings","Protection","Enabled Protections C","40","Hex"
+		// "Settings","Protection","CHG FET Protections A","18","Hex"
+		// "Settings","Protection","CHG FET Protections B","11","Hex"
+		// "Settings","Protection","CHG FET Protections C","10","Hex"
+		// "Settings","Protection","DSG FET Protections A","84","Hex"
+		// "Settings","Protection","DSG FET Protections B","00","Hex"
+		// "Settings","Protection","DSG FET Protections C","40","Hex"
 	}
 
-	ret = write_memory8(ADDR_REG0, 0x01); // Enable the pre-regulator to turn on bq34z100
-	if (ret != PX4_OK) {
-		PX4_ERR("writing REG0 failed");
-		return PX4_ERROR;
-	}
+	ret |= write_register(Register<int16_t>{"Precharge Start Voltage", 0x930A, 2800});
+	ret |= write_register(Register<int16_t>{"Precharge Stop Voltage", 0x930C, 3000});
 
-	ret = write_memory8(ADDR_TS1_CONFIG, 0x0f); // FET temp monitoring
-	if (ret != PX4_OK) {
-		PX4_ERR("writing TS1_CONFIG failed");
-		return PX4_ERROR;
-	}
+	ret |= write_register(Register<int16_t>{"Dsg Current Threshold", 0x9310, 35}); // What are userA units?
+	ret |= write_register(Register<int16_t>{"Chg Current Threshold", 0x9312, 35}); // What are userA units?
 
-	ret = write_memory8(ADDR_TS3_CONFIG, 0x07); // Cell temp monitoring
-	if (ret != PX4_OK) {
-		PX4_ERR("writing TS3_CONFIG failed");
-		return PX4_ERROR;
-	}
-	ret = write_memory8(ADDR_DA_CONFIG, 0x06); // Centi-volt and centi-amp
-	if (ret != PX4_OK) {
-		PX4_ERR("writing DA_CONFIG failed");
-		return PX4_ERROR;
-	}
-	return PX4_OK;
+	ret |= write_register(Register<uint16_t>{"Mfg Status Init", 0x9343, 0x0010}); // Enable FET normal mode
+
+	ret |= write_register(Register<uint8_t>{"Balancing Configuration", 0x9335, 0x07});
+
+	ret |= write_register(Register<uint8_t>{"Cell Balance Max Cells", 0x933A, 12});
+
+	ret |= write_register(Register<int16_t>{"Sleep Current", 0x9248, 15});
+
+	ret |= write_register(Register<uint8_t>{"COV Threshold", 0x9278, 84}); // units 50.6mV
+
+	ret |= write_register(Register<uint8_t>{"COVL Latch Limit", 0x927D, 10});
+
+	ret |= write_register(Register<uint8_t>{"OCC Threshold", 0x9280, 8});
+
+	ret |= write_register(Register<uint8_t>{"SCD Threshold", 0x9286, 3});
+
+	ret |= write_register(Register<uint8_t>{"SCDL Latch Limit", 0x9295, 10});
+
+	exit_config_update_mode();
+
+	return ret;
 }
 
 float BQ76952::temperature_cells()
@@ -315,13 +365,14 @@ uint32_t BQ76952::status_flags()
 void BQ76952::enable_protections()
 {
 	PX4_INFO("Enabling protections");
-	// ADDR_PROTECTION_CONFIG -- default looks good
 	// SCDL_CURR_RECOV -- 1 = SCDL recovers when current is greater than or equal to Protections:SCDL:RecoveryTime.
 	// OCDL_CURR_RECOV -- 1 = OCDL recovers when current is greater than or equal to Protections:OCDL:RecoveryTime
 	// PF_OTP -- If this bit is not set, Permanent Failure status will be lost on any reset
 
 	//  The individual protections can be enabled by setting the related Settings:Protection:Enabled Protections
 	//  A – C configuration registers.
+
+	enter_config_update_mode();
 
 	// Settings:Protection:Enabled Protections A
 	{
@@ -344,7 +395,7 @@ void BQ76952::enable_protections()
 		byte |= 1 << 2; 	// 2 CUV 0 Cell Undervoltage Protection
 							// TODO: set the threshold
 
-		write_memory8(ADDR_PROTECTIONS_A, byte);
+		write_memory<uint8_t>(ADDR_PROTECTIONS_A, byte);
 	}
 
 	// Settings:Protection:Enabled Protections B
@@ -365,7 +416,7 @@ void BQ76952::enable_protections()
 
 		byte |= 1 << 0; 	// 0 UTC 0 Undertemperature in Charge
 
-		write_memory8(ADDR_PROTECTIONS_B, byte);
+		write_memory<uint8_t>(ADDR_PROTECTIONS_B, byte);
 	}
 
 	// Settings:Protection:Enabled Protections C
@@ -388,35 +439,43 @@ void BQ76952::enable_protections()
 
 		// byte |= 1 << 1; // 1 HWDF 0 Host Watchdog Fault
 
-		write_memory8(ADDR_PROTECTIONS_C, byte);
+		write_memory<uint8_t>(ADDR_PROTECTIONS_C, byte);
 	}
+
+	exit_config_update_mode();
 }
 
 void BQ76952::disable_protections()
 {
 	PX4_INFO("Disabling protections");
+	enter_config_update_mode();
+
 	// Except these ones stay on
 	{
 		uint8_t byte = {};
 		byte |= 1 << 4; // Overcurrent in Charge Protection
 		byte |= 1 << 3; // Cell Overvoltage Protection
-		write_memory8(ADDR_PROTECTIONS_A, byte);
+		write_memory<uint8_t>(ADDR_PROTECTIONS_A, byte);
 	}
 	{
 		uint8_t byte = {};
 		byte |= 1 << 4; // Overtemperature in Charge
 		byte |= 1 << 0; // Undertemperature in Charge
-		write_memory8(ADDR_PROTECTIONS_B, byte);
+		write_memory<uint8_t>(ADDR_PROTECTIONS_B, byte);
 	}
 	{
 		uint8_t byte = {};
-		write_memory8(ADDR_PROTECTIONS_C, byte);
+		write_memory<uint8_t>(ADDR_PROTECTIONS_C, byte);
 	}
+
+	exit_config_update_mode();
 }
 
 void BQ76952::configure_protections_fet_action()
 {
 	PX4_INFO("Configuring FET protection actions");
+
+	enter_config_update_mode();
 
 	// CHG FET Protections A
 	{
@@ -437,7 +496,7 @@ void BQ76952::configure_protections_fet_action()
 		//      1 = CHG FET is disabled when protection is triggered.
 		byte |= (1 << 3);
 
-		write_memory8(ADDR_CHG_FET_Protections_A, byte);
+		write_memory<uint8_t>(ADDR_CHG_FET_Protections_A, byte);
 	}
 
 	// CHG FET Protections B
@@ -474,7 +533,7 @@ void BQ76952::configure_protections_fet_action()
 		byte |= (1 << 0);
 		// TODO: set threshold
 
-		write_memory8(ADDR_CHG_FET_Protections_B, byte);
+		write_memory<uint8_t>(ADDR_CHG_FET_Protections_B, byte);
 	}
 
 	// CHG FET Protections C
@@ -503,7 +562,7 @@ void BQ76952::configure_protections_fet_action()
 
 		// TODO: do we want to use these features? ^
 
-		write_memory8(ADDR_CHG_FET_Protections_C, byte);
+		write_memory<uint8_t>(ADDR_CHG_FET_Protections_C, byte);
 	}
 
 	// DSG FET Protections A
@@ -531,7 +590,7 @@ void BQ76952::configure_protections_fet_action()
 		// 		1 = DSG FET is disabled when protection is triggered.
 		byte |= (1 << 2);
 
-		write_memory8(ADDR_DSG_FET_Protections_A, byte);
+		write_memory<uint8_t>(ADDR_DSG_FET_Protections_A, byte);
 	}
 
 	// DSG FET Protections B
@@ -563,7 +622,7 @@ void BQ76952::configure_protections_fet_action()
 		// 		1 = DSG FET is disabled when protection is triggered.
 		byte |= (1 << 1);
 
-		write_memory8(ADDR_DSG_FET_Protections_B, byte);
+		write_memory<uint8_t>(ADDR_DSG_FET_Protections_B, byte);
 	}
 
 	// DSG FET Protections C
@@ -589,8 +648,10 @@ void BQ76952::configure_protections_fet_action()
 		// 		1 = DSG FET is disabled when protection is triggered.
 		// byte |= (1 << 1);
 
-		write_memory8(ADDR_DSG_FET_Protections_C, byte);
+		write_memory<uint8_t>(ADDR_DSG_FET_Protections_C, byte);
 	}
+
+	exit_config_update_mode();
 }
 
 void BQ76952::enable_fets()
@@ -641,100 +702,6 @@ uint16_t BQ76952::read_memory16(uint16_t addr)
 	}
 
 	return data;
-}
-
-int BQ76952::write_memory8(uint16_t addr, uint8_t data)
-{
-	// Must be in config update mode to write to memory
-	int ret = enter_config_update_mode();
-	if (ret != PX4_OK) {
-		PX4_ERR("failed to enter config update mode");
-		return PX4_ERROR;
-	}
-
-	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
-
-	// See pg 13 of technical reference
-	// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
-	// number of bytes used in the transfer buffer, then the result is bitwise inverted
-	uint8_t checksum = 0;
-	// Send the data
-	{
-		uint8_t buf[4] = {};
-		buf[0] = CMD_ADDR_SUBCMD_LOW;
-		buf[1] = uint8_t(addr & 0x00FF);
-		buf[2] = uint8_t((addr >> 8) & 0x00FF);
-		buf[3] = data;
-
-		ret |= transfer(buf, sizeof(buf), nullptr, 0);
-		for (size_t i = 1; i < sizeof(buf); i++) {
-			checksum += buf[i];
-		}
-	}
-
-	// Send checksum and length
-	{
-		uint8_t buf[3] = {};
-		buf[0] = CMD_ADDR_RESP_CHKSUM;
-		buf[1] = ~checksum;
-		buf[2] = 5; // 2 bytes addr, 1 bytes data, 1 byte checksum, 1 byte length
-		ret |= transfer(buf, sizeof(buf), nullptr, 0);
-	}
-
-	if (ret != PX4_OK) {
-		perf_count(_comms_errors);
-	}
-
-	exit_config_update_mode();
-
-	return PX4_OK;
-}
-
-int BQ76952::write_memory16(uint16_t addr, uint16_t data)
-{
-	PX4_INFO("Writing to 0x%x --> 0x%x", addr, data);
-
-	int ret = enter_config_update_mode();
-	if (ret != PX4_OK) {
-		PX4_ERR("failed to write memory");
-		return PX4_ERROR;
-	}
-
-	// See pg 13 of technical reference
-	// The checksum is the 8-bit sum of the subcommand bytes (0x3E and 0x3F) plus the
-	// number of bytes used in the transfer buffer, then the result is bitwise inverted
-	uint8_t checksum = 0;
-	// Send the data
-	{
-		uint8_t buf[5] = {};
-		buf[0] = CMD_ADDR_SUBCMD_LOW;
-		buf[1] = uint8_t(addr & 0x00FF);
-		buf[2] = uint8_t((addr >> 8) & 0x00FF);
-		buf[3] = uint8_t(data & 0x00FF);
-		buf[4] = uint8_t((data >> 8) & 0x00FF);
-
-		ret |= transfer(buf, sizeof(buf), nullptr, 0);
-		for (size_t i = 1; i < sizeof(buf); i++) {
-			checksum += buf[i];
-		}
-	}
-
-	// Send checksum and length
-	{
-		uint8_t buf[3] = {};
-		buf[0] = CMD_ADDR_RESP_CHKSUM;
-		buf[1] = ~checksum;
-		buf[2] = 6; // 2 bytes addr, 2 bytes data, 1 byte checksum, 1 byte length
-		ret |= transfer(buf, sizeof(buf), nullptr, 0);
-	}
-
-	if (ret != PX4_OK) {
-		perf_count(_comms_errors);
-	}
-
-	exit_config_update_mode();
-
-	return PX4_OK;
 }
 
 int BQ76952::enter_config_update_mode()
