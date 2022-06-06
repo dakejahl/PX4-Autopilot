@@ -95,9 +95,11 @@ int BQ76952::configure_settings()
 
 	ret |= write_register(Register<uint16_t>{"LD Gain", 0x91A4, 34500});
 
-	ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
+	//TODO - This is setting the wrong value. BQ76 expects type float4
+	//ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
 
-	ret |= write_register(Register<float>{"Capacity Gain", 0x91AC, 0.310f});
+	//TODO - This is setting the wrong value. BQ76 expects type float4
+	//ret |= write_register(Register<float>{"Capacity Gain", 0x91AC, 0.310f});
 
 	ret |= write_register(Register<uint8_t>{"REG12 Config", 0x9236, 0x0d});
 	ret |= write_register(Register<uint8_t>{"REG12 Config", 0x9237, 0x01});
@@ -145,9 +147,12 @@ int BQ76952::configure_settings()
 
 	ret |= write_register(Register<uint8_t>{"COVL Latch Limit", 0x927D, 10});
 
-	ret |= write_register(Register<uint8_t>{"OCC Threshold", 0x9280, 8});
+	//TODO - This is getting set to 16, not 8
+	//ret |= write_register(Register<uint8_t>{"OCC Threshold", 0x9280, 8});
 
-	ret |= write_register(Register<uint8_t>{"SCD Threshold", 0x9286, 3});
+	ret |= write_register(Register<uint8_t>{"SCD Threshold", 0x9286, 3}); // 3 = 60 mV across shunt. 60mv/300uOhm = 200A
+
+	ret |= write_register(Register<uint8_t>{"SCD Delay", 0x9287, 31}); // units of 15us. 31 is max. 31 x 15us = 465us
 
 	ret |= write_register(Register<uint8_t>{"SCDL Latch Limit", 0x9295, 10});
 
@@ -178,7 +183,6 @@ float BQ76952::temperature_fets()
 	}
 	return ((float)temperature / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS; // Convert from 0.1K to C
 }
-
 
 float BQ76952::current()
 {
@@ -379,21 +383,17 @@ void BQ76952::enable_protections()
 		uint8_t byte = {};
 
 		byte |= 1 << 7; 	// 7 SCD 1 Short Circuit in Discharge Protection
-							// TODO: set the threshold
 
 		// byte |= 1 << 6; 	// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
 
-		byte |= 1 << 5; 	// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
+		// byte |= 1 << 5; 	// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
 							// TODO: set the threshold
 
 		byte |= 1 << 4; 	// 4 OCC 0 Overcurrent in Charge Protection
-							// TODO: set the threshold
 
 		byte |= 1 << 3; 	// 3 COV 1 Cell Overvoltage Protection
-							// TODO: set the threshold
 
 		byte |= 1 << 2; 	// 2 CUV 0 Cell Undervoltage Protection
-							// TODO: set the threshold
 
 		write_memory<uint8_t>(ADDR_PROTECTIONS_A, byte);
 	}
@@ -406,13 +406,13 @@ void BQ76952::enable_protections()
 
 		byte |= 1 << 6; 	// 6 OTINT 0 Internal Overtemperature
 
-		byte |= 1 << 5; 	// 5 OTD 0 Overtemperature in Discharge
+		// byte |= 1 << 5; 	// 5 OTD 0 Overtemperature in Discharge
 
 		byte |= 1 << 4; 	// 4 OTC 0 Overtemperature in Charge
 
-		byte |= 1 << 2; 	// 2 UTINT 0 Internal Undertemperature
+		// byte |= 1 << 2; 	// 2 UTINT 0 Internal Undertemperature
 
-		byte |= 1 << 1; 	// 1 UTD 0 Undertemperature in Discharge
+		// byte |= 1 << 1; 	// 1 UTD 0 Undertemperature in Discharge
 
 		byte |= 1 << 0; 	// 0 UTC 0 Undertemperature in Charge
 
@@ -425,13 +425,13 @@ void BQ76952::enable_protections()
 
 		// byte |= 1 << 7; // 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
 
-		// byte |= 1 << 6; 	// 6 SCDL 0 Short Circuit in Discharge Latch
+		byte |= 1 << 6; 	// 6 SCDL 0 Short Circuit in Discharge Latch
 							// TODO: do we want to use this feature?
 
 		// byte |= 1 << 5; 	// 5 OCDL 0 Overcurrent in Discharge Latch
 							// TODO: do we want to use this feature?
 
-		// byte |= 1 << 4; 	// 4 COVL 0 Cell Overvoltage Latch
+		byte |= 1 << 4; 	// 4 COVL 0 Cell Overvoltage Latch
 							// TODO: do we want to use this feature?
 
 		// byte |= 1 << 2; 	// 2 PTO 0 Precharge Timeout
@@ -453,18 +453,60 @@ void BQ76952::disable_protections()
 	// Except these ones stay on
 	{
 		uint8_t byte = {};
-		byte |= 1 << 4; // Overcurrent in Charge Protection
-		byte |= 1 << 3; // Cell Overvoltage Protection
+
+		// byte |= 1 << 7; 	// 7 SCD 1 Short Circuit in Discharge Protection
+
+		// byte |= 1 << 6; 	// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
+
+		// byte |= 1 << 5; 	// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
+							// TODO: set the threshold
+
+		byte |= 1 << 4; 	// 4 OCC 0 Overcurrent in Charge Protection
+
+		byte |= 1 << 3; 	// 3 COV 1 Cell Overvoltage Protection
+
+		// byte |= 1 << 2; 	// 2 CUV 0 Cell Undervoltage Protection
+
 		write_memory<uint8_t>(ADDR_PROTECTIONS_A, byte);
 	}
 	{
 		uint8_t byte = {};
-		byte |= 1 << 4; // Overtemperature in Charge
-		byte |= 1 << 0; // Undertemperature in Charge
+
+		// byte |= 1 << 7; 	// 7 OTF 0 FET Overtemperature
+
+		// byte |= 1 << 6; 	// 6 OTINT 0 Internal Overtemperature
+
+		// byte |= 1 << 5; 	// 5 OTD 0 Overtemperature in Discharge
+
+		byte |= 1 << 4; 	// 4 OTC 0 Overtemperature in Charge
+
+		// byte |= 1 << 2; 	// 2 UTINT 0 Internal Undertemperature
+
+		// byte |= 1 << 1; 	// 1 UTD 0 Undertemperature in Discharge
+
+		byte |= 1 << 0; 	// 0 UTC 0 Undertemperature in Charge
+
 		write_memory<uint8_t>(ADDR_PROTECTIONS_B, byte);
 	}
 	{
 		uint8_t byte = {};
+
+		// byte |= 1 << 7; // 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
+
+		// byte |= 1 << 6; 	// 6 SCDL 0 Short Circuit in Discharge Latch
+							// TODO: do we want to use this feature?
+
+		// byte |= 1 << 5; 	// 5 OCDL 0 Overcurrent in Discharge Latch
+							// TODO: do we want to use this feature?
+
+		byte |= 1 << 4; 	// 4 COVL 0 Cell Overvoltage Latch
+							// TODO: do we want to use this feature?
+
+		// byte |= 1 << 2; 	// 2 PTO 0 Precharge Timeout
+							// TODO: do we want to use this feature?
+
+		// byte |= 1 << 1; // 1 HWDF 0 Host Watchdog Fault
+
 		write_memory<uint8_t>(ADDR_PROTECTIONS_C, byte);
 	}
 
@@ -543,17 +585,17 @@ void BQ76952::configure_protections_fet_action()
 		// 6 SCDL 1 Short Circuit in Discharge Latch
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		// byte |= (6 << 0);
+		// byte |= (1 << 6);
 
 		// 4 COVL 1 Cell Overvoltage Latch
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		// byte |= (4 << 0);
+		byte |= (1 << 4);
 
 		// 2 PTO 1 Precharge Timeout
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		// byte |= (2 << 0);
+		// byte |= (1 << 2);
 
 		// 1 HWDF 1 Host Watchdog Fault
 		//      0 = CHG FET is not disabled when protection is triggered.
@@ -574,11 +616,10 @@ void BQ76952::configure_protections_fet_action()
 		// 		1 = DSG FET is disabled when protection is triggered.
 		byte |= (1 << 7);
 
-
 		// 6 OCD2 1 Overcurrent in Discharge 2nd Tier Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		// byte |= (1 << 6);
+		byte |= (1 << 6);
 
 		// 5 OCD1 1 Overcurrent in Discharge 1st Tier Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
@@ -631,17 +672,17 @@ void BQ76952::configure_protections_fet_action()
 		// 7 OCD3 1 Overcurrent in Discharge 3rd Tier Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		// byte |= (1 << 7);
+		byte |= (1 << 7);
 
 		// 6 SCDL 1 Short Circuit in Discharge Latch
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		// byte |= (1 << 6);
+		byte |= (1 << 6);
 
 		// 5 OCDL 1 Overcurrent in Discharge Latch
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		// byte |= (1 << 5);
+		byte |= (1 << 5);
 
 		// 1 HWDF 1 Host Watchdog Fault
 		// 		0 = DSG FET is not disabled when protection is triggered.

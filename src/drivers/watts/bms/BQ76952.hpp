@@ -65,6 +65,7 @@ using namespace time_literals;
 #define CMD_ENTER_CFG_UPDATE    0x0034 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_MFG_STATUS          0x0057 // pg 119
 #define CMD_MANU_DATA          	0x0070
+#define CMD_DASTATUS_5          0x0075 // Used to get CC3 and CC2 currents, cell and fet temperatures
 
 #define CMD_SET_CFGUPDATE       0x0090 // The device will then automatically disable the protection FETs if they are enabled.
 #define CMD_EXIT_CFG_UPDATE     0x0092 // The device will then automatically disable the protection FETs if they are enabled.

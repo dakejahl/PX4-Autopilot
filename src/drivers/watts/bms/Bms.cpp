@@ -185,13 +185,13 @@ void Bms::handle_automatic_protections()
 	if (current > protect_current) {
 		if (_protections_enabled) {
 			PX4_INFO("TODO: Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
-			// _bq76->disable_protections();
+			_bq76->disable_protections();
 			_protections_enabled = false;
 		}
 	} else {
 		if (!_protections_enabled) {
 			PX4_INFO("TODO: Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
-			// _bq76->enable_protections();
+			_bq76->enable_protections();
 			_protections_enabled = true;
 		}
 	}
