@@ -95,9 +95,11 @@ int BQ76952::configure_settings()
 
 	ret |= write_register(Register<uint16_t>{"LD Gain", 0x91A4, 34500});
 
-	ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
+	//TODO - This is setting the wrong value. BQ76 expects type float4
+	//ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
 
-	ret |= write_register(Register<float>{"Capacity Gain", 0x91AC, 0.310f});
+	//TODO - This is setting the wrong value. BQ76 expects type float4
+	//ret |= write_register(Register<float>{"Capacity Gain", 0x91AC, 0.310f});
 
 	ret |= write_register(Register<uint8_t>{"REG12 Config", 0x9236, 0x0d});
 	ret |= write_register(Register<uint8_t>{"REG12 Config", 0x9237, 0x01});
