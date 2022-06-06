@@ -150,7 +150,9 @@ int BQ76952::configure_settings()
 	//TODO - This is getting set to 16, not 8
 	//ret |= write_register(Register<uint8_t>{"OCC Threshold", 0x9280, 8});
 
-	ret |= write_register(Register<uint8_t>{"SCD Threshold", 0x9286, 3});
+	ret |= write_register(Register<uint8_t>{"SCD Threshold", 0x9286, 3}); // 3 = 60 mV across shunt. 60mv/300uOhm = 200A
+
+	ret |= write_register(Register<uint8_t>{"SCD Delay", 0x9287, 31}); // units of 15us. 31 is max. 31 x 15us = 465us
 
 	ret |= write_register(Register<uint8_t>{"SCDL Latch Limit", 0x9295, 10});
 
