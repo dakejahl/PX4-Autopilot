@@ -180,8 +180,6 @@ void Bms::handle_automatic_protections()
 	float current = _bq76->current();
 	float protect_current = _param_protect_current.get();
 	int32_t protect_timeout = _param_protect_timeout.get();
-
-	float current = _bq76->current();
 	hrt_abstime now = hrt_absolute_time();
 
 	if (_protections_enabled) {
