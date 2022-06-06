@@ -179,20 +179,31 @@ void Bms::handle_automatic_protections()
 
 	float current = _bq76->current();
 	float protect_current = _param_protect_current.get();
+	int32_t protect_timeout = _param_protect_timeout.get();
 
-	// TODO: current > threshold for X seconds
+	float current = _bq76->current();
+	hrt_abstime now = hrt_absolute_time();
 
-	if (current > protect_current) {
-		if (_protections_enabled) {
-			PX4_INFO("TODO: Current exceeds PROTECT_CURRENT (%2.2f), disabling protections", double(protect_current));
-			// _bq76->disable_protections();
-			_protections_enabled = false;
+	if (_protections_enabled) {
+		if (current > protect_current) {
+			_bq76->disable_protections();
 		}
+
 	} else {
-		if (!_protections_enabled) {
-			PX4_INFO("TODO: Current is below PROTECT_CURRENT (%2.2f), enabling protections", double(protect_current));
-			// _bq76->enable_protections();
-			_protections_enabled = true;
+		if (current < protect_current) {
+			if (!_below_protect_current) {
+				_below_protect_current = true;
+				_protect_start_time = now;
+			}
+
+			hrt_abstime timeout = (hrt_abstime)protect_timeout * 1e3; // us --> ms
+			if (now > _protect_start_time + timeout) {
+				PX4_INFO("Battery has been below protect current for %llu, enabling protections", timeout);
+				_bq76->enable_protections();
+			}
+
+		} else {
+			_below_protect_current = false;
 		}
 	}
 }
@@ -213,7 +224,7 @@ void Bms::handle_idle_current_detection()
 			_idle_start_time = now;
 		}
 
-		hrt_abstime timeout = (hrt_abstime)idle_timeout * 1e6;
+		hrt_abstime timeout = (hrt_abstime)idle_timeout * 1e6; // us --> s
 		if (now > _idle_start_time + timeout) {
 			PX4_INFO("Battery has been idle for %llu, shutting down", timeout);
 			_shutdown_pub.publish(shutdown_s{});
@@ -390,6 +401,7 @@ int Bms::flags()
 
 int Bms::diagnostics()
 {
+	PX4_INFO("========== bq76 ==========");
 	// MFG STATUS
 	{
 		uint16_t status = _bq76->mfg_status();
@@ -505,6 +517,63 @@ int Bms::diagnostics()
 		}
 	}
 
+	PX4_INFO("\n========== bq34 ==========");
+	// Control status
+	{
+		uint16_t status = _bq34->read_control_status();
+		PX4_INFO("control status: 0x%x", status);
+
+		if (status & (1 << 14)) {
+			PX4_INFO("bq34z100-G1 is in FULL ACCESS SEALED state");
+		}
+
+		if (status & (1 << 13)) {
+			PX4_INFO("bq34z100-G1 is in the SEALED State");
+		}
+
+		if (status & (1 << 12)) {
+			PX4_INFO("calibration function is active");
+		}
+
+		if (status & (1 << 11)) {
+			PX4_INFO("Coulomb Counter Calibration routine is active.");
+		}
+
+		if (status & (1 << 10)) {
+			PX4_INFO("Board Calibration routine is active");
+		}
+
+		if (status & (1 << 9)) {
+			PX4_INFO("a valid data flash checksum has been generated");
+		}
+
+		if (status & (1 << 4)) {
+			PX4_INFO("bq34z100-G1 is in SLEEP mode");
+		}
+
+		if (status & (1 << 3)) {
+			PX4_INFO("Impedance Track algorithm using constant-power mode");
+		}
+
+		if (status & (1 << 2)) {
+			PX4_INFO("Ra table updates are disabled");
+		}
+
+		if (status & (1 << 1)) {
+			PX4_INFO("cell voltages are OK for Qmax updates");
+		}
+
+		if (status & (1 << 0)) {
+			PX4_INFO("Qmax updates are enabled");
+		}
+	}
+
+	// Device type
+	{
+		uint16_t type = _bq34->read_device_type();
+		PX4_INFO("device type: 0x%x", type);
+	}
+
 	return PX4_OK;
 }
 
@@ -520,6 +589,18 @@ int Bms::off()
 	return PX4_OK;
 }
 
+int Bms::disable_protections()
+{
+	_bq76->disable_protections();
+	return PX4_OK;
+}
+
+int Bms::enable_protections()
+{
+	_bq76->enable_protections();
+	return PX4_OK;
+}
+
 int Bms::custom_command(int argc, char *argv[])
 {
 	const char *verb = argv[0];
@@ -528,7 +609,6 @@ int Bms::custom_command(int argc, char *argv[])
 		if (is_running()) {
 			return _object.load()->diagnostics();
 		}
-
 		return PX4_ERROR;
 	}
 
@@ -536,7 +616,6 @@ int Bms::custom_command(int argc, char *argv[])
 		if (is_running()) {
 			return _object.load()->flags();
 		}
-
 		return PX4_ERROR;
 	}
 
@@ -544,7 +623,6 @@ int Bms::custom_command(int argc, char *argv[])
 		if (is_running()) {
 			return _object.load()->on();
 		}
-
 		return PX4_ERROR;
 	}
 
@@ -552,7 +630,20 @@ int Bms::custom_command(int argc, char *argv[])
 		if (is_running()) {
 			return _object.load()->off();
 		}
+		return PX4_ERROR;
+	}
 
+	if (!strcmp(verb, "disable_p")) {
+		if (is_running()) {
+			return _object.load()->disable_protections();
+		}
+		return PX4_ERROR;
+	}
+
+	if (!strcmp(verb, "enable_p")) {
+		if (is_running()) {
+			return _object.load()->enable_protections();
+		}
 		return PX4_ERROR;
 	}
 
@@ -578,9 +669,9 @@ BMS driver.
 	PRINT_MODULE_USAGE_COMMAND_DESCR("flags", "Prints bq76 safety fault flags");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("on", "Enables the output FETs");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("off", "Disables the output FETs");
-
+	PRINT_MODULE_USAGE_COMMAND_DESCR("disable_p", "Disables protections");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("enable_p", "Enables protections");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
-
 	return 0;
 }
 

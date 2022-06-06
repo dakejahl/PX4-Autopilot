@@ -56,11 +56,26 @@ public:
     uint16_t read_cycle_count();
     uint8_t read_state_of_health();
     uint16_t read_device_type();
+    uint16_t read_control_status();
 
     // Memory access
     uint16_t read_control(uint8_t addr_msb, uint8_t addr_lsb);
-    uint8_t read_register8(uint8_t addr);
-    uint16_t read_register16(uint8_t addr);
+
+    template <typename T>
+    T read_register(uint8_t addr)
+    {
+        T data = {};
+        int ret = transfer(&addr, 1, nullptr, 0);
+        ret |= transfer(nullptr, 0, (uint8_t*)&data, sizeof(data));
+        px4_usleep(5_ms);
+
+        if (ret != PX4_OK) {
+            PX4_ERR("read_register addr 0x%x failed", addr);
+            return 0;
+        }
+
+        return data;
+    }
 
 private:
 	perf_counter_t _comms_errors;

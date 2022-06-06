@@ -192,8 +192,8 @@ private:
 		PX4_INFO("Writing 0x%x to %s", (unsigned int)reg.value, reg.name);
 
 		int ret = PX4_OK;
-		// ret = write_memory8(reg.address, reg.value);
 		ret = write_memory<T>(reg.address, reg.value);
+		px4_usleep(5_ms);
 
 		if (ret != PX4_OK) {
 			PX4_ERR("%s", reg.name);

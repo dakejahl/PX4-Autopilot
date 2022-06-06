@@ -91,6 +91,8 @@ private:
 	int flags();
 	int on();
 	int off();
+	int disable_protections();
+	int enable_protections();
 
 private:
 	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
@@ -112,16 +114,21 @@ private:
 	bool _booted{false};
 	bool _booted_button_held{true};
 
+	// Protection current control
+	bool _below_protect_current{false};
+	hrt_abstime _protect_start_time{0};
+	bool _protections_enabled{true};
+
+	// Idle current shutdown
 	bool _below_idle_current{false};
 	hrt_abstime _idle_start_time{0};
-
-	bool _protections_enabled{true};
 
 	bool _shutdown{false};
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
 		(ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
+		(ParamInt<px4::params::PROTECT_TIMEOUT>)    _param_protect_timeout,
 		(ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
 		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current,
 		(ParamFloat<px4::params::PARALLEL_VOLTAGE>)    _param_parallel_voltage,

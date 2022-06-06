@@ -58,6 +58,7 @@ int BQ34Z100::probe()
 		}
 	}
 
+	PX4_ERR("device type does not match expected!");
 	return -1;
 }
 
@@ -74,45 +75,73 @@ int BQ34Z100::init()
 	return PX4_OK;
 }
 
+// DataFlashBlock(): 0x3F
+// Issuing a 0x01 instructs the BlockData() command to transfer Manufacturer Data
+
+// BlockDataControl(): 0x61
+// UNSEALED Access: This command is used to control data flash ACCESS mode. Writing 0x00 to this
+// command enables BlockData() to access general data flash. Writing a 0x01 to this command enables the
+// SEALED mode operation of DataFlashBlock().
+
+// BlockDataChecksum(): 0x60
+// UNSEALED Access: This byte contains the checksum on the 32 bytes of block data read or written to
+// data flash.
+// SEALED Access: This byte contains the checksum for the 32 bytes of block data written to Manufacturer
+// Data.
+
+// To access data flash locations individually, the block containing the desired data flash location(s) must be
+// transferred to the command register locations where they can be read to the host or changed directly. This
+// is accomplished by sending the set-up command BlockDataControl() (code 0x61) with data 0x00. Up to 32
+// bytes of data can be read directly from the BlockData() command locations 0x40…0x5F, externally
+// altered, then re-written to the BlockData() command space. Alternatively, specific locations can be read,
+// altered, and re-written if their corresponding offsets are used to index into the BlockData() command
+// space. Finally, the data residing in the command space is transferred to data flash, once the correct
+// checksum for the whole block is written to BlockDataChecksum() (command number 0x60).
+
 float BQ34Z100::read_voltage()
 {
 	static constexpr uint8_t REG_ADDR_VOLTAGE = 0x08;
-	return float(read_register16(REG_ADDR_VOLTAGE)) / 1000.0f;
+	return float(read_register<uint16_t>(REG_ADDR_VOLTAGE)) / 1000.0f;
 }
 
 uint32_t BQ34Z100::read_remaining_capacity()
 {
 	static constexpr uint8_t REG_ADDR_REMAINING_CAPACITY = 0x04;
-	return uint32_t(read_register16(REG_ADDR_REMAINING_CAPACITY));
+	return uint32_t(read_register<uint16_t>(REG_ADDR_REMAINING_CAPACITY));
 }
 
 uint32_t BQ34Z100::read_full_charge_capacity()
 {
 	static constexpr uint8_t REG_ADDR_FULL_CHARGE_CAPACITY = 0x06;
-	return uint32_t(read_register16(REG_ADDR_FULL_CHARGE_CAPACITY));
+	return uint32_t(read_register<uint16_t>(REG_ADDR_FULL_CHARGE_CAPACITY));
 }
 
 uint32_t BQ34Z100::read_design_capacity()
 {
 	static constexpr uint8_t REG_ADDR_DESIGN_CAPACITY = 0x3C;
-	return uint32_t(read_register16(REG_ADDR_DESIGN_CAPACITY));
+	return uint32_t(read_register<uint16_t>(REG_ADDR_DESIGN_CAPACITY));
 }
 
 uint16_t BQ34Z100::read_cycle_count()
 {
 	static constexpr uint8_t REG_ADDR_CYCLE_COUNT = 0x2C;
-	return uint16_t(read_register16(REG_ADDR_CYCLE_COUNT));
+	return uint16_t(read_register<uint16_t>(REG_ADDR_CYCLE_COUNT));
 }
 
 uint8_t BQ34Z100::read_state_of_health()
 {
 	static constexpr uint8_t REG_ADDR_CYCLE_COUNT = 0x2E;
-	return uint8_t(read_register16(REG_ADDR_CYCLE_COUNT));
+	return uint8_t(read_register<uint16_t>(REG_ADDR_CYCLE_COUNT));
 }
 
 uint16_t BQ34Z100::read_device_type()
 {
 	return read_control(0x00, 0x01);
+}
+
+uint16_t BQ34Z100::read_control_status()
+{
+	return read_control(0x00, 0x00);
 }
 
 uint16_t BQ34Z100::read_control(uint8_t addr_msb, uint8_t addr_lsb)
@@ -126,34 +155,5 @@ uint16_t BQ34Z100::read_control(uint8_t addr_msb, uint8_t addr_lsb)
 		return 0;
 	}
 
-	return read_register16(CONTROL_REG);
-}
-
-uint8_t BQ34Z100::read_register8(uint8_t addr)
-{
-	int ret = transfer(&addr, sizeof(addr), nullptr, 0);
-	uint8_t recv = {};
-	ret |= transfer(nullptr, 0, &recv, sizeof(recv));
-
-	if (ret != PX4_OK) {
-		PX4_ERR("read_register8 addr 0x%x failed", addr);
-		return 0;
-	}
-
-	return recv;
-}
-
-uint16_t BQ34Z100::read_register16(uint8_t addr)
-{
-	int ret = transfer(&addr, 1, nullptr, 0);
-	uint8_t recv[2] = {};
-	ret |= transfer(nullptr, 0, recv, sizeof(recv));
-
-	if (ret != PX4_OK) {
-		PX4_ERR("read_register16 addr 0x%x failed", addr);
-		return 0;
-	}
-
-	uint16_t value = (recv[1] << 8) | recv[0];
-	return value;
+	return read_register<uint16_t>(CONTROL_REG);
 }

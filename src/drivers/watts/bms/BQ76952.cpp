@@ -543,17 +543,17 @@ void BQ76952::configure_protections_fet_action()
 		// 6 SCDL 1 Short Circuit in Discharge Latch
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		// byte |= (6 << 0);
+		// byte |= (1 << 6);
 
 		// 4 COVL 1 Cell Overvoltage Latch
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		// byte |= (4 << 0);
+		// byte |= (1 << 4);
 
 		// 2 PTO 1 Precharge Timeout
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		// byte |= (2 << 0);
+		// byte |= (1 << 2);
 
 		// 1 HWDF 1 Host Watchdog Fault
 		//      0 = CHG FET is not disabled when protection is triggered.

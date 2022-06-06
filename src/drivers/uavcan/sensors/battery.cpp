@@ -92,7 +92,7 @@ UavcanBatteryBridge::battery_sub_continuous_cb(const uavcan::ReceivedDataStructu
 
 	_battery_status[instance].remaining = msg.capacity_remaining / msg.full_charge_capacity;
 	// _battery_status[instance].scale = msg.; // Power scaling factor, >= 1, or -1 if unknown
-	_battery_status[instance].temperature = msg.temperature; // Kelvin to Celcius
+	_battery_status[instance].temperature = msg.temperature_pcb;
 	// _battery_status[instance].cell_count = msg.;
 	_battery_status[instance].connected = true;
 	// _battery_status[instance].source = msg.status & ardupilot::equipment::power::BatteryContinuous::STATUS_FLAG_IN_USE;
@@ -101,7 +101,6 @@ UavcanBatteryBridge::battery_sub_continuous_cb(const uavcan::ReceivedDataStructu
 	// _battery_status[instance].capacity = msg.;
 	// _battery_status[instance].full_charge_capacity_wh = msg.full_charge_capacity_wh;
 	// _battery_status[instance].remaining_capacity_wh = msg.remaining_capacity_wh;
-	// _battery_status[instance].cycle_count = msg.;
 	// _battery_status[instance].time_remaining_s = msg.;
 	// _battery_status[instance].average_time_to_empty = msg.;
 	// _battery_status[instance].serial_number = msg.model_instance_id;
