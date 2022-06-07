@@ -32,38 +32,6 @@
  ****************************************************************************/
 
 /**
- * Enable automatic protection control.
- *
- * System will disable protections when current rises above PROTECT_CURRENT.
- * @min 0
- * @max 1
- *
- * @group UAVCAN
- */
-PARAM_DEFINE_INT32(AUTO_PROTECT, 0);
-
-/**
- * Current threshold to exceed for system to automatically disable protections.
- *
- * System will disable protections when current rises above PROTECT_CURRENT.
- *
- * @group UAVCAN
- */
-PARAM_DEFINE_FLOAT(PROTECT_CURRENT, 5.0f);
-
-/**
- * Timeout (ms) after which the battery pack will turn protections ON if current falls below PROTECT_CURRENT.
- *
- * 0 disabled
- *
- * @min 0
- * @max 1800
- *
- * @group UAVCAN
- */
-PARAM_DEFINE_INT32(PROTECT_TIMEOUT, 500);
-
-/**
  * Timeout (s) after which the battery pack will turn itself off if current falls below IDLE_CURRENT.
  *
  * 0 disabled

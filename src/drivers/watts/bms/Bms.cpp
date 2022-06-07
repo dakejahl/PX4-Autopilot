@@ -135,9 +135,6 @@ void Bms::Run()
 	// If drawing a very low amount of power for some amount of time, automatically turn pack off
 	// handle_idle_current_detection();
 
-	// Automatically enable/disable protections
-	handle_automatic_protections();
-
 	collect_and_publish();
 
 	perf_end(_cycle_perf);
@@ -167,43 +164,6 @@ void Bms::collect_and_publish()
 	battery_status.status_flags = _bq76->status_flags();
 
 	_battery_status_pub.publish(battery_status);
-}
-
-void Bms::handle_automatic_protections()
-{
-	bool auto_protect = _param_auto_protect.get();
-
-	if (!auto_protect) {
-		return;
-	}
-
-	float current = _bq76->current();
-	float protect_current = _param_protect_current.get();
-	int32_t protect_timeout = _param_protect_timeout.get();
-	hrt_abstime now = hrt_absolute_time();
-
-	if (_protections_enabled) {
-		if (current > protect_current) {
-			_bq76->disable_protections();
-		}
-
-	} else {
-		if (current < protect_current) {
-			if (!_below_protect_current) {
-				_below_protect_current = true;
-				_protect_start_time = now;
-			}
-
-			hrt_abstime timeout = (hrt_abstime)protect_timeout * 1e3; // us --> ms
-			if (now > _protect_start_time + timeout) {
-				PX4_INFO("Battery has been below protect current for %llu, enabling protections", timeout);
-				_bq76->enable_protections();
-			}
-
-		} else {
-			_below_protect_current = false;
-		}
-	}
 }
 
 void Bms::handle_idle_current_detection()
@@ -324,10 +284,8 @@ void Bms::shutdown()
 void Bms::update_params(const bool force)
 {
 	if (_parameter_update_sub.updated() || force) {
-		// clear update
 		parameter_update_s param_update;
 		_parameter_update_sub.copy(&param_update);
-		// update parameters from storage
 		ModuleParams::updateParams();
 	}
 }

@@ -76,7 +76,6 @@ private:
 
 	void handle_button_and_boot();
 	void handle_idle_current_detection();
-	void handle_automatic_protections();
 
 	bool check_button_held();
 	void shutdown();
@@ -126,13 +125,9 @@ private:
 	bool _shutdown{false};
 
 	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::AUTO_PROTECT>)    _param_auto_protect,
-		(ParamFloat<px4::params::PROTECT_CURRENT>)  _param_protect_current,
-		(ParamInt<px4::params::PROTECT_TIMEOUT>)    _param_protect_timeout,
 		(ParamInt<px4::params::IDLE_TIMEOUT>)    _param_idle_timeout,
 		(ParamFloat<px4::params::IDLE_CURRENT>)    _param_idle_current,
 		(ParamFloat<px4::params::PARALLEL_VOLTAGE>)    _param_parallel_voltage,
 		(ParamInt<px4::params::CAPACITY_SCALAR>)    _param_capacity_scalar
-
 	);
 };
