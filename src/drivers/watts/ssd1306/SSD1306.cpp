@@ -177,15 +177,15 @@ void SSD1306::display_page_0(const watts_battery_status_s& data)
 	str = text_temp;
 	drawString(0, 16, str);
 
-	// mAH consumed
-	snprintf(text_temp, sizeof(text_temp), "Capacity: %u", (int)data.actual_capacity);
-	str = text_temp;
-	drawString(0, 48, str);
-
-	// % remaining
-	snprintf(text_temp, sizeof(text_temp), "Remaining: %u%%", (int)(100.0f * (float)data.capacity_remaining / (float)data.actual_capacity));
+	// mAH remaining
+	snprintf(text_temp, sizeof(text_temp), "Capacity: %u", (int)data.capacity_remaining);
 	str = text_temp;
 	drawString(0, 32, str);
+
+	// % remaining
+	snprintf(text_temp, sizeof(text_temp), "Remaining: %u", (int)(data.state_of_charge));
+	str = text_temp;
+	drawString(0, 48, str);
 
 	display();
 }
@@ -202,6 +202,15 @@ void SSD1306::display_page_1(const watts_battery_status_s& data)
 	str = text_temp;
 	drawString(0, 0, str);
 
+	// Remaining Capacity
+	snprintf(text_temp, sizeof(text_temp), "Rem Cap: %u", (int)data.capacity_remaining);
+	str = text_temp;
+	drawString(0, 16, str);
+
+	// Full Charge Capacity
+	snprintf(text_temp, sizeof(text_temp), "Max Cap: %u", (int)data.actual_capacity);
+	str = text_temp;
+	drawString(0, 32, str);
 
 	display();
 }

@@ -104,6 +104,12 @@ float BQ34Z100::read_voltage()
 	return float(read_register<uint16_t>(REG_ADDR_VOLTAGE)) / 1000.0f;
 }
 
+uint32_t BQ34Z100::read_state_of_charge()
+{
+	static constexpr uint8_t READ_ADDR_STATE_OF_CHARGE = 0x02;
+	return uint32_t(read_register<uint16_t>(READ_ADDR_STATE_OF_CHARGE));
+}
+
 uint32_t BQ34Z100::read_remaining_capacity()
 {
 	static constexpr uint8_t REG_ADDR_REMAINING_CAPACITY = 0x04;

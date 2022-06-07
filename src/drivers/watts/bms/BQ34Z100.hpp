@@ -50,6 +50,7 @@ public:
 
     // Monitor things
     float read_voltage();
+    uint32_t read_state_of_charge();
     uint32_t read_remaining_capacity();
     uint32_t read_full_charge_capacity();
     uint32_t read_design_capacity();

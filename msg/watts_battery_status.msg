@@ -6,6 +6,7 @@ float32 temperature_other       # [C]      : Application dependent, NAN: field n
 float32 current                 # [Ampere] : Positive: defined as a discharge current. Negitive: defined as a charging current, NAN: field not provided
 float32 voltage                 # [Volt]
 uint32 capacity_remaining       # [mAh]
+uint8 state_of_charge           # [%]      : 0-100%
 
 float32[12] cell_voltages       # [Volt]
 
