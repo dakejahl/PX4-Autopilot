@@ -641,8 +641,9 @@ extern "C" int uavcannode_start(int argc, char *argv[])
 
 		} else
 #endif
-		// Otherwise we perform Dynamic Node ID Allocation during init()
+			// Otherwise we perform Dynamic Node ID Allocation during init()
 		{
+
 		}
 	}
 

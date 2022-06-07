@@ -34,13 +34,15 @@
 /**
  * UAVCAN Node ID.
  *
+ * If 0, the node ID will be assigned by the network.
+ * If nonzero, the node ID will be set to this value.
  * Read the specs at http://uavcan.org to learn more about Node ID.
  *
- * @min 1
+ * @min 0
  * @max 125
  * @group UAVCAN
  */
-PARAM_DEFINE_INT32(CANNODE_NODE_ID, 120);
+PARAM_DEFINE_INT32(CANNODE_NODE_ID, 0);
 
 /**
  * UAVCAN CAN bus bitrate.

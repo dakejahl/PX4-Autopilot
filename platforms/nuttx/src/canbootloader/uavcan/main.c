@@ -1185,7 +1185,7 @@ __EXPORT int main(int argc, char *argv[])
 
 	} else {
 
-		// If app is already valid, jump straight to app (will be invalid if not flashed by FC)
+		// If app is already valid, jump straight to app
 		if (bootloader.app_valid) {
 			common.node_id = 0; // For normal boots there is nothing connected, we need to do dynamic ID allocation
 			goto boot;
