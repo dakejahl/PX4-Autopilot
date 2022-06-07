@@ -52,6 +52,7 @@
 #include "Publishers/StaticTemperature.hpp"
 #include "Publishers/BatteryPeriodic.hpp"
 #include "Publishers/BatteryContinuous.hpp"
+#include "Publishers/BatteryCells.hpp"
 
 #include "Subscribers/BeepCommand.hpp"
 #include "Subscribers/LightsCommand.hpp"
@@ -303,6 +304,7 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 	// TODO: make runtime (and build time?) configurable
 	_publisher_list.add(new BatteryPeriodic(this, _node));
 	_publisher_list.add(new BatteryContinuous(this, _node));
+	_publisher_list.add(new BatteryCells(this, _node));
 	_publisher_list.add(new FlowMeasurement(this, _node));
 	_publisher_list.add(new GnssFix2(this, _node));
 	_publisher_list.add(new MagneticFieldStrength2(this, _node));

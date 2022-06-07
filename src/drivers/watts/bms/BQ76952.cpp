@@ -80,23 +80,23 @@ int BQ76952::configure_settings()
 	enter_config_update_mode();
 
 	int ret = PX4_OK;
-	ret |= write_register(Register<int16_t>{"Cell 1 Gain", 0x9180, 12125});
-	ret |= write_register(Register<int16_t>{"Cell 2 Gain", 0x9182, 12127});
-	ret |= write_register(Register<int16_t>{"Cell 3 Gain", 0x9184, 12125});
-	ret |= write_register(Register<int16_t>{"Cell 4 Gain", 0x9186, 12124});
-	ret |= write_register(Register<int16_t>{"Cell 5 Gain", 0x9188, 12125});
-	ret |= write_register(Register<int16_t>{"Cell 6 Gain", 0x918A, 12124});
-	ret |= write_register(Register<int16_t>{"Cell 7 Gain", 0x918C, 12125});
-	ret |= write_register(Register<int16_t>{"Cell 8 Gain", 0x918E, 12125});
-	ret |= write_register(Register<int16_t>{"Cell 9 Gain", 0x9190, 12123});
-	ret |= write_register(Register<int16_t>{"Cell 10 Gain", 0x9192, 12123});
-	ret |= write_register(Register<int16_t>{"Cell 11 Gain", 0x9194, 12127});
-	ret |= write_register(Register<int16_t>{"Cell 12 Gain", 0x9196, 12144});
+	// ret |= write_register(Register<int16_t>{"Cell 1 Gain", 0x9180, 12125});
+	// ret |= write_register(Register<int16_t>{"Cell 2 Gain", 0x9182, 12127});
+	// ret |= write_register(Register<int16_t>{"Cell 3 Gain", 0x9184, 12125});
+	// ret |= write_register(Register<int16_t>{"Cell 4 Gain", 0x9186, 12124});
+	// ret |= write_register(Register<int16_t>{"Cell 5 Gain", 0x9188, 12125});
+	// ret |= write_register(Register<int16_t>{"Cell 6 Gain", 0x918A, 12124});
+	// ret |= write_register(Register<int16_t>{"Cell 7 Gain", 0x918C, 12125});
+	// ret |= write_register(Register<int16_t>{"Cell 8 Gain", 0x918E, 12125});
+	// ret |= write_register(Register<int16_t>{"Cell 9 Gain", 0x9190, 12123});
+	// ret |= write_register(Register<int16_t>{"Cell 10 Gain", 0x9192, 12123});
+	// ret |= write_register(Register<int16_t>{"Cell 11 Gain", 0x9194, 12127});
+	// ret |= write_register(Register<int16_t>{"Cell 12 Gain", 0x9196, 12144});
 
-	ret |= write_register(Register<uint16_t>{"Pack Gain", 0x91A0, 35130});
-	ret |= write_register(Register<uint16_t>{"TOS Gain", 0x91A2, 33345});
+	// ret |= write_register(Register<uint16_t>{"Pack Gain", 0x91A0, 35130});
+	// ret |= write_register(Register<uint16_t>{"TOS Gain", 0x91A2, 33345});
 
-	ret |= write_register(Register<uint16_t>{"LD Gain", 0x91A4, 34500});
+	// ret |= write_register(Register<uint16_t>{"LD Gain", 0x91A4, 34500});
 
 	//TODO - This is setting the wrong value. BQ76 expects type float4
 	//ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});

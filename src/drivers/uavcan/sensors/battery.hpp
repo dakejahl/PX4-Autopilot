@@ -41,6 +41,7 @@
 #include <uORB/topics/battery_status.h>
 #include <ardupilot/equipment/power/BatteryContinuous.hpp>
 #include <ardupilot/equipment/power/BatteryPeriodic.hpp>
+#include <ardupilot/equipment/power/BatteryCells.hpp>
 #include <drivers/drv_hrt.h>
 #include <px4_platform_common/module_params.h>
 
@@ -57,10 +58,12 @@ public:
 
 private:
 
-	void battery_sub_continuous_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryContinuous> &msg);
-	void battery_sub_periodic_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryPeriodic> &msg);
+	void battery_continuous_sub_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryContinuous> &msg);
+	void battery_periodic_sub_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryPeriodic> &msg);
+	void battery_cells_sub_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryCells> &msg);
+
 	void sumDischarged(hrt_abstime timestamp, float current_a);
-	void determineWarning(float remaining);
+	uint8_t determineWarning(float remaining);
 
 	typedef uavcan::MethodBinder < UavcanBatteryBridge *,
 		void (UavcanBatteryBridge::*)
@@ -72,9 +75,14 @@ private:
 		(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryPeriodic> &) >
 		BatteryPeriodicCbBinder;
 
+	typedef uavcan::MethodBinder < UavcanBatteryBridge *,
+		void (UavcanBatteryBridge::*)
+		(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryCells> &) >
+		BatteryCellsCbBinder;
+
 	uavcan::Subscriber<ardupilot::equipment::power::BatteryContinuous, BatteryContinuousCbBinder> _sub_continuous;
 	uavcan::Subscriber<ardupilot::equipment::power::BatteryPeriodic, BatteryPeriodicCbBinder> _sub_periodic;
-
+	uavcan::Subscriber<ardupilot::equipment::power::BatteryCells, BatteryCellsCbBinder> _sub_cells;
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::BAT_LOW_THR>) _param_bat_low_thr,
 		(ParamFloat<px4::params::BAT_CRIT_THR>) _param_bat_crit_thr,
@@ -83,7 +91,5 @@ private:
 
 	float _discharged_mah = 0.f;
 	float _discharged_mah_loop = 0.f;
-	uint8_t _warning;
-	hrt_abstime _last_timestamp;
 	battery_status_s _battery_status[battery_status_s::MAX_INSTANCES] {};
 };

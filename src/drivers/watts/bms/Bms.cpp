@@ -260,7 +260,7 @@ bool Bms::check_button_held()
 		if (_button_pressed) {
 			hrt_abstime duration = now - _pressed_start_time;
 			if (duration > 10_ms) {
-				PX4_INFO("Button pressed for %f seconds", double((float)duration/1e6f));
+				// PX4_INFO("Button pressed for %f seconds", double((float)duration/1e6f));
 				_button_pressed_pub.publish(button_pressed_s{});
 			}
 		}
