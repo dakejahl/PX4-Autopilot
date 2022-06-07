@@ -243,9 +243,21 @@ void SSD1306::display_page_3(const watts_battery_status_s& data)
 	const char* str;
 
 	// % remaining
-	snprintf(text_temp, sizeof(text_temp), "Remaining: %u%%", (int)(100.0f * (float)data.capacity_remaining / (float)data.actual_capacity));
+	snprintf(text_temp, sizeof(text_temp), "%1.2f  %1.2f  %1.2f", (double)data.cell_voltages[0], (double)data.cell_voltages[1], (double)data.cell_voltages[2]);
+	str = text_temp;
+	drawString(0, 0, str);
+
+	snprintf(text_temp, sizeof(text_temp), "%1.2f  %1.2f  %1.2f", (double)data.cell_voltages[3], (double)data.cell_voltages[4], (double)data.cell_voltages[5]);
+	str = text_temp;
+	drawString(0, 16, str);
+
+	snprintf(text_temp, sizeof(text_temp), "%1.2f  %1.2f  %1.2f", (double)data.cell_voltages[6], (double)data.cell_voltages[7], (double)data.cell_voltages[8]);
 	str = text_temp;
 	drawString(0, 32, str);
+
+	snprintf(text_temp, sizeof(text_temp), "%1.2f  %1.2f  %1.2f", (double)data.cell_voltages[9], (double)data.cell_voltages[10], (double)data.cell_voltages[11]);
+	str = text_temp;
+	drawString(0, 48, str);
 
 	display();
 }
