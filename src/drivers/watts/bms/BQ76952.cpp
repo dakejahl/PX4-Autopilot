@@ -64,6 +64,9 @@ int BQ76952::init()
 	// Set FET mode to normal and configure FET actions when protections are tripped
 	configure_fets();
 
+	// After FET actions are configured, turn on most of the protections for logging, even though most FET actions are turned off
+	enable_protections();
+
 	// Enable LDO at REG1 if it's not already enabled (turns on the bq34)
 	uint8_t value = 0b00001101;
 	sub_command(CMD_REG12_CONTROL, &value, sizeof(value));
@@ -384,9 +387,9 @@ void BQ76952::enable_protections()
 
 		byte |= 1 << 7; 	// 7 SCD 1 Short Circuit in Discharge Protection
 
-		// byte |= 1 << 6; 	// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
+		byte |= 1 << 6; 	// 6 OCD2 0 Overcurrent in Discharge 2nd Tier Protection
 
-		// byte |= 1 << 5; 	// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
+		byte |= 1 << 5; 	// 5 OCD1 0 Overcurrent in Discharge 1st Tier Protection
 							// TODO: set the threshold
 
 		byte |= 1 << 4; 	// 4 OCC 0 Overcurrent in Charge Protection
@@ -406,13 +409,13 @@ void BQ76952::enable_protections()
 
 		byte |= 1 << 6; 	// 6 OTINT 0 Internal Overtemperature
 
-		// byte |= 1 << 5; 	// 5 OTD 0 Overtemperature in Discharge
+		byte |= 1 << 5; 	// 5 OTD 0 Overtemperature in Discharge
 
 		byte |= 1 << 4; 	// 4 OTC 0 Overtemperature in Charge
 
-		// byte |= 1 << 2; 	// 2 UTINT 0 Internal Undertemperature
+		byte |= 1 << 2; 	// 2 UTINT 0 Internal Undertemperature
 
-		// byte |= 1 << 1; 	// 1 UTD 0 Undertemperature in Discharge
+		byte |= 1 << 1; 	// 1 UTD 0 Undertemperature in Discharge
 
 		byte |= 1 << 0; 	// 0 UTC 0 Undertemperature in Charge
 
@@ -423,12 +426,12 @@ void BQ76952::enable_protections()
 	{
 		uint8_t byte = {};
 
-		// byte |= 1 << 7; // 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
+		byte |= 1 << 7;		// 7 OCD3 0 Overcurrent in Discharge 3rd Tier Protection
 
 		byte |= 1 << 6; 	// 6 SCDL 0 Short Circuit in Discharge Latch
 							// TODO: do we want to use this feature?
 
-		// byte |= 1 << 5; 	// 5 OCDL 0 Overcurrent in Discharge Latch
+		byte |= 1 << 5; 	// 5 OCDL 0 Overcurrent in Discharge Latch
 							// TODO: do we want to use this feature?
 
 		byte |= 1 << 4; 	// 4 COVL 0 Cell Overvoltage Latch
@@ -548,13 +551,13 @@ void BQ76952::configure_protections_fet_action()
 		// 7 OTF 1 FET Overtemperature
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (1 << 7);
+		// byte |= (1 << 7);
 		// TODO: set threshold
 
 		// 6 OTINT 1 Internal Overtemperature
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (1 << 6);
+		// byte |= (1 << 6);
 		// TODO: set threshold
 
 		// 4 OTC 1 Overtemperature in Charge
@@ -566,7 +569,7 @@ void BQ76952::configure_protections_fet_action()
 		// 2 UTINT 1 Internal Undertemperature
 		//      0 = CHG FET is not disabled when protection is triggered.
 		//      1 = CHG FET is disabled when protection is triggered.
-		byte |= (1 << 2);
+		// byte |= (1 << 2);
 		// TODO: set threshold
 
 		// 0 UTC 1 Undertemperature in Charge
@@ -614,17 +617,17 @@ void BQ76952::configure_protections_fet_action()
 		// 7 SCD 1 Short Circuit in Discharge Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 7);
+		// byte |= (1 << 7);
 
 		// 6 OCD2 1 Overcurrent in Discharge 2nd Tier Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 6);
+		// byte |= (1 << 6);
 
 		// 5 OCD1 1 Overcurrent in Discharge 1st Tier Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 5);
+		// byte |= (1 << 5);
 
 		// 2 CUV 1 Cell Undervoltage Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
@@ -641,27 +644,27 @@ void BQ76952::configure_protections_fet_action()
 		// 7 OTF 1 FET Overtemperature
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 7);
+		// byte |= (1 << 7);
 
 		// 6 OTINT 1 Internal Overtemperature
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 6);
+		// byte |= (1 << 6);
 
 		// 5 OTD 1 Overtemperature in Discharge
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 5);
+		// byte |= (1 << 5);
 
 		// 2 UTINT 1 Internal Undertemperature
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 2);
+		// byte |= (1 << 2);
 
 		// 1 UTD 1 Undertemperature in Discharge
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 1);
+		// byte |= (1 << 1);
 
 		write_memory<uint8_t>(ADDR_DSG_FET_Protections_B, byte);
 	}
@@ -672,17 +675,17 @@ void BQ76952::configure_protections_fet_action()
 		// 7 OCD3 1 Overcurrent in Discharge 3rd Tier Protection
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 7);
+		// byte |= (1 << 7);
 
 		// 6 SCDL 1 Short Circuit in Discharge Latch
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 6);
+		// byte |= (1 << 6);
 
 		// 5 OCDL 1 Overcurrent in Discharge Latch
 		// 		0 = DSG FET is not disabled when protection is triggered.
 		// 		1 = DSG FET is disabled when protection is triggered.
-		byte |= (1 << 5);
+		// byte |= (1 << 5);
 
 		// 1 HWDF 1 Host Watchdog Fault
 		// 		0 = DSG FET is not disabled when protection is triggered.
