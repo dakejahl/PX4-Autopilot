@@ -82,11 +82,13 @@ public:
 				battery.design_capacity = 16000;
 				battery.cycle_count = 123;
 				battery.state_of_health_pct = 69;
+				battery.cells_in_series = status.cells_in_series;
+				battery.cycle_count = status.cycle_count;
+				battery.state_of_health_pct = status.state_of_health;
 
 				battery.name = "WATTS";
 				battery.serial_number = "123456";
 				battery.manufacture_date = "5_6_2022";
-
 
 				uavcan::Publisher<ardupilot::equipment::power::BatteryPeriodic>::broadcast(battery);
 

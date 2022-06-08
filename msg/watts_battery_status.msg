@@ -17,7 +17,7 @@ uint32 design_capacity          # [mAh] Fully Charged Design Capacity. UINT32_MA
 uint32 actual_capacity          # [mAh] Predicted battery capacity when fully charged (accounting for battery degradation)
 uint16 cycle_count              # UINT16_MAX: field not provided.
 uint8 state_of_health           # % state of health (0 - 100) UINT8_MAX: field not provided
-
+uint8 cells_in_series
 uint32 status_flags
 
 uint32 STATUS_FLAG_READY_TO_USE                             = 1

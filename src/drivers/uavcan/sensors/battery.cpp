@@ -97,7 +97,7 @@ UavcanBatteryBridge::battery_continuous_sub_cb(const uavcan::ReceivedDataStructu
 	_battery_status[instance].current_a = msg.current;
 	_battery_status[instance].current_filtered_a = msg.current;
 	_battery_status[instance].capacity = msg.full_charge_capacity;
-	_battery_status[instance].remaining = msg.capacity_remaining / msg.full_charge_capacity;
+	_battery_status[instance].remaining = (float)msg.capacity_remaining / (float)msg.full_charge_capacity;
 
 	_battery_status[instance].discharged_mah = msg.full_charge_capacity - msg.capacity_remaining;
 	_battery_status[instance].custom_faults = msg.status_flags;

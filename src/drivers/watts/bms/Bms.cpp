@@ -155,12 +155,13 @@ void Bms::collect_and_publish()
 	_bq76->cell_voltages(battery_status.cell_voltages, 12);
 
 	battery_status.state_of_charge = _bq34->read_state_of_charge();
-	battery_status.capacity_remaining = _bq34->read_state_of_charge() * _param_capacity_scalar.get();
+	battery_status.capacity_remaining = _bq34->read_remaining_capacity() * _param_capacity_scalar.get();
 	battery_status.design_capacity = _bq34->read_design_capacity() * _param_capacity_scalar.get();
 	battery_status.actual_capacity = _bq34->read_full_charge_capacity() * _param_capacity_scalar.get();
 
 	battery_status.cycle_count = _bq34->read_cycle_count();
 	battery_status.state_of_health = _bq34->read_state_of_health();
+	battery_status.cells_in_series = 12;
 
 	battery_status.status_flags = _bq76->status_flags();
 

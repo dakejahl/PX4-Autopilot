@@ -230,7 +230,7 @@ void SSD1306::display_page_2(const watts_battery_status_s& data)
 	// Temperature
 	snprintf(text_temp, sizeof(text_temp), "Temperature: %3.2f", double(data.temperature_pcb));
 	str = text_temp;
-	drawString(0, 16, str);
+	drawString(0, 32, str);
 
 	display();
 }
