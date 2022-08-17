@@ -42,7 +42,7 @@
 
 #include <uORB/topics/watts_battery_status.h>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/shutdown.h>
+#include <uORB/topics/app_state.h>
 #include <uORB/topics/button_pressed.h>
 #include <uORB/Publication.hpp>
 #include <uORB/SubscriptionInterval.hpp>
@@ -51,6 +51,9 @@
 #include "BQ34Z100.hpp"
 
 using namespace time_literals;
+
+static constexpr hrt_abstime BUTTON_HOLD_TIME = 3_s;
+
 
 class Bms : public ModuleBase<Bms>, public ModuleParams, public px4::ScheduledWorkItem
 {
@@ -74,7 +77,7 @@ private:
 
 	void update_params(const bool force = false);
 
-	void handle_button_and_boot();
+	void handle_button_behaviors();
 	void handle_idle_current_detection();
 
 	bool check_button_held();
@@ -101,7 +104,7 @@ private:
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
-	uORB::Publication<shutdown_s> _shutdown_pub{ORB_ID(shutdown)};
+	uORB::Publication<app_state_s> _app_state_pub{ORB_ID(app_state)};
 	uORB::Publication<button_pressed_s>	_button_pressed_pub{ORB_ID(button_pressed)};
 	uORB::Publication<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
 

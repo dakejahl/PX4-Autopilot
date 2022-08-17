@@ -129,8 +129,9 @@ void Bms::Run()
 
 	update_params();
 
-	// Detect button presses and handle corresponding behavior
-	handle_button_and_boot();
+	// Detect button hold and press and performs behaviors (bootup/shutdown/toggle-page)
+	// and also publishes the state (BOOTING, BOOTED, SHUTDOWN)
+	handle_button_behaviors();
 
 	// If drawing a very low amount of power for some amount of time, automatically turn pack off
 	// handle_idle_current_detection();
@@ -187,7 +188,9 @@ void Bms::handle_idle_current_detection()
 		hrt_abstime timeout = (hrt_abstime)idle_timeout * 1e6; // us --> s
 		if (now > _idle_start_time + timeout) {
 			PX4_INFO("Battery has been idle for %llu, shutting down", timeout);
-			_shutdown_pub.publish(shutdown_s{});
+			app_state_s state = {};
+			state.state = app_state_s::SHUTDOWN;
+			_app_state_pub.publish(state);
 			_shutdown = true;
 		}
 
@@ -196,7 +199,7 @@ void Bms::handle_idle_current_detection()
 	}
 }
 
-void Bms::handle_button_and_boot()
+void Bms::handle_button_behaviors()
 {
 	if (!_booted) {
 		if (check_button_held()) {
@@ -204,6 +207,7 @@ void Bms::handle_button_and_boot()
 			_booted = true;
 			_booted_button_held = true;
 			_bq76->enable_fets();
+			// TODO: publish BOOTED
 		}
 
 		// Check if PACK voltage is high
@@ -212,13 +216,30 @@ void Bms::handle_button_and_boot()
 			PX4_INFO("PACK voltage (%fv) above threshold (%fv), enabling FETs", double(pack_voltage), double(_param_parallel_voltage.get()));
 			_booted = true;
 			_bq76->enable_fets();
+			// TODO: publish BOOTED
 			return;
+		}
+
+		// If button is being held update boot progress
+		if (!px4_arch_gpioread(GPIO_N_BTN)) {
+			hrt_abstime now = hrt_absolute_time();
+			hrt_abstime duration = now - _pressed_start_time;
+			uint8_t progress = (100 * duration) / BUTTON_HOLD_TIME;
+			if (progress > 100) {
+				progress = 100;
+			}
+			app_state_s state = {};
+			state.state = app_state_s::BOOTING;
+			state.progress = progress;
+			_app_state_pub.publish(state);
 		}
 
 		// Check if 5 seconds has elapsed, power off
 		if (hrt_absolute_time() > 5_s) {
 			PX4_INFO("Button not held, shutting down");
-			_shutdown_pub.publish(shutdown_s{});
+			app_state_s state = {};
+			state.state = app_state_s::SHUTDOWN;
+			_app_state_pub.publish(state);
 			_shutdown = true;
 		}
 
@@ -227,16 +248,27 @@ void Bms::handle_button_and_boot()
 		if (px4_arch_gpioread(GPIO_N_BTN)) {
 			PX4_INFO("button released after boot");
 			_booted_button_held = false;
+			// Normal running operation
+			app_state_s state = {};
+			state.state = app_state_s::RUNNING;
+			_app_state_pub.publish(state);
 		}
 
 	} else {
 		if (check_button_held()) {
 			PX4_INFO("Button was held, shutting down");
-			// Notify shutdown
-			_shutdown_pub.publish(shutdown_s{});
+			app_state_s state = {};
+			state.state = app_state_s::SHUTDOWN;
+			_app_state_pub.publish(state);
 			_shutdown = true;
 			// We disable FETs here as well so that the user sees something happen
 			_bq76->disable_fets();
+
+		} else {
+			// Normal running operation
+			app_state_s state = {};
+			state.state = app_state_s::RUNNING;
+			_app_state_pub.publish(state);
 		}
 	}
 }
@@ -252,8 +284,7 @@ bool Bms::check_button_held()
 			_pressed_start_time = now;
 		}
 
-		static constexpr hrt_abstime HOLD_TIME = 3_s;
-		if (now - _pressed_start_time > HOLD_TIME) {
+		if (now - _pressed_start_time > BUTTON_HOLD_TIME) {
 			_button_pressed = false;
 			return true;
 		}

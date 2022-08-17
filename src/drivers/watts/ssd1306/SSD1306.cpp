@@ -96,14 +96,45 @@ void SSD1306::RunImpl()
 		return;
 	}
 
-	if (_shutdown_sub.updated()) {
-		// Shut down imminenet, disable OLED
-		resetDisplay();
+	_app_state_sub.update(&_state);
+
+	if (_state.state == app_state_s::BOOTING) {
+		show_bootup_display(_state.progress);
+
+	} else if (_state.state == app_state_s::RUNNING) {
+		show_runtime_display();
+
+	} else if (_state.state == app_state_s::SHUTDOWN) {
+		resetDisplay(); // Shut down imminenet, disable OLED
 		_shutting_down = true;
 		perf_end(_cycle_perf);
 		return;
+
 	}
 
+	perf_end(_cycle_perf);
+}
+
+void SSD1306::show_bootup_display(uint8_t progress)
+{
+	clear();
+
+	char text_temp[20] = {};
+	const char* str;
+
+	snprintf(text_temp, sizeof(text_temp), "Fuck you");
+	str = text_temp;
+	drawString(0, 0, str);
+
+	snprintf(text_temp, sizeof(text_temp), "Booting... %u%%", progress);
+	str = text_temp;
+	drawString(0, 16, str);
+
+	display();
+}
+
+void SSD1306::show_runtime_display()
+{
 	bool button_pressed = false;
 	button_pressed_s button = {};
 	if (_button_pressed_sub.update(&button)) {
@@ -148,16 +179,6 @@ void SSD1306::RunImpl()
 				break;
 		}
 	}
-
-	// TODO: implement a mechanism to safely shut down -- SEE button_task.cpp
-	// shutdown_s shutdown;
-	// if (_shutdown_sub.update(&shutdown)) {
-	// 	PX4_INFO("SHUTTING DOWN NOW");
-	// 	displayOff();
-	// 	exit_and_cleanup();
-	// }
-
-	perf_end(_cycle_perf);
 }
 
 void SSD1306::display_page_0(const watts_battery_status_s& data)

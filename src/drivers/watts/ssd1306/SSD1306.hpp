@@ -43,7 +43,7 @@
 
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/watts_battery_status.h>
-#include <uORB/topics/shutdown.h>
+#include <uORB/topics/app_state.h>
 #include <uORB/topics/button_pressed.h>
 
 #include "ssd1306_fonts.h"
@@ -124,7 +124,10 @@ public:
 	void exit_and_cleanup() override;
 
 private:
-    static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
+	static const hrt_abstime    SAMPLE_INTERVAL {50_ms};
+
+	void show_bootup_display(uint8_t progress);
+	void show_runtime_display();
 
 	void display_page_0(const watts_battery_status_s& data);
 	void display_page_1(const watts_battery_status_s& data);
@@ -160,8 +163,10 @@ private:
 
 private:
 	uORB::Subscription _battery_sub{ORB_ID(watts_battery_status)};
-	uORB::Subscription _shutdown_sub{ORB_ID(shutdown)};
+	uORB::Subscription _app_state_sub{ORB_ID(app_state)};
 	uORB::Subscription _button_pressed_sub{ORB_ID(button_pressed)};
+
+	app_state_s _state = {};
 
 	uint8_t* _buffer {nullptr};
 	uint8_t* _buffer2 {nullptr};

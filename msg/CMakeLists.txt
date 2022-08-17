@@ -206,7 +206,7 @@ set(msg_files
 	wind.msg
 	yaw_estimator_status.msg
 	watts_battery_status.msg
-	shutdown.msg
+	app_state.msg
 	button_pressed.msg
 )
 
