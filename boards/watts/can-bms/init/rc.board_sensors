@@ -3,4 +3,7 @@
 # board sensors init
 #------------------------------------------------------------------------------
 bms start
-ssd1306 start -I -b 2
+# ssd1306 start -I -b 2
+
+# Testing esp8266-oled-ssd1306 library
+ssd1306_display start -I -b 2

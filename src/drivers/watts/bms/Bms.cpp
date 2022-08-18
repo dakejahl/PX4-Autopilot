@@ -248,11 +248,12 @@ void Bms::handle_button_behaviors()
 		if (px4_arch_gpioread(GPIO_N_BTN)) {
 			PX4_INFO("button released after boot");
 			_booted_button_held = false;
-			// Normal running operation
-			app_state_s state = {};
-			state.state = app_state_s::RUNNING;
-			_app_state_pub.publish(state);
 		}
+
+		// Normal running operation
+		app_state_s state = {};
+		state.state = app_state_s::RUNNING;
+		_app_state_pub.publish(state);
 
 	} else {
 		if (check_button_held()) {

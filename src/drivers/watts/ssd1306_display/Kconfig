@@ -1,0 +1,5 @@
+menuconfig DRIVERS_WATTS_SSD1306_DISPLAY
+	bool "ssd1306_display"
+	default n
+	---help---
+		Enable support for ssd1306
