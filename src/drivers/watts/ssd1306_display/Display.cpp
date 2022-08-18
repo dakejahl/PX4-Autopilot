@@ -84,20 +84,26 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
 
 void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
+	// Center point of OLED
+	int16_t x_center = (display->getWidth()  / 2);
+	int16_t y_center = (display->getHeight()  / 2);
+
 	// Text alignment demo
 	display->setFont(ArialMT_Plain_10);
 
 	// The coordinates define the left starting point of the text
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	display->drawString(0 + x, 11 + y, "Left aligned (0,10)");
+	display->drawString(x, y, "Left aligned (0,10)");
 
 	// The coordinates define the center of the text
 	display->setTextAlignment(TEXT_ALIGN_CENTER);
-	display->drawString(64 + x, 22 + y, "Center aligned (64,22)");
+	display->drawString(x + x_center, y + y_center, "Center aligned (64,22)");
 
 	// The coordinates define the right end of the text
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	display->drawString(128 + x, 33 + y, "Right aligned (128,33)");
+	// display->drawString(x + display->getWidth(), y + display->getHeight() - 1, "Right aligned (128,33)");
+	display->drawString(x + display->getWidth(), y + 45, "Right aligned (128,33)");
+
 }
 
 void drawFrame4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
@@ -107,7 +113,9 @@ void drawFrame4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
 	// Currently only spaces and "-" are allowed for wrapping
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_10);
-	display->drawStringMaxWidth(0 + x, 10 + y, 128, "Lorem ipsum\n dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore.");
+	display->drawStringMaxWidth(0 + x, 10 + y, 128, "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore what the fuck is this text even saying.");
+	// display->drawStringMaxWidth(x, y, 128, "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore what the fuck is this text even saying.");
+
 }
 
 void drawFrame5(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
