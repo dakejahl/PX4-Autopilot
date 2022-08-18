@@ -246,7 +246,7 @@ void Bms::handle_button_behaviors()
 	} else if (_booted && _booted_button_held) {
 		// We must make sure the button is released before we start monitoring for shutdown / screen toggle
 		if (px4_arch_gpioread(GPIO_N_BTN)) {
-			PX4_INFO("button released after boot");
+			PX4_INFO("Button released");
 			_booted_button_held = false;
 		}
 
