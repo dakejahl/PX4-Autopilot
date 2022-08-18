@@ -46,6 +46,7 @@
 // But how do we fix it? We need to pass function pointers
 // and that is hard to do with classes... hmmm
 //
+app_state_s _state = {};
 watts_battery_status_s _battery_status;
 
 // TODO: do we want an overlay?
@@ -58,17 +59,23 @@ void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
 
 void booting_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
+	// Splash screen
 	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
 	int16_t y_offset = (display->getHeight()  / 2)  - (Watts_Logo_Height / 2);
+	display->drawXbm(x + x_offset, y + y_offset - 5, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
 
-	display->drawXbm(x + x_offset, y + y_offset, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
+	// Loading progress bar
+	uint16_t progress_bar_width = 80;
+	uint16_t progress_bar_height = 5;
+	uint16_t x_loading = (display->getWidth() / 2) - (progress_bar_width / 2);
+	uint16_t y_loading = display->getHeight() - 7;
+	display->drawProgressBar(x_loading, y_loading, progress_bar_width, progress_bar_height, _state.progress);
 }
 
 void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
 	int16_t y_offset = (display->getHeight()  / 2)  - (Watts_Logo_Height / 2);
-
 	display->drawXbm(x + x_offset, y + y_offset - 5, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
 }
 

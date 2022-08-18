@@ -79,7 +79,4 @@ private:
 
 	OLEDDisplayUi* _display_ui;
 	SSD1306_I2C* _display_interface;
-
-	app_state_s _state = {};
-
 };
