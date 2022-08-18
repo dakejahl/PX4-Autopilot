@@ -33,11 +33,8 @@
 
 #pragma once
 
-
-
 #include <drivers/drv_hrt.h>
 #include <lib/perf/perf_counter.h>
-
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 
@@ -46,9 +43,7 @@
 #include <uORB/topics/app_state.h>
 #include <uORB/topics/button_pressed.h>
 
-
 #include "SSD1306_I2C.h"
-
 #include "esp8266-oled-ssd1306/src/OLEDDisplayUi.h"
 
 using namespace time_literals;
@@ -83,7 +78,8 @@ private:
 	perf_counter_t _cycle_perf{};
 
 	OLEDDisplayUi* _display_ui;
-    SSD1306_I2C* _display_interface;
+	SSD1306_I2C* _display_interface;
 
 	app_state_s _state = {};
+
 };

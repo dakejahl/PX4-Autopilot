@@ -42,16 +42,21 @@
 
 //////////////////////////////////////////////////////////
 ///////////////////// FIX THIS ///////////////////////////
+//
+// But how do we fix it? We need to pass function pointers
+// and that is hard to do with classes... hmmm
+//
+watts_battery_status_s _battery_status;
 
+// TODO: do we want an overlay?
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
 {
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
 	display->setFont(ArialMT_Plain_10);
-	// display->drawString(128, 0, String(millis()));
 	display->drawString(128, 0, "420");
 }
 
-void drawBooting(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+void booting_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
 	int16_t y_offset = (display->getHeight()  / 2)  - (Watts_Logo_Height / 2);
@@ -59,80 +64,95 @@ void drawBooting(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int
 	display->drawXbm(x + x_offset, y + y_offset, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
 }
 
-void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
 	int16_t y_offset = (display->getHeight()  / 2)  - (Watts_Logo_Height / 2);
 
-	display->drawXbm(x + x_offset, y + y_offset, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
+	display->drawXbm(x + x_offset, y + y_offset - 5, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
 }
 
-void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	// Demonstrates the 3 included default sizes. The fonts come from SSD1306Fonts.h file
-	// Besides the default fonts there will be a program to convert TrueType fonts into this format
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_10);
-	display->drawString(0 + x, 10 + y, "Arial 10");
 
-	display->setFont(ArialMT_Plain_16);
-	display->drawString(0 + x, 20 + y, "Arial 16");
+	static constexpr uint16_t ArialMT_Plain_10_Height = 11; // ArialMT_Plain_10
+	// static constexpr uint16_t ArialMT_Plain_16_Height = 20; // ArialMT_Plain_16
+	// static constexpr uint16_t ArialMT_Plain_24_Height = 34; // ArialMT_Plain_24
 
-	display->setFont(ArialMT_Plain_24);
-	display->drawString(0 + x, 34 + y, "Arial 24");
+	uint16_t vertical_offset = 0; // font height 20 for ArialMT_Plain_16
+	char text_temp[64] = {};
+
+	snprintf(text_temp, sizeof(text_temp), "%s %16.2f V", "Voltage:", double(_battery_status.voltage));
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%s %16.2f A", "Current:", double(_battery_status.current));
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%s %11u mAh", "Capacity:", int(_battery_status.capacity_remaining));
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%s %8u%%", "Remaining:", int(_battery_status.state_of_charge));
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%s %5u C", "Temperature:", int(_battery_status.temperature_pcb));
+	display->drawString(x, y + vertical_offset, text_temp);
 }
 
-void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	// Center point of OLED
-	int16_t x_center = (display->getWidth()  / 2);
-	int16_t y_center = (display->getHeight()  / 2);
-
-	// Text alignment demo
-	display->setFont(ArialMT_Plain_10);
-
-	// The coordinates define the left starting point of the text
-	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	display->drawString(x, y, "Left aligned (0,10)");
-
-	// The coordinates define the center of the text
-	display->setTextAlignment(TEXT_ALIGN_CENTER);
-	display->drawString(x + x_center, y + y_center, "Center aligned (64,22)");
-
-	// The coordinates define the right end of the text
-	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	// display->drawString(x + display->getWidth(), y + display->getHeight() - 1, "Right aligned (128,33)");
-	display->drawString(x + display->getWidth(), y + 45, "Right aligned (128,33)");
-
-}
-
-void drawFrame4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	// Demo for drawStringMaxWidth:
-	// with the third parameter you can define the width after which words will be wrapped.
-	// Currently only spaces and "-" are allowed for wrapping
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_10);
-	display->drawStringMaxWidth(0 + x, 10 + y, 128, "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore what the fuck is this text even saying.");
-	// display->drawStringMaxWidth(x, y, 128, "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore what the fuck is this text even saying.");
 
+	static constexpr uint16_t ArialMT_Plain_10_Height = 13; // ArialMT_Plain_10
+	// static constexpr uint16_t ArialMT_Plain_16_Height = 20; // ArialMT_Plain_16
+	// static constexpr uint16_t ArialMT_Plain_24_Height = 34; // ArialMT_Plain_24
+
+	uint16_t vertical_offset = 0; // font height 20 for ArialMT_Plain_16
+	char text_temp[64] = {};
+
+	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[0], (double)_battery_status.cell_voltages[1], (double)_battery_status.cell_voltages[2]);
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[3], (double)_battery_status.cell_voltages[4], (double)_battery_status.cell_voltages[5]);
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[6], (double)_battery_status.cell_voltages[7], (double)_battery_status.cell_voltages[8]);
+	display->drawString(x, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_10_Height;
+
+	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[9], (double)_battery_status.cell_voltages[10], (double)_battery_status.cell_voltages[11]);
+	display->drawString(x, y + vertical_offset, text_temp);
 }
 
-void drawFrame5(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->setFont(ArialMT_Plain_10);
+	display->drawStringMaxWidth(0 + x, y, 128, "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore.");
+}
+
+void running_page_5(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	int16_t x_offset = (display->getWidth()  / 2)  - (Terran_Logo_Width / 2);
-	int16_t y_offset = (display->getHeight()  / 2)  - (Terran_Logo_Height / 2);
+	int16_t y_offset = (display->getHeight()  / 2)  - (Terran_Logo_Height / 2) - 10;
 
 	display->drawXbm(x + x_offset, y_offset, Terran_Logo_Width, Terran_Logo_Height, Terran_Logo_Bits);
 }
 
+// Page frames
 int booting_page_count = 1;
-FrameCallback booting_pages[] = { drawBooting };
-
+FrameCallback booting_pages[] = { booting_page };
 
 int running_page_count = 5;
-FrameCallback running_pages[] = { drawFrame1, drawFrame2, drawFrame3, drawFrame4, drawFrame5 };
-
+FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3, running_page_4, running_page_5 };
 
 // Overlays are statically drawn on top of a frame eg. a clock
 OverlayCallback overlays[] = { msOverlay };
@@ -187,6 +207,9 @@ void Display::Run()
 		return;
 	}
 
+	// Update battery data
+	_battery_sub.update(&_battery_status);
+
 	uint8_t previous_state = _state.state;
 	_app_state_sub.update(&_state);
 
@@ -196,7 +219,7 @@ void Display::Run()
 			_display_ui->setTimePerTransition(0);
 			_display_interface->clear();
 			_display_ui->setFrames(running_pages, running_page_count);
-			_display_ui->setOverlays(overlays, overlaysCount);
+			// _display_ui->setOverlays(overlays, overlaysCount);
 
 		} else if (_state.state == app_state_s::SHUTDOWN) {
 			// Shut down imminenet, disable OLED
