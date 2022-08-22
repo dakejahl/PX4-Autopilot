@@ -57,7 +57,7 @@ void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
 	display->drawString(128, 0, "420");
 }
 
-void booting_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+void booting_loading_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	// Splash screen
 	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
@@ -70,6 +70,12 @@ void booting_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, in
 	uint16_t x_loading = (display->getWidth() / 2) - (progress_bar_width / 2);
 	uint16_t y_loading = display->getHeight() - 7;
 	display->drawProgressBar(x_loading, y_loading, progress_bar_width, progress_bar_height, _state.progress);
+}
+
+void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+void booting_data_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	running_page_2(display, state, x, y);
 }
 
 void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
@@ -155,8 +161,8 @@ void running_page_5(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 }
 
 // Page frames
-int booting_page_count = 1;
-FrameCallback booting_pages[] = { booting_page };
+int booting_page_count = 2;
+FrameCallback booting_pages[] = { booting_loading_page, booting_data_page };
 
 int running_page_count = 5;
 FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3, running_page_4, running_page_5 };
@@ -200,6 +206,7 @@ int Display::init()
 	// Set it up for initial bootup
 	_display_ui->disableAllIndicators();
 	_display_ui->disableAutoTransition();
+	_display_ui->setTimePerTransition(0);
 	_display_interface->flipScreenVertically();
 
 	ScheduleOnInterval(SAMPLE_INTERVAL, SAMPLE_INTERVAL);
@@ -214,47 +221,46 @@ void Display::Run()
 		return;
 	}
 
-	// Update battery data
 	_battery_sub.update(&_battery_status);
 
 	uint8_t previous_state = _state.state;
 	_app_state_sub.update(&_state);
 
 	if (_state.state != previous_state) {
-		if (_state.state == app_state_s::RUNNING) {
-			_display_ui->enableAllIndicators();
-			_display_ui->setTimePerTransition(0);
+		if (_state.state == app_state_s::BOOTING) {
+			_display_ui->switchToFrame(0);
+
+		} else if (_state.state == app_state_s::SHOW_INFO) {
+			_display_ui->switchToFrame(1);
+
+		} else if (_state.state == app_state_s::RUNNING) {
 			_display_interface->clear();
+			_display_ui->enableAllIndicators();
 			_display_ui->setFrames(running_pages, running_page_count);
-			// _display_ui->setOverlays(overlays, overlaysCount);
 
 		} else if (_state.state == app_state_s::SHUTDOWN) {
 			// Shut down imminenet, disable OLED
 			_display_interface->clear();
 			_display_interface->display();
 			ScheduleClear();
-			PX4_INFO("Exiting");
+			PX4_INFO("exiting");
 			return;
 		}
 	}
 
-	// Handle button presses during running
-	if (_state.state == app_state_s::RUNNING) {
-		button_pressed_s button = {};
-		if (_button_pressed_sub.update(&button)) {
+	perf_begin(_cycle_perf);
+
+	button_pressed_s button = {};
+	if (_button_pressed_sub.update(&button)) {
+		if (_state.state == app_state_s::RUNNING) {
 			_display_ui->nextFrame();
 		}
-	} else if (_state.state == app_state_s::BOOTING) {
-		// Update progress
 	}
-
-	perf_begin(_cycle_perf);
 
 	_display_ui->update();
 
 	perf_end(_cycle_perf);
 }
-
 
 int Display::custom_command(int argc, char *argv[])
 {

@@ -52,8 +52,8 @@
 
 using namespace time_literals;
 
-static constexpr hrt_abstime BUTTON_HOLD_TIME = 3_s;
-
+static constexpr hrt_abstime BUTTON_HOLD_TIME = 2_s;
+static constexpr hrt_abstime BUTTON_SHUTDOWN_TIME = 5_s;
 
 class Bms : public ModuleBase<Bms>, public ModuleParams, public px4::ScheduledWorkItem
 {
@@ -77,7 +77,9 @@ private:
 
 	void update_params(const bool force = false);
 
-	void handle_button_behaviors();
+	void handle_button_booting();
+	void handle_button_running();
+
 	void handle_idle_current_detection();
 
 	bool check_button_held();

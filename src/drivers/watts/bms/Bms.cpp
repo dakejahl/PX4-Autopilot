@@ -131,7 +131,12 @@ void Bms::Run()
 
 	// Detect button hold and press and performs behaviors (bootup/shutdown/toggle-page)
 	// and also publishes the state (BOOTING, BOOTED, SHUTDOWN)
-	handle_button_behaviors();
+	if (!_booted) {
+		handle_button_booting();
+	} else {
+		handle_button_running();
+	}
+	// handle_button_behaviors();
 
 	// If drawing a very low amount of power for some amount of time, automatically turn pack off
 	// handle_idle_current_detection();
@@ -199,61 +204,63 @@ void Bms::handle_idle_current_detection()
 	}
 }
 
-void Bms::handle_button_behaviors()
+void Bms::handle_button_booting()
 {
-	if (!_booted) {
-		if (check_button_held()) {
-			PX4_INFO("Button was held, enabling FETs");
-			_booted = true;
-			_booted_button_held = true;
-			_bq76->enable_fets();
-			// TODO: publish BOOTED
-		}
+	// Button held
+	if (check_button_held()) {
+		PX4_INFO("Button was held, enabling FETs");
+		_booted = true;
+		_booted_button_held = true;
+		_bq76->enable_fets();
+	}
 
-		// Check if PACK voltage is high
-		float pack_voltage = _bq76->pack_voltage();
-		if (pack_voltage >= _param_parallel_voltage.get()) {
-			PX4_INFO("PACK voltage (%fv) above threshold (%fv), enabling FETs", double(pack_voltage), double(_param_parallel_voltage.get()));
-			_booted = true;
-			_bq76->enable_fets();
-			// TODO: publish BOOTED
-			return;
-		}
+	// Check if PACK voltage is high
+	float pack_voltage = _bq76->pack_voltage();
+	if (pack_voltage >= _param_parallel_voltage.get()) {
+		PX4_INFO("PACK voltage (%fv) above threshold (%fv), enabling FETs", double(pack_voltage), double(_param_parallel_voltage.get()));
+		_booted = true;
+		_bq76->enable_fets();
+		return;
+	}
 
-		// If button is being held update boot progress
-		if (!px4_arch_gpioread(GPIO_N_BTN)) {
-			hrt_abstime now = hrt_absolute_time();
-			hrt_abstime duration = now - _pressed_start_time;
-			uint8_t progress = (100 * duration) / BUTTON_HOLD_TIME;
-			if (progress > 100) {
-				progress = 100;
-			}
-			app_state_s state = {};
-			state.state = app_state_s::BOOTING;
-			state.progress = progress;
-			_app_state_pub.publish(state);
+	hrt_abstime now = hrt_absolute_time();
+	// If button is being held update boot progress
+	if (!px4_arch_gpioread(GPIO_N_BTN)) {
+		hrt_abstime duration = now - _pressed_start_time;
+		uint8_t progress = (100 * duration) / BUTTON_HOLD_TIME;
+		if (progress > 100) {
+			progress = 100;
 		}
+		app_state_s state = {};
+		state.state = app_state_s::BOOTING;
+		state.progress = progress;
+		_app_state_pub.publish(state);
+	} else {
+		// Button released, show battery info and power off
+		app_state_s state = {};
+		state.state = app_state_s::SHOW_INFO;
+		_app_state_pub.publish(state);
+	}
 
-		// Check if 5 seconds has elapsed, power off
-		if (hrt_absolute_time() > 5_s) {
-			PX4_INFO("Button not held, shutting down");
-			app_state_s state = {};
-			state.state = app_state_s::SHUTDOWN;
-			_app_state_pub.publish(state);
-			_shutdown = true;
-		}
+	// Check if time since last press has elapsed 3 seconds
+	hrt_abstime elapsed = now - _pressed_start_time;
+	if (elapsed > BUTTON_SHUTDOWN_TIME) {
+		PX4_INFO("Button not held, shutting down");
+		app_state_s state = {};
+		state.state = app_state_s::SHUTDOWN;
+		_app_state_pub.publish(state);
+		_shutdown = true;
+	}
+}
 
-	} else if (_booted && _booted_button_held) {
+void Bms::handle_button_running()
+{
+	if (_booted_button_held) {
 		// We must make sure the button is released before we start monitoring for shutdown / screen toggle
 		if (px4_arch_gpioread(GPIO_N_BTN)) {
 			PX4_INFO("Button released");
 			_booted_button_held = false;
 		}
-
-		// Normal running operation
-		app_state_s state = {};
-		state.state = app_state_s::RUNNING;
-		_app_state_pub.publish(state);
 
 	} else {
 		if (check_button_held()) {
@@ -264,14 +271,14 @@ void Bms::handle_button_behaviors()
 			_shutdown = true;
 			// We disable FETs here as well so that the user sees something happen
 			_bq76->disable_fets();
-
-		} else {
-			// Normal running operation
-			app_state_s state = {};
-			state.state = app_state_s::RUNNING;
-			_app_state_pub.publish(state);
+			return;
 		}
 	}
+
+	// Normal running operation
+	app_state_s state = {};
+	state.state = app_state_s::RUNNING;
+	_app_state_pub.publish(state);
 }
 
 bool Bms::check_button_held()
