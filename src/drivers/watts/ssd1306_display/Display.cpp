@@ -60,9 +60,7 @@ void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
 void booting_loading_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	// Splash screen
-	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
-	int16_t y_offset = (display->getHeight()  / 2)  - (Watts_Logo_Height / 2);
-	display->drawXbm(x + x_offset, y + y_offset - 5, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
+	display->drawXbm(x, y, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
 
 	// Loading progress bar
 	uint16_t progress_bar_width = 80;
@@ -80,9 +78,7 @@ void booting_data_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t 
 
 void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	int16_t x_offset = (display->getWidth()  / 2)  - (Watts_Logo_Width / 2);
-	int16_t y_offset = (display->getHeight()  / 2)  - (Watts_Logo_Height / 2);
-	display->drawXbm(x + x_offset, y + y_offset - 5, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
+	display->drawXbm(x, y, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
 }
 
 void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
@@ -158,28 +154,60 @@ void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 
 void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	display->setFont(ArialMT_Plain_10);
-	display->drawStringMaxWidth(0 + x, y, 128, "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore.");
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
 }
 
 void running_page_5(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	int16_t x_offset = (display->getWidth()  / 2)  - (Terran_Logo_Width / 2);
-	int16_t y_offset = (display->getHeight()  / 2)  - (Terran_Logo_Height / 2) - 10;
+	// Battery
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
+	display->drawXbm(x, y, Watts_BatteryBars5_Width, Watts_BatteryBars5_Height, Watts_BatteryBars5_bits);
 
-	display->drawXbm(x + x_offset, y_offset, Terran_Logo_Width, Terran_Logo_Height, Terran_Logo_Bits);
+	// Text
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->setFont(ArialMT_Plain_16);
+
+	char text_temp[64] = {};
+	snprintf(text_temp, sizeof(text_temp), "%.1fV", double(_battery_status.voltage));
+	display->drawString(x, y + 26, text_temp);
+
+	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_charge));
+	display->drawString(x + 85, y + 26, text_temp);
+}
+
+void running_page_6(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
+	display->drawXbm(x, y, Watts_BatteryBars4_Width, Watts_BatteryBars4_Height, Watts_BatteryBars4_bits);
+}
+
+void running_page_7(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
+	display->drawXbm(x, y, Watts_BatteryBars3_Width, Watts_BatteryBars3_Height, Watts_BatteryBars3_bits);
+}
+
+void running_page_8(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
+	display->drawXbm(x, y, Watts_BatteryBars2_Width, Watts_BatteryBars2_Height, Watts_BatteryBars2_bits);
+}
+
+void running_page_9(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
+	display->drawXbm(x, y, Watts_BatteryBars1_Width, Watts_BatteryBars1_Height, Watts_BatteryBars1_bits);
 }
 
 // Page frames
 int booting_page_count = 2;
 FrameCallback booting_pages[] = { booting_loading_page, booting_data_page };
 
-// int running_page_count = 5;
-// FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3, running_page_4, running_page_5 };
+int running_page_count = 9;
+FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3, running_page_4, running_page_5, running_page_6, running_page_7, running_page_8, running_page_9};
 
-int running_page_count = 3;
-FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3 };
+// int running_page_count = 3;
+// FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3 };
 
 // Overlays are statically drawn on top of a frame eg. a clock
 OverlayCallback overlays[] = { msOverlay };
