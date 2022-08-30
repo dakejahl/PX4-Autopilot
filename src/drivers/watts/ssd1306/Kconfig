@@ -1,5 +1,0 @@
-menuconfig DRIVERS_WATTS_SSD1306
-	bool "ssd1306"
-	default n
-	---help---
-		Enable support for ssd1306
