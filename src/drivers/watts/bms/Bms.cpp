@@ -160,28 +160,8 @@ void Bms::collect_and_publish()
 
 	_bq76->cell_voltages(battery_status.cell_voltages, 12);
 
-	// battery_status.state_of_charge = _bq34->read_state_of_charge();
+	battery_status.state_of_charge = _bq34->read_state_of_charge();
 	battery_status.capacity_remaining = _bq34->read_remaining_capacity() * _param_capacity_scalar.get();
-
-	static hrt_abstime _counter = 0;
-	if (battery_status.timestamp - _counter < 2000000) {
-		battery_status.state_of_charge = 100;
-
-	} else if (battery_status.timestamp - _counter < 4000000) {
-		battery_status.state_of_charge = 80;
-
-	} else if (battery_status.timestamp - _counter < 6000000) {
-		battery_status.state_of_charge = 60;
-
-	} else if (battery_status.timestamp - _counter < 8000000) {
-		battery_status.state_of_charge = 30;
-
-	} else if (battery_status.timestamp - _counter < 10000000) {
-		battery_status.state_of_charge = 10;
-
-	} else {
-		_counter = battery_status.timestamp;
-	}
 
 	battery_status.design_capacity = _bq34->read_design_capacity() * _param_capacity_scalar.get();
 	battery_status.actual_capacity = _bq34->read_full_charge_capacity() * _param_capacity_scalar.get();
