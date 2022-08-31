@@ -49,14 +49,6 @@
 app_state_s _state = {};
 watts_battery_status_s _battery_status;
 
-// TODO: do we want an overlay?
-void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
-{
-	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	display->setFont(ArialMT_Plain_10);
-	display->drawString(128, 0, "420");
-}
-
 void booting_loading_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	// Splash screen
@@ -70,58 +62,77 @@ void booting_loading_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16
 	display->drawProgressBar(x_loading, y_loading, progress_bar_width, progress_bar_height, _state.progress);
 }
 
-void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
-void booting_data_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	running_page_2(display, state, x, y);
-}
-
 void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	display->drawXbm(x, y, Watts_Logo_Width, Watts_Logo_Height, Watts_Logo_Bits);
+	// Bump the battery image up slightly so that it doesn't cover the indicators
+	y = y - 3;
+
+	// Battery
+	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
+
+	uint32_t remaining = _battery_status.state_of_charge;
+	if (remaining > 95) {
+		display->drawXbm(x, y, Watts_BatteryBars5_Width, Watts_BatteryBars5_Height, Watts_BatteryBars5_bits);
+
+	} else if (remaining > 75) {
+		display->drawXbm(x, y, Watts_BatteryBars4_Width, Watts_BatteryBars4_Height, Watts_BatteryBars4_bits);
+
+	} else if (remaining > 55) {
+		display->drawXbm(x, y, Watts_BatteryBars3_Width, Watts_BatteryBars3_Height, Watts_BatteryBars3_bits);
+
+	} else if (remaining > 25) {
+		display->drawXbm(x, y, Watts_BatteryBars2_Width, Watts_BatteryBars2_Height, Watts_BatteryBars2_bits);
+
+	} else {
+		display->drawXbm(x, y, Watts_BatteryBars1_Width, Watts_BatteryBars1_Height, Watts_BatteryBars1_bits);
+	}
+
+	// Text
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->setFont(ArialMT_Plain_16);
+
+	char text_temp[64] = {};
+	snprintf(text_temp, sizeof(text_temp), "%.1fV", double(_battery_status.voltage));
+	display->drawString(x, y + 23, text_temp);
+
+	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_charge));
+	display->drawString(x + 86, y + 23, text_temp);
 }
 
 void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
-	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	display->setFont(ArialMT_Plain_10);
+	display->setFont(ArialMT_Plain_16);
 
-	static constexpr uint16_t ArialMT_Plain_10_Height = 11; // ArialMT_Plain_10
-	// static constexpr uint16_t ArialMT_Plain_16_Height = 20; // ArialMT_Plain_16
-	// static constexpr uint16_t ArialMT_Plain_24_Height = 34; // ArialMT_Plain_24
-
-	uint16_t vertical_offset = 0; // font height 20 for ArialMT_Plain_16
-	uint16_t horizontal_offset = 76; // offset for data values display
+	uint16_t vertical_offset = 0;
 	char text_temp[64] = {};
 
-	snprintf(text_temp, sizeof(text_temp), "Voltage:");
-	display->drawString(x, y + vertical_offset, text_temp);
-	snprintf(text_temp, sizeof(text_temp), "%.2f V", double(_battery_status.voltage));
-	display->drawString(x + horizontal_offset, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
+	static constexpr uint16_t ArialMT_Plain_16_Height = 18; // ArialMT_Plain_16
 
-	snprintf(text_temp, sizeof(text_temp), "Current:");
+	// State of health
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	snprintf(text_temp, sizeof(text_temp), "Health:");
 	display->drawString(x, y + vertical_offset, text_temp);
-	snprintf(text_temp, sizeof(text_temp), "%.2f A", double(_battery_status.current));
-	display->drawString(x + horizontal_offset, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_health));
+	display->drawString(x + 128, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_16_Height;
 
-	snprintf(text_temp, sizeof(text_temp), "Capacity:");
+	// Temperature
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	snprintf(text_temp, sizeof(text_temp), "Temp:");
 	display->drawString(x, y + vertical_offset, text_temp);
-	snprintf(text_temp, sizeof(text_temp), "%u mAh", int(_battery_status.capacity_remaining));
-	display->drawString(x + horizontal_offset, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	snprintf(text_temp, sizeof(text_temp), "%uF", int(_battery_status.temperature_pcb * 1.8f + 32));
+	display->drawString(x + 128, y + vertical_offset, text_temp);
+	vertical_offset += ArialMT_Plain_16_Height;
 
-	snprintf(text_temp, sizeof(text_temp), "Remaining:");
+	// Cyle Count
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	snprintf(text_temp, sizeof(text_temp), "Cycles:");
 	display->drawString(x, y + vertical_offset, text_temp);
-	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_charge));
-	display->drawString(x + horizontal_offset, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
-
-	snprintf(text_temp, sizeof(text_temp), "Temperature:");
-	display->drawString(x, y + vertical_offset, text_temp);
-	snprintf(text_temp, sizeof(text_temp), "%u C", int(_battery_status.temperature_pcb));
-	display->drawString(x + horizontal_offset, y + vertical_offset, text_temp);
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	snprintf(text_temp, sizeof(text_temp), "%u", int(_battery_status.cycle_count));
+	display->drawString(x + 128, y + vertical_offset, text_temp);
 }
 
 void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
@@ -130,10 +141,8 @@ void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setFont(ArialMT_Plain_10);
 
 	static constexpr uint16_t ArialMT_Plain_10_Height = 13; // ArialMT_Plain_10
-	// static constexpr uint16_t ArialMT_Plain_16_Height = 20; // ArialMT_Plain_16
-	// static constexpr uint16_t ArialMT_Plain_24_Height = 34; // ArialMT_Plain_24
 
-	uint16_t vertical_offset = 0; // font height 20 for ArialMT_Plain_16
+	uint16_t vertical_offset = 2;
 	char text_temp[64] = {};
 
 	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[0], (double)_battery_status.cell_voltages[1], (double)_battery_status.cell_voltages[2]);
@@ -152,70 +161,15 @@ void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->drawString(x, y + vertical_offset, text_temp);
 }
 
-void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
-}
-
-void running_page_5(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	// Battery
-	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
-	display->drawXbm(x, y, Watts_BatteryBars5_Width, Watts_BatteryBars5_Height, Watts_BatteryBars5_bits);
-
-	// Text
-	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	display->setFont(ArialMT_Plain_16);
-
-	char text_temp[64] = {};
-	snprintf(text_temp, sizeof(text_temp), "%.1fV", double(_battery_status.voltage));
-	display->drawString(x, y + 26, text_temp);
-
-	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_charge));
-	display->drawString(x + 85, y + 26, text_temp);
-}
-
-void running_page_6(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
-	display->drawXbm(x, y, Watts_BatteryBars4_Width, Watts_BatteryBars4_Height, Watts_BatteryBars4_bits);
-}
-
-void running_page_7(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
-	display->drawXbm(x, y, Watts_BatteryBars3_Width, Watts_BatteryBars3_Height, Watts_BatteryBars3_bits);
-}
-
-void running_page_8(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
-	display->drawXbm(x, y, Watts_BatteryBars2_Width, Watts_BatteryBars2_Height, Watts_BatteryBars2_bits);
-}
-
-void running_page_9(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{
-	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
-	display->drawXbm(x, y, Watts_BatteryBars1_Width, Watts_BatteryBars1_Height, Watts_BatteryBars1_bits);
-}
-
 // Page frames
 int booting_page_count = 2;
-FrameCallback booting_pages[] = { booting_loading_page, booting_data_page };
+FrameCallback booting_pages[] = { booting_loading_page, running_page_1 };
 
-int running_page_count = 9;
-FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3, running_page_4, running_page_5, running_page_6, running_page_7, running_page_8, running_page_9};
-
-// int running_page_count = 3;
-// FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3 };
-
-// Overlays are statically drawn on top of a frame eg. a clock
-OverlayCallback overlays[] = { msOverlay };
-int overlaysCount = 1;
+int running_page_count = 3;
+FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3 };
 
 //////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////
-
 
 Display::Display() :
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::I2C2),
