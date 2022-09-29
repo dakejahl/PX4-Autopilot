@@ -91,9 +91,15 @@ void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_16);
 
+	static constexpr uint16_t ArialMT_Plain_16_Height = 18; // ArialMT_Plain_16
+
 	char text_temp[64] = {};
+
+	snprintf(text_temp, sizeof(text_temp), "%.1fA", double(_battery_status.current));
+	display->drawString(x, y + ArialMT_Plain_16_Height, text_temp);
+
 	snprintf(text_temp, sizeof(text_temp), "%.1fV", double(_battery_status.voltage));
-	display->drawString(x, y + 23, text_temp);
+	display->drawString(x, y + (ArialMT_Plain_16_Height * 2), text_temp);
 
 	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_charge));
 	display->drawString(x + 86, y + 23, text_temp);
