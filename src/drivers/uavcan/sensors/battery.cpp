@@ -96,10 +96,9 @@ UavcanBatteryBridge::battery_continuous_sub_cb(const uavcan::ReceivedDataStructu
 	_battery_status[instance].voltage_filtered_v = msg.voltage;
 	_battery_status[instance].current_a = msg.current;
 	_battery_status[instance].current_filtered_a = msg.current;
-	_battery_status[instance].capacity = msg.full_charge_capacity;
-	_battery_status[instance].remaining = (float)msg.capacity_remaining / (float)msg.full_charge_capacity;
-
-	_battery_status[instance].discharged_mah = msg.full_charge_capacity - msg.capacity_remaining;
+	// _battery_status[instance].capacity = msg.full_charge_capacity;
+	_battery_status[instance].remaining = msg.state_of_charge;
+	_battery_status[instance].discharged_mah = msg.capacity_consumed;
 	_battery_status[instance].custom_faults = msg.status_flags;
 
 
@@ -139,6 +138,7 @@ UavcanBatteryBridge::battery_periodic_sub_cb(const uavcan::ReceivedDataStructure
 	_battery_status[instance].cycle_count = msg.cycle_count;
 	_battery_status[instance].state_of_health = msg.state_of_health_pct;
 	_battery_status[instance].cell_count = msg.cells_in_series;
+	_battery_status[instance].capacity = msg.full_charge_capacity;
 
 	// memcpy(_battery_status[instance].serial_number, msg.serial_number , 2); // We only use the first 2 bytes
 	// name
