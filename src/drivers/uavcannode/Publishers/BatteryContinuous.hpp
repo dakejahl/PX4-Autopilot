@@ -85,9 +85,7 @@ public:
 				battery.temperature_other = status.temperature_other; // float16
 				battery.current = status.current; // float16
 				battery.voltage = status.voltage; // float16
-				battery.capacity_consumed = status.actual_capacity - status.capacity_remaining; // uint32
-				battery.capacity_remaining = status.capacity_remaining; // uint32
-				battery.full_charge_capacity = status.actual_capacity; // uint32
+				battery.capacity_consumed = status.actual_capacity - status.capacity_remaining;
 				battery.status_flags = status.status_flags; // uORB <--> DroneCAN <--> Mavlink BatteryV2
 
 				// if (battery.current > 0.0f) {
