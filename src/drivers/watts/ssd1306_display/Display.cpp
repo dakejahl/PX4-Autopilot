@@ -95,7 +95,7 @@ void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 
 	char text_temp[64] = {};
 
-	snprintf(text_temp, sizeof(text_temp), "%.1fA", double(_battery_status.current));
+	snprintf(text_temp, sizeof(text_temp), "%.1fAA", double(_battery_status.current));
 	display->drawString(x, y + ArialMT_Plain_16_Height, text_temp);
 
 	snprintf(text_temp, sizeof(text_temp), "%.1fV", double(_battery_status.voltage));
