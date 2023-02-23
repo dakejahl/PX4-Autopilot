@@ -78,13 +78,16 @@ public:
 			watts_battery_status_s status;
 			if (uORB::SubscriptionCallbackWorkItem::update(&status)) {
 
-				// These should be 1:1
 				ardupilot::equipment::power::BatteryContinuous battery = {};
-				battery.temperature_cells = status.temperature_cells; // float16
-				battery.temperature_pcb = status.temperature_pcb; // float16
-				battery.temperature_other = status.temperature_other; // float16
-				battery.current = status.current; // float16
-				battery.voltage = status.voltage; // float16
+				battery.temperature_cells = status.temperature_cells;
+				battery.temperature_pcb = status.temperature_pcb;
+				battery.temperature_other = status.temperature_other;
+				battery.current = status.current;
+				battery.voltage = status.voltage;
+
+				battery.state_of_charge = status.state_of_charge;
+				battery.slot_id = 69; // TODO: how should we use this?
+
 				battery.capacity_consumed = status.actual_capacity - status.capacity_remaining;
 				battery.status_flags = status.status_flags; // uORB <--> DroneCAN <--> Mavlink BatteryV2
 
@@ -96,7 +99,9 @@ public:
 				// }
 
 				uavcan::Publisher<ardupilot::equipment::power::BatteryContinuous>::broadcast(battery);
+
 				_last_broadcast_time = now;
+
 				// ensure callback is registered
 				uORB::SubscriptionCallbackWorkItem::registerCallback();
 			}

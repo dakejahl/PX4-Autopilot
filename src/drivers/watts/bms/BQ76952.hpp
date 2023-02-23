@@ -104,25 +104,6 @@ using namespace time_literals;
 // Register Bitmasks
 #define DA_CONFIG_CENTIVOLT_CENTIAMP 0b00000110
 
-static constexpr uint32_t STATUS_FLAG_READY_TO_USE                             = 1;
-static constexpr uint32_t STATUS_FLAG_CHARGING                                 = 2;
-static constexpr uint32_t STATUS_FLAG_CELL_BALANCING                           = 4;
-static constexpr uint32_t STATUS_FLAG_FAULT_CELL_IMBALANCE                     = 8;
-static constexpr uint32_t STATUS_FLAG_AUTO_DISCHARGING                         = 16;
-static constexpr uint32_t STATUS_FLAG_REQUIRES_SERVICE                         = 32;
-static constexpr uint32_t STATUS_FLAG_BAD_BATTERY                              = 64;
-static constexpr uint32_t STATUS_FLAG_PROTECTIONS_ENABLED                      = 128;
-static constexpr uint32_t STATUS_FLAG_FAULT_PROTECTION_SYSTEM                  = 256;
-static constexpr uint32_t STATUS_FLAG_FAULT_OVER_VOLT                          = 512;
-static constexpr uint32_t STATUS_FLAG_FAULT_UNDER_VOLT                         = 1024;
-static constexpr uint32_t STATUS_FLAG_FAULT_OVER_TEMP                          = 2048;
-static constexpr uint32_t STATUS_FLAG_FAULT_UNDER_TEMP                         = 4096;
-static constexpr uint32_t STATUS_FLAG_FAULT_OVER_CURRENT                       = 8192;
-static constexpr uint32_t STATUS_FLAG_FAULT_SHORT_CIRCUIT                      = 16384;
-static constexpr uint32_t STATUS_FLAG_FAULT_INCOMPATIBLE_VOLTAGE               = 32768;
-static constexpr uint32_t STATUS_FLAG_FAULT_INCOMPATIBLE_FIRMWARE              = 65536;
-static constexpr uint32_t STATUS_FLAG_FAULT_INCOMPATIBLE_CELLS_CONFIGURATION   = 131072;
-
 template <typename T>
 struct Register {
 	const char* name;

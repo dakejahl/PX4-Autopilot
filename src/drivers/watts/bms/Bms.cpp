@@ -337,60 +337,60 @@ int Bms::flags()
 	uint32_t flags = _bq76->status_flags();
 	PX4_INFO("flags: 0x%08lx", flags);
 
-	if (flags & STATUS_FLAG_READY_TO_USE) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_READY_TO_USE) {
 		PX4_INFO("Ready to use");
 	} else {
 		PX4_INFO("Not ready to use");
 	}
 
-	if (flags & STATUS_FLAG_CHARGING) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_CHARGING) {
 		PX4_INFO("Charging");
 	} else {
 		PX4_INFO("Discharging");
 	}
 
-	if (flags & STATUS_FLAG_CELL_BALANCING) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_CELL_BALANCING) {
 		PX4_INFO("Balancing");
 	}
 
-	if (flags & STATUS_FLAG_AUTO_DISCHARGING) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_AUTO_DISCHARGING) {
 		PX4_INFO("Auto discharging");
 	}
 
-	if (flags & STATUS_FLAG_REQUIRES_SERVICE) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_REQUIRES_SERVICE) {
 		PX4_INFO("Requires service");
 	}
 
-	if (flags & STATUS_FLAG_BAD_BATTERY) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_BAD_BATTERY) {
 		PX4_INFO("Bad battery");
 	}
 
-	if (flags & STATUS_FLAG_PROTECTIONS_ENABLED) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_PROTECTIONS_ENABLED) {
 		PX4_INFO("Protections enabled");
 	} else {
 		PX4_INFO("Protections disabled");
 	}
 
 	// Faults
-	if (flags & STATUS_FLAG_FAULT_PROTECTION_SYSTEM) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM) {
 		PX4_INFO("--- SAFETY FAULT ---");
 	}
-	if (flags & STATUS_FLAG_FAULT_OVER_VOLT) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_OVER_VOLT) {
 		PX4_INFO("Over volt");
 	}
-	if (flags & STATUS_FLAG_FAULT_UNDER_VOLT) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_UNDER_VOLT) {
 		PX4_INFO("Under volt");
 	}
-	if (flags & STATUS_FLAG_FAULT_OVER_TEMP) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_OVER_TEMP) {
 		PX4_INFO("Over temp");
 	}
-	if (flags & STATUS_FLAG_FAULT_UNDER_TEMP) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_UNDER_TEMP) {
 		PX4_INFO("Under temp");
 	}
-	if (flags & STATUS_FLAG_FAULT_OVER_CURRENT) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_OVER_CURRENT) {
 		PX4_INFO("Over current");
 	}
-	if (flags & STATUS_FLAG_FAULT_SHORT_CIRCUIT) {
+	if (flags & watts_battery_status_s::STATUS_FLAG_FAULT_SHORT_CIRCUIT) {
 		PX4_INFO("Short circuit");
 	}
 

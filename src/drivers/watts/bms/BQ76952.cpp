@@ -37,6 +37,7 @@
 // balancing.
 
 #include "BQ76952.hpp"
+#include <uORB/topics/watts_battery_status.h>
 
 BQ76952::BQ76952() :
 	I2C(DRV_DEVTYPE_BQ76952, "BQ76952", 1, 0x08, 400000),
@@ -282,32 +283,32 @@ uint32_t BQ76952::status_flags()
 		ret |= direct_command(CMD_SAFETY_STATUS_A, &safety_status_a, sizeof(safety_status_a));
 
 		if (ret != PX4_OK) {
-			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_REQUIRES_SERVICE;
 			return status_flags;
 		}
 
 		uint8_t under_volt_mask = (1 << 2);
 		if (safety_status_a & under_volt_mask) {
-			status_flags |= STATUS_FLAG_FAULT_UNDER_VOLT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_UNDER_VOLT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t over_volt_mask = (1 << 3);
 		if (safety_status_a & over_volt_mask) {
-			status_flags |= STATUS_FLAG_FAULT_OVER_VOLT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_OVER_VOLT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t over_current_mask = (1 << 4) | (1 << 5) | (1 << 6);
 		if (safety_status_a & over_current_mask) {
-			status_flags |= STATUS_FLAG_FAULT_OVER_CURRENT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_OVER_CURRENT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t short_circuit_mask = (1 << 7);
 		if (safety_status_a & short_circuit_mask) {
-			status_flags |= STATUS_FLAG_FAULT_SHORT_CIRCUIT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_SHORT_CIRCUIT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 	}
 
@@ -319,20 +320,20 @@ uint32_t BQ76952::status_flags()
 
 
 		if (ret != PX4_OK) {
-			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_REQUIRES_SERVICE;
 			return status_flags;
 		}
 
 		uint8_t over_temp_mask = (1 << 7) | (1 << 6) | (1 << 5) | (1 << 4);
 		if (safety_status_b & over_temp_mask) {
-			status_flags |= STATUS_FLAG_FAULT_OVER_TEMP;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_OVER_TEMP;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t under_temp_mask = (1 << 2) | (1 << 1) | (1 << 0);
 		if (safety_status_b & under_temp_mask) {
-			status_flags |= STATUS_FLAG_FAULT_UNDER_TEMP;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_UNDER_TEMP;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 	}
 
@@ -343,26 +344,26 @@ uint32_t BQ76952::status_flags()
 		ret |= direct_command(CMD_SAFETY_STATUS_C, &safety_status_c, sizeof(safety_status_c));
 
 		if (ret != PX4_OK) {
-			status_flags |= STATUS_FLAG_REQUIRES_SERVICE;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_REQUIRES_SERVICE;
 			return status_flags;
 		}
 
 		uint8_t over_current_mask = (1 << 7) | (1 << 5);
 		if (safety_status_c & over_current_mask) {
-			status_flags |= STATUS_FLAG_FAULT_OVER_CURRENT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_OVER_CURRENT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t short_circuit_mask = (1 << 6);
 		if (safety_status_c & short_circuit_mask) {
-			status_flags |= STATUS_FLAG_FAULT_SHORT_CIRCUIT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_SHORT_CIRCUIT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 
 		uint8_t over_volt_mask = (1 << 4);
 		if (safety_status_c & over_volt_mask) {
-			status_flags |= STATUS_FLAG_FAULT_OVER_VOLT;
-			status_flags |= STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_OVER_VOLT;
+			status_flags |= watts_battery_status_s::STATUS_FLAG_FAULT_PROTECTION_SYSTEM;
 		}
 	}
 

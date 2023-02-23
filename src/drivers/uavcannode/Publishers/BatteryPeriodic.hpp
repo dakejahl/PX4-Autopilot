@@ -69,7 +69,7 @@ public:
 
 	void BroadcastAnyUpdates() override
 	{
-		static constexpr hrt_abstime BROADCAST_INTERVAL = 500000; // 2hz
+		static constexpr hrt_abstime BROADCAST_INTERVAL = 1000000; // 1hz
 		hrt_abstime now = hrt_absolute_time();
 
 		if (now - _last_broadcast_time > BROADCAST_INTERVAL) {
@@ -79,19 +79,21 @@ public:
 
 				ardupilot::equipment::power::BatteryPeriodic battery = {};
 
-				battery.design_capacity = 16000;
-				battery.cycle_count = 123;
+				battery.name = "WATTS";
+				battery.serial_number = "123456"; // TODO:
+				battery.manufacture_date = "5_6_2022"; // TODO:
+
+				battery.design_capacity = status.design_capacity;
 				battery.cells_in_series = status.cells_in_series;
+				battery.nominal_voltage = 50.4f; // TODO: use a parameter
+
+				battery.full_charge_capacity = status.actual_capacity;
 				battery.cycle_count = status.cycle_count;
 				battery.state_of_health = status.state_of_health;
-				battery.design_capacity = status.design_capacity;
-				battery.full_charge_capacity = status.actual_capacity;
-
-				battery.name = "WATTS";
-				battery.serial_number = "123456";
-				battery.manufacture_date = "5_6_2022";
 
 				uavcan::Publisher<ardupilot::equipment::power::BatteryPeriodic>::broadcast(battery);
+
+				_last_broadcast_time = now;
 
 				// ensure callback is registered
 				uORB::SubscriptionCallbackWorkItem::registerCallback();
