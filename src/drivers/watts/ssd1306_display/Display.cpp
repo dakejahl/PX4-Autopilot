@@ -193,6 +193,10 @@ void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 
 	y_off += FONT_10_HEIGHT;
 
+	// Underline
+	// display->drawLine(x + 18, y + y_off, x + 128 - 18, y + y_off);
+	// y_off += FONT_10_HEIGHT / 4;
+
 	// Software version
 	unsigned fwver = px4_firmware_version();
 	unsigned major = (fwver >> (8 * 3)) & 0xFF;
@@ -211,17 +215,19 @@ void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	board_get_mfguid_formated(uuid, sizeof(uuid)); //STM32 UUID is 12 bytes -- 203337314d435004001d003a
 
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	display->drawString(x, y + y_off, "HW:");
-	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	display->drawStringf(x + 128, y + y_off, buffer, "%.*s", 12, &uuid[12]);
-
-	y_off += FONT_10_HEIGHT;
-
-	// Serial Number
-	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->drawString(x, y + y_off, "SN:");
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	display->drawStringf(x + 128, y + y_off, buffer, "123456"); // TODO: serial from bq34
+	display->drawStringf(x + 128, y + y_off, buffer, "%.*s", 12, uuid);
+	y_off += FONT_10_HEIGHT;
+	display->drawStringf(x + 128, y + y_off, buffer, "%.*s", 12, &uuid[12]);
+
+
+	// We don't need to use both BQ34 SN and STM32 UUID
+	// Serial Number
+	// display->setTextAlignment(TEXT_ALIGN_LEFT);
+	// display->drawString(x, y + y_off, "SN:");
+	// display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	// display->drawStringf(x + 128, y + y_off, buffer, "123456"); // TODO: serial from bq34
 }
 
 // Page frames

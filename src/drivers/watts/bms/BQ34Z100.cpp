@@ -143,6 +143,12 @@ uint16_t BQ34Z100::read_cycle_count()
 	return uint16_t(read_register<uint16_t>(REG_ADDR_CYCLE_COUNT));
 }
 
+uint16_t BQ34Z100::read_serial_number()
+{
+	static constexpr uint8_t REG_ADDR_SERIAL_NUMBER = 0x2E;
+	return uint16_t(read_register<uint16_t>(REG_ADDR_SERIAL_NUMBER));
+}
+
 uint8_t BQ34Z100::read_state_of_health()
 {
 	static constexpr uint8_t REG_ADDR_CYCLE_COUNT = 0x2E;

@@ -55,7 +55,9 @@ public:
     uint32_t read_full_charge_capacity();
     uint32_t read_design_capacity();
     uint16_t read_cycle_count();
+    uint16_t read_serial_number();
     uint8_t read_state_of_health();
+
     uint16_t read_device_type();
     uint16_t read_control_status();
 
