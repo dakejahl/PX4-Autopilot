@@ -4,6 +4,7 @@ float32 temperature_cells       # [C]      : Pack mounted thermistor (preferably
 float32 temperature_pcb         # [C]      : Battery PCB temperature (likely output FET(s) or current sense resistor), NAN: field not provided
 float32 temperature_other       # [C]      : Application dependent, NAN: field not provided
 float32 current                 # [Ampere] : Positive: defined as a discharge current. Negitive: defined as a charging current, NAN: field not provided
+float32 current_filtered        #
 float32 voltage                 # [Volt]
 uint32 capacity_remaining       # [mAh]
 uint8 state_of_charge           # [%]      : 0-100%

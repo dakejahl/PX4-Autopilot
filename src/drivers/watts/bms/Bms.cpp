@@ -38,12 +38,16 @@
 
 #include "Bms.hpp"
 
+static constexpr hrt_abstime SAMPLE_INTERVAL = 50_ms;
+
 Bms::Bms() :
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::I2C1),
 	_cycle_perf(perf_alloc(PC_ELAPSED, "Bms: single-sample"))
 {
 	_battery_status_pub.advertise();
+
+	_current_filter.setParameters(SAMPLE_INTERVAL, 1_s);
 }
 
 Bms::~Bms()
@@ -151,26 +155,28 @@ void Bms::collect_and_publish()
 	watts_battery_status_s battery_status = {};
 	battery_status.timestamp = hrt_absolute_time();
 
-	battery_status.temperature_cells = _bq76->temperature_cells();
-	battery_status.temperature_pcb = _bq76->temperature_fets();
-	battery_status.temperature_other = NAN; // unused
+	battery_status.temperature_cells = 		_bq76->temperature_cells();
+	battery_status.temperature_pcb = 		_bq76->temperature_fets();
+	battery_status.temperature_other = 		NAN; // unused
 
-	battery_status.current = _bq76->current();
-	battery_status.voltage = _bq76->bat_voltage();
+	battery_status.current = 				_bq76->current();
+	battery_status.current_filtered = 		_current_filter.update(battery_status.current);
+
+	battery_status.voltage = 				_bq76->bat_voltage();
 
 	_bq76->cell_voltages(battery_status.cell_voltages, 12);
 
-	battery_status.state_of_charge = _bq34->read_state_of_charge();
-	battery_status.capacity_remaining = _bq34->read_remaining_capacity() * _param_capacity_scalar.get();
+	battery_status.state_of_charge = 		_bq34->read_state_of_charge();
+	battery_status.capacity_remaining = 	_bq34->read_remaining_capacity() * _param_capacity_scalar.get();
 
-	battery_status.design_capacity = _bq34->read_design_capacity() * _param_capacity_scalar.get();
-	battery_status.actual_capacity = _bq34->read_full_charge_capacity() * _param_capacity_scalar.get();
+	battery_status.design_capacity = 		_bq34->read_design_capacity() * _param_capacity_scalar.get();
+	battery_status.actual_capacity = 		_bq34->read_full_charge_capacity() * _param_capacity_scalar.get();
 
-	battery_status.cycle_count = _bq34->read_cycle_count();
-	battery_status.state_of_health = _bq34->read_state_of_health();
-	battery_status.cells_in_series = 12;
+	battery_status.cycle_count = 			_bq34->read_cycle_count();
+	battery_status.state_of_health = 		_bq34->read_state_of_health();
+	battery_status.cells_in_series = 		12;
 
-	battery_status.status_flags = _bq76->status_flags();
+	battery_status.status_flags = 			_bq76->status_flags();
 
 	_battery_status_pub.publish(battery_status);
 }

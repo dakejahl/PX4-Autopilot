@@ -38,7 +38,10 @@
 
 #include "Display.hpp"
 #include "images.h"
+#include <version/version.h>
 
+static constexpr uint16_t FONT_10_HEIGHT = 13; // ArialMT_Plain_10
+static constexpr uint16_t FONT_16_HEIGHT = 18; // ArialMT_Plain_16
 
 //////////////////////////////////////////////////////////
 ///////////////////// FIX THIS ///////////////////////////
@@ -62,12 +65,13 @@ void booting_loading_page(OLEDDisplay *display, OLEDDisplayUiState* state, int16
 	display->drawProgressBar(x_loading, y_loading, progress_bar_width, progress_bar_height, _state.progress);
 }
 
+// Main page -- % remaining, voltage, current
 void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	// Bump the battery image up slightly so that it doesn't cover the indicators
 	y = y - 3;
 
-	// Battery
+	// Battery Icon
 	display->drawXbm(x, y, Watts_BatteryBorder_Width, Watts_BatteryBorder_Height, Watts_BatteryBorder_bits);
 
 	uint32_t remaining = _battery_status.state_of_charge;
@@ -91,28 +95,32 @@ void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_16);
 
-	static constexpr uint16_t ArialMT_Plain_16_Height = 18; // ArialMT_Plain_16
+	uint16_t y_off = FONT_16_HEIGHT;
 
-	char text_temp[64] = {};
+	char buffer[64] = {};
 
-	snprintf(text_temp, sizeof(text_temp), "%.1fAX", double(_battery_status.current));
-	display->drawString(x, y + ArialMT_Plain_16_Height, text_temp);
+	// Current
+	float current = (int(_battery_status.current_filtered * 10))/10; // Fixes negative 0
+	display->drawStringf(x, y + y_off, buffer, "%.1fA", double(current));
 
-	snprintf(text_temp, sizeof(text_temp), "%.1fV", double(_battery_status.voltage));
-	display->drawString(x, y + (ArialMT_Plain_16_Height * 2), text_temp);
+	// Next line
+	y_off += FONT_16_HEIGHT;
 
-	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_charge));
-	display->drawString(x + 86, y + 23, text_temp);
+	// Voltage
+	display->drawStringf(x, y + y_off, buffer, "%.1fV", double(_battery_status.voltage));
+
+	// Percent remaining
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	display->drawStringf(x + 128 - 5, y + 25, buffer, "%u%%", int(_battery_status.state_of_charge));
 }
 
+// Battery health page
 void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	display->setFont(ArialMT_Plain_16);
 
 	uint16_t vertical_offset = 0;
 	char text_temp[64] = {};
-
-	static constexpr uint16_t ArialMT_Plain_16_Height = 18; // ArialMT_Plain_16
 
 	// State of health
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -121,7 +129,7 @@ void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
 	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_health));
 	display->drawString(x + 128, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_16_Height;
+	vertical_offset += FONT_16_HEIGHT;
 
 	// Temperature
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -130,7 +138,7 @@ void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
 	snprintf(text_temp, sizeof(text_temp), "%uF", int(_battery_status.temperature_pcb * 1.8f + 32));
 	display->drawString(x + 128, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_16_Height;
+	vertical_offset += FONT_16_HEIGHT;
 
 	// Cyle Count
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -141,38 +149,104 @@ void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->drawString(x + 128, y + vertical_offset, text_temp);
 }
 
+// Cell voltages page
 void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
 {
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_10);
 
-	static constexpr uint16_t ArialMT_Plain_10_Height = 13; // ArialMT_Plain_10
 
 	uint16_t vertical_offset = 2;
 	char text_temp[64] = {};
 
 	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[0], (double)_battery_status.cell_voltages[1], (double)_battery_status.cell_voltages[2]);
 	display->drawString(x, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
+	vertical_offset += FONT_10_HEIGHT;
 
 	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[3], (double)_battery_status.cell_voltages[4], (double)_battery_status.cell_voltages[5]);
 	display->drawString(x, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
+	vertical_offset += FONT_10_HEIGHT;
 
 	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[6], (double)_battery_status.cell_voltages[7], (double)_battery_status.cell_voltages[8]);
 	display->drawString(x, y + vertical_offset, text_temp);
-	vertical_offset += ArialMT_Plain_10_Height;
+	vertical_offset += FONT_10_HEIGHT;
 
 	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[9], (double)_battery_status.cell_voltages[10], (double)_battery_status.cell_voltages[11]);
 	display->drawString(x, y + vertical_offset, text_temp);
 }
 
-// Page frames
-int booting_page_count = 2;
-FrameCallback booting_pages[] = { booting_loading_page, running_page_1 };
+// Version information
+void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{
+	char buffer[64] = {};
 
-int running_page_count = 3;
-FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3 };
+	// display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->setFont(ArialMT_Plain_10);
+
+	uint16_t y_off = 2;
+
+
+	// nsh> ver all
+	// HW arch: PX4_FMU_V5X
+	// HW type: V5X02
+	// HW version: 0x00000000
+	// HW revision: 0x00000002
+	// FW git-hash: 1c8ab2a0d7db2d14a6f320ebd8766b5ffaea28fa
+	// FW version: Release 1.13.3 (17630207)
+	// OS: NuttX
+	// OS version: Release 11.0.0 (184549631)
+	// OS git-hash: 4a1dd8680cd29f51fb0fe66dcfbf6f69bec747cf
+	// Build datetime: Mar 14 2023 01:45:46
+	// Build uri: localhost
+	// Build variant: default
+	// Toolchain: GNU GCC, 9.3.1 20200408 (release)
+	// PX4GUID: 000200000000203335375942500f001f0035
+	// MCU: STM32F76xxx, rev. Z
+
+	// Page title
+	display->setTextAlignment(TEXT_ALIGN_CENTER);
+	display->drawString(x + 64, y + y_off, "Version Information");
+	y_off += FONT_10_HEIGHT;
+
+	// Software version
+	unsigned fwver = px4_firmware_version();
+	unsigned major = (fwver >> (8 * 3)) & 0xFF;
+	unsigned minor = (fwver >> (8 * 2)) & 0xFF;
+	unsigned patch = (fwver >> (8 * 1)) & 0xFF;
+
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->drawString(x, y + y_off, "SW:");
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	display->drawStringf(x + 128, y + y_off, buffer, "%u.%u.%u", major, minor, patch);
+
+	// Next line
+	y_off += FONT_10_HEIGHT;
+
+	// Hardware version
+	char uuid[25]; // 2 characters per hex byte + null terminator
+	board_get_mfguid_formated(uuid, sizeof(uuid)); //STM32 UUID is 12 bytes -- 203337314d435004001d003a
+
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->drawString(x, y + y_off, "HW:");
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	display->drawStringf(x + 128, y + y_off, buffer, "%.*s", 12, &uuid[12]);
+
+	// Next line
+	y_off += FONT_10_HEIGHT;
+
+	// Serial Number
+	display->setTextAlignment(TEXT_ALIGN_LEFT);
+	display->drawString(x, y + y_off, "SN:");
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+	display->drawStringf(x + 128, y + y_off, buffer, "123456"); // TODO: serial from bq34
+}
+
+// Page frames
+FrameCallback booting_pages[] = { booting_loading_page, running_page_1 };
+int booting_page_count = sizeof(booting_pages)/sizeof(booting_pages[0]);
+
+FrameCallback running_pages[] = { running_page_1, running_page_2, running_page_3, running_page_4 };
+int running_page_count = sizeof(running_pages)/sizeof(running_pages[0]);
 
 //////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////

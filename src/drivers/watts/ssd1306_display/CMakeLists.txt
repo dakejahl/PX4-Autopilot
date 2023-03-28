@@ -41,4 +41,5 @@ px4_add_module(
 		esp8266-oled-ssd1306/src/OLEDDisplay.cpp
 		esp8266-oled-ssd1306/src/OLEDDisplayUi.cpp
 	DEPENDS
+		version
 	)

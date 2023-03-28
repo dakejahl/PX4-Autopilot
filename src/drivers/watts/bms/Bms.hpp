@@ -35,6 +35,7 @@
 
 #include <drivers/drv_hrt.h>
 #include <lib/perf/perf_counter.h>
+#include <lib/mathlib/math/filter/AlphaFilter.hpp>
 
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/module_params.h>
@@ -99,8 +100,6 @@ private:
 	int enable_protections();
 
 private:
-	static const hrt_abstime SAMPLE_INTERVAL{50_ms};
-
 	BQ34Z100* _bq34{nullptr};
 	BQ76952* _bq76{nullptr};
 
@@ -111,6 +110,8 @@ private:
 	uORB::Publication<watts_battery_status_s> _battery_status_pub{ORB_ID(watts_battery_status)};
 
 	perf_counter_t _cycle_perf{};
+
+	AlphaFilter<float> _current_filter{0};
 
 	// State variables
 	hrt_abstime _pressed_start_time{0};
