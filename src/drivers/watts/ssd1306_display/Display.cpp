@@ -31,11 +31,6 @@
  *
  ****************************************************************************/
 
-// The Texas Instruments BQ76952 is a highly integrated, high accuracy battery monitor and protector for 3-series
-// to 16-series li-ion, li-polymer, and LiFePO4 battery packs. The device includes a high accuracy monitoring
-// system, a highly configurable protection subsystem, and support for autonomous or host controlled cell
-// balancing.
-
 #include "Display.hpp"
 #include "images.h"
 #include <version/version.h>
@@ -43,12 +38,6 @@
 static constexpr uint16_t FONT_10_HEIGHT = 13; // ArialMT_Plain_10
 static constexpr uint16_t FONT_16_HEIGHT = 18; // ArialMT_Plain_16
 
-//////////////////////////////////////////////////////////
-///////////////////// FIX THIS ///////////////////////////
-//
-// But how do we fix it? We need to pass function pointers
-// and that is hard to do with classes... hmmm
-//
 app_state_s _state = {};
 watts_battery_status_s _battery_status;
 
@@ -119,34 +108,30 @@ void running_page_2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 {
 	display->setFont(ArialMT_Plain_16);
 
-	uint16_t vertical_offset = 0;
-	char text_temp[64] = {};
+	uint16_t y_off = 0;
+	char buffer[64] = {};
 
 	// State of health
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	snprintf(text_temp, sizeof(text_temp), "Health:");
-	display->drawString(x, y + vertical_offset, text_temp);
+	display->drawString(x, y + y_off, "Health:");
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	snprintf(text_temp, sizeof(text_temp), "%u%%", int(_battery_status.state_of_health));
-	display->drawString(x + 128, y + vertical_offset, text_temp);
-	vertical_offset += FONT_16_HEIGHT;
+	display->drawStringf(x + 128, y + y_off, buffer, "%u%%", int(_battery_status.state_of_health));
+
+	y_off += FONT_16_HEIGHT;
 
 	// Temperature
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	snprintf(text_temp, sizeof(text_temp), "Temp:");
-	display->drawString(x, y + vertical_offset, text_temp);
+	display->drawString(x, y + y_off, "Temp:");
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	snprintf(text_temp, sizeof(text_temp), "%uF", int(_battery_status.temperature_pcb * 1.8f + 32));
-	display->drawString(x + 128, y + vertical_offset, text_temp);
-	vertical_offset += FONT_16_HEIGHT;
+	display->drawStringf(x + 128, y + y_off, buffer, "%uF", int(_battery_status.temperature_pcb * 1.8f + 32));
+
+	y_off += FONT_16_HEIGHT;
 
 	// Cyle Count
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
-	snprintf(text_temp, sizeof(text_temp), "Cycles:");
-	display->drawString(x, y + vertical_offset, text_temp);
+	display->drawString(x, y + y_off, "Cycles:");
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
-	snprintf(text_temp, sizeof(text_temp), "%u", int(_battery_status.cycle_count));
-	display->drawString(x + 128, y + vertical_offset, text_temp);
+	display->drawStringf(x + 128, y + y_off, buffer, "%u", int(_battery_status.cycle_count));
 }
 
 // Cell voltages page
@@ -155,24 +140,25 @@ void running_page_3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_10);
 
+	float cells[12] = {};
+	memcpy(cells, _battery_status.cell_voltages, sizeof(_battery_status.cell_voltages));
 
-	uint16_t vertical_offset = 2;
-	char text_temp[64] = {};
+	uint16_t y_off = 2;
+	char buffer[64] = {};
 
-	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[0], (double)_battery_status.cell_voltages[1], (double)_battery_status.cell_voltages[2]);
-	display->drawString(x, y + vertical_offset, text_temp);
-	vertical_offset += FONT_10_HEIGHT;
+	display->drawStringf(x, y + y_off, buffer, "%8.2f  %8.2f  %8.2f", (double)cells[0], (double)cells[1], (double)cells[2]);
 
-	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[3], (double)_battery_status.cell_voltages[4], (double)_battery_status.cell_voltages[5]);
-	display->drawString(x, y + vertical_offset, text_temp);
-	vertical_offset += FONT_10_HEIGHT;
+	y_off += FONT_10_HEIGHT;
 
-	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[6], (double)_battery_status.cell_voltages[7], (double)_battery_status.cell_voltages[8]);
-	display->drawString(x, y + vertical_offset, text_temp);
-	vertical_offset += FONT_10_HEIGHT;
+	display->drawStringf(x, y + y_off, buffer, "%8.2f  %8.2f  %8.2f", (double)cells[3], (double)cells[4], (double)cells[5]);
 
-	snprintf(text_temp, sizeof(text_temp), "%8.2f  %8.2f  %8.2f", (double)_battery_status.cell_voltages[9], (double)_battery_status.cell_voltages[10], (double)_battery_status.cell_voltages[11]);
-	display->drawString(x, y + vertical_offset, text_temp);
+	y_off += FONT_10_HEIGHT;
+
+	display->drawStringf(x, y + y_off, buffer, "%8.2f  %8.2f  %8.2f", (double)cells[6], (double)cells[7], (double)cells[8]);
+
+	y_off += FONT_10_HEIGHT;
+
+	display->drawStringf(x, y + y_off, buffer, "%8.2f  %8.2f  %8.2f", (double)cells[9], (double)cells[10], (double)cells[11]);
 }
 
 // Version information
@@ -180,11 +166,9 @@ void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 {
 	char buffer[64] = {};
 
-	// display->setTextAlignment(TEXT_ALIGN_LEFT);
 	display->setFont(ArialMT_Plain_10);
 
 	uint16_t y_off = 2;
-
 
 	// nsh> ver all
 	// HW arch: PX4_FMU_V5X
@@ -206,6 +190,7 @@ void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	// Page title
 	display->setTextAlignment(TEXT_ALIGN_CENTER);
 	display->drawString(x + 64, y + y_off, "Version Information");
+
 	y_off += FONT_10_HEIGHT;
 
 	// Software version
@@ -219,7 +204,6 @@ void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
 	display->drawStringf(x + 128, y + y_off, buffer, "%u.%u.%u", major, minor, patch);
 
-	// Next line
 	y_off += FONT_10_HEIGHT;
 
 	// Hardware version
@@ -231,7 +215,6 @@ void running_page_4(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
 	display->drawStringf(x + 128, y + y_off, buffer, "%.*s", 12, &uuid[12]);
 
-	// Next line
 	y_off += FONT_10_HEIGHT;
 
 	// Serial Number
@@ -266,7 +249,8 @@ int Display::init()
 {
 	PX4_INFO("Initializing Display");
 
-	_display_interface = new SSD1306_I2C(); // Pass addr as arg
+	static constexpr uint8_t I2C_ADDR = 0x3D;
+	_display_interface = new SSD1306_I2C(I2C_ADDR);
 	_display_ui = new OLEDDisplayUi(_display_interface);
 
 	_display_ui->setTargetFPS(60);

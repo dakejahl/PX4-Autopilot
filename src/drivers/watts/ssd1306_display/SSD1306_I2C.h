@@ -42,7 +42,7 @@
 class SSD1306_I2C : public device::I2C, public OLEDDisplay
 {
 public:
-	SSD1306_I2C();
+	SSD1306_I2C(uint16_t address);
 	virtual void display() override;
 
 protected:

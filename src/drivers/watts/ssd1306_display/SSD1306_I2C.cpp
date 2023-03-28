@@ -33,8 +33,11 @@
 
 #include "SSD1306_I2C.h"
 
-SSD1306_I2C::SSD1306_I2C() :
-	I2C(DRV_DEVTYPE_SSD1306, "SSD1306_I2C", 2, 0x3d, 400000),
+static constexpr int BUS_NUMBER = 2;
+static constexpr uint32_t FREQUENCY = 400000;
+
+SSD1306_I2C::SSD1306_I2C(uint16_t address) :
+	I2C(DRV_DEVTYPE_SSD1306, "SSD1306_I2C", BUS_NUMBER, address, FREQUENCY),
 	_comms_errors(perf_alloc(PC_COUNT, "SSD1306_I2C: comm errors"))
 {
 	setGeometry(OLEDDISPLAY_GEOMETRY::GEOMETRY_128_64);
