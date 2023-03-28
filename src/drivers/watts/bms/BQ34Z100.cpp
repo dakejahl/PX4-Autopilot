@@ -36,8 +36,12 @@
 
 #include "BQ34Z100.hpp"
 
+static constexpr uint16_t I2C_ADDR = 0x55;
+static constexpr int BUS_NUMBER = 1;
+static constexpr uint32_t FREQUENCY = 400000;
+
 BQ34Z100::BQ34Z100() :
-	I2C(DRV_DEVTYPE_BQ34Z100, "BQ34Z100", 1, 0x55, 400000),
+	I2C(DRV_DEVTYPE_BQ34Z100, "BQ34Z100", BUS_NUMBER, I2C_ADDR, FREQUENCY),
 	_comms_errors(perf_alloc(PC_COUNT, "BQ34Z100: comm errors"))
 {}
 

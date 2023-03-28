@@ -39,8 +39,12 @@
 #include "BQ76952.hpp"
 #include <uORB/topics/watts_battery_status.h>
 
+static constexpr uint16_t I2C_ADDR = 0x08;
+static constexpr int BUS_NUMBER = 1;
+static constexpr uint32_t FREQUENCY = 400000;
+
 BQ76952::BQ76952() :
-	I2C(DRV_DEVTYPE_BQ76952, "BQ76952", 1, 0x08, 400000),
+	I2C(DRV_DEVTYPE_BQ76952, "BQ76952", BUS_NUMBER, I2C_ADDR, FREQUENCY),
 	_comms_errors(perf_alloc(PC_COUNT, "BQ76952: comm errors"))
 {}
 
