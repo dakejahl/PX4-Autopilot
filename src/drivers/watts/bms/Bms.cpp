@@ -155,28 +155,24 @@ void Bms::collect_and_publish()
 	watts_battery_status_s battery_status = {};
 	battery_status.timestamp = hrt_absolute_time();
 
+	// BQ76
 	battery_status.temperature_cells = 		_bq76->temperature_cells();
 	battery_status.temperature_pcb = 		_bq76->temperature_fets();
 	battery_status.temperature_other = 		NAN; // unused
-
 	battery_status.current = 				_bq76->current();
 	battery_status.current_filtered = 		_current_filter.update(battery_status.current);
-
 	battery_status.voltage = 				_bq76->bat_voltage();
-
 	_bq76->cell_voltages(battery_status.cell_voltages, 12);
-
-	battery_status.state_of_charge = 		_bq34->read_state_of_charge();
-	battery_status.capacity_remaining = 	_bq34->read_remaining_capacity() * _param_capacity_scalar.get();
-
-	battery_status.design_capacity = 		_bq34->read_design_capacity() * _param_capacity_scalar.get();
-	battery_status.actual_capacity = 		_bq34->read_full_charge_capacity() * _param_capacity_scalar.get();
-
-	battery_status.cycle_count = 			_bq34->read_cycle_count();
-	battery_status.state_of_health = 		_bq34->read_state_of_health();
-	battery_status.cells_in_series = 		12;
-
 	battery_status.status_flags = 			_bq76->status_flags();
+
+	// BQ34
+	battery_status.state_of_charge = 		_bq34->data_command(BQ34Z100::StateOfCharge); // 0 - 100
+	battery_status.capacity_remaining = 	_bq34->data_command(BQ34Z100::RemainingCapacity) * _param_capacity_scalar.get(); // mAh
+	battery_status.design_capacity = 		_bq34->data_command(BQ34Z100::DesignCapacity) * _param_capacity_scalar.get(); // mAh
+	battery_status.actual_capacity = 		_bq34->data_command(BQ34Z100::FullChargeCapacity) * _param_capacity_scalar.get(); // mAh
+	battery_status.cycle_count = 			_bq34->data_command(BQ34Z100::CycleCount);
+	battery_status.state_of_health = 		_bq34->data_command(BQ34Z100::StateOfHealth); // 0 - 100
+	battery_status.cells_in_series = 		12;
 
 	_battery_status_pub.publish(battery_status);
 }

@@ -175,7 +175,7 @@ private:
 
 		int ret = PX4_OK;
 		ret = write_memory<T>(reg.address, reg.value);
-		px4_usleep(5_ms);
+		px4_usleep(5_ms); // TODO: Is this needed and is it too long?
 
 		if (ret != PX4_OK) {
 			PX4_ERR("%s", reg.name);

@@ -44,19 +44,23 @@ public:
 	BQ34Z100();
 	~BQ34Z100();
 
-    // Initialize things
 	int init();
     int probe() override;
 
-    // Monitor things
-    float read_voltage();
-    uint32_t read_state_of_charge();
-    uint32_t read_remaining_capacity();
-    uint32_t read_full_charge_capacity();
-    uint32_t read_design_capacity();
-    uint16_t read_cycle_count();
-    uint16_t read_serial_number();
-    uint8_t read_state_of_health();
+    enum CommandAddr : uint8_t {
+        StateOfCharge = 0x02,
+        RemainingCapacity = 0x04,
+        FullChargeCapacity = 0x06,
+        Voltage = 0x08,
+        SerialNumber = 0x28,
+        CycleCount = 0x2C,
+        StateOfHealth = 0x2E,
+        DesignCapacity = 0x3C,
+    };
+
+    uint16_t data_command(uint8_t addr) {
+        return read_register<uint16_t>(addr);
+    }
 
     uint16_t read_device_type();
     uint16_t read_control_status();
@@ -70,7 +74,7 @@ public:
         T data = {};
         int ret = transfer(&addr, 1, nullptr, 0);
         ret |= transfer(nullptr, 0, (uint8_t*)&data, sizeof(data));
-        px4_usleep(5_ms);
+        px4_usleep(5_ms); // Is this needed and is it too long?
 
         if (ret != PX4_OK) {
             PX4_ERR("read_register addr 0x%x failed", addr);
