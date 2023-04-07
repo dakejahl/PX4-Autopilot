@@ -77,6 +77,9 @@
 #define GPIO_SPI1_OLED_DC   (GPIO_PORTB | GPIO_PIN1  | GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz)
 #define GPIO_SPI1_OLED_RST  (GPIO_PORTB | GPIO_PIN3  | GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz)
 
+// BMS WAKE signal used to wake up the BQ76 from Shutdown mode
+#define GPIO_BMS_WAKE (GPIO_PORTB | GPIO_PIN15  | GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz)
+
 #define FLASH_BASED_PARAMS
 
 /* High-resolution timer */
@@ -95,6 +98,7 @@
 		GPIO_CAN1_RX,                     \
 		GPIO_CAN1_SILENT_S0,              \
 		GPIO_CAN1_TERMINATION,            \
+		GPIO_BMS_WAKE,                    \
 	}
 
 __BEGIN_DECLS
