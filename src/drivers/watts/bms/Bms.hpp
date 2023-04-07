@@ -111,7 +111,7 @@ private:
 
 	perf_counter_t _cycle_perf{};
 
-	AlphaFilter<float> _current_filter{0};
+	AlphaFilter<float> _current_filter{0}; // Replace with a rolling average
 
 	// State variables
 	hrt_abstime _pressed_start_time{0};

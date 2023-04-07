@@ -47,7 +47,7 @@ Bms::Bms() :
 {
 	_battery_status_pub.advertise();
 
-	_current_filter.setParameters(SAMPLE_INTERVAL, 1_s);
+	_current_filter.setParameters(SAMPLE_INTERVAL, 50_ms);
 }
 
 Bms::~Bms()

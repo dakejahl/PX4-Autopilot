@@ -89,7 +89,7 @@ void running_page_1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, 
 	char buffer[64] = {};
 
 	// Current
-	float current = (int(_battery_status.current_filtered * 10))/10; // Fixes negative 0
+	float current = float((int(_battery_status.current_filtered * 10)))/10.0f; // Round to 1 decimal place
 	display->drawStringf(x, y + y_off, buffer, "%.1fA", double(current));
 
 	// Next line

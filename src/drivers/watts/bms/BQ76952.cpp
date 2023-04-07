@@ -104,7 +104,10 @@ int BQ76952::configure_settings()
 	// ret |= write_register(Register<uint16_t>{"LD Gain", 0x91A4, 34500});
 
 	//TODO - This is setting the wrong value. BQ76 expects type float4
-	//ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
+	// ret |= write_register(Register<float>{"CC Gain", 0x91A8, 0.310f});
+
+	// CURRENT AND VOLTAGE CALIBRATION
+	ret |= write_register(Register<float>{"CC Gain", 0x91A8, 25.223f});
 
 	//TODO - This is setting the wrong value. BQ76 expects type float4
 	//ret |= write_register(Register<float>{"Capacity Gain", 0x91AC, 0.310f});
@@ -145,6 +148,7 @@ int BQ76952::configure_settings()
 
 	ret |= write_register(Register<uint16_t>{"Mfg Status Init", 0x9343, 0x0010}); // Enable FET normal mode
 
+	// TODO: Balance to 10mV
 	ret |= write_register(Register<uint8_t>{"Balancing Configuration", 0x9335, 0x07});
 
 	ret |= write_register(Register<uint8_t>{"Cell Balance Max Cells", 0x933A, 12});
@@ -158,6 +162,7 @@ int BQ76952::configure_settings()
 	//TODO - This is getting set to 16, not 8
 	//ret |= write_register(Register<uint8_t>{"OCC Threshold", 0x9280, 8});
 
+	// TODO: fix this, the shunt max mV is 500, which limits our max current to 150A. Shunt is 300uOhm
 	ret |= write_register(Register<uint8_t>{"SCD Threshold", 0x9286, 4}); // 4 = 80 mV across shunt. 80mv/400uOhm = 200A
 
 	ret |= write_register(Register<uint8_t>{"SCD Delay", 0x9287, 31}); // units of 15us. 31 is max. 31 x 15us = 465us
@@ -194,13 +199,14 @@ float BQ76952::temperature_fets()
 
 float BQ76952::current()
 {
-	// TODO: fix units
-	int16_t current = {};
-	if (direct_command(CMD_READ_CC2_CURRENT, &current, sizeof(current)) != PX4_OK) {
+	int16_t cc2_count = {};
+	if (direct_command(CMD_READ_CC2_CURRENT, &cc2_count, sizeof(cc2_count)) != PX4_OK) {
 		PX4_ERR("Failed to read current");
 		return 0;
 	}
-	return (float)current / 100.0f; // centi-amp resolution 327amps +/-
+	// DA Config = 0b10 which is == 10mA per CC2_Count
+	static constexpr uint8_t milliamp_per_bit = 10;
+	return float(cc2_count * milliamp_per_bit) / 1000.0f;
 }
 
 float BQ76952::bat_voltage()

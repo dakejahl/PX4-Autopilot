@@ -103,6 +103,9 @@ int BQ34Z100::init()
 // checksum for the whole block is written to BlockDataChecksum() (command number 0x60).
 
 
+// NOTE: All reported values of mAh (capacity and current) are scaled by 7. This
+// scaling (calibration) is part of the .srec (.bq.fs) golden file Alex created.
+
 uint16_t BQ34Z100::read_device_type()
 {
 	return read_control(0x00, 0x01);
