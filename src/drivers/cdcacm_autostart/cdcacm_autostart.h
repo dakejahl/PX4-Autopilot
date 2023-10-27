@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2022 Technology Innovation Institute. All rights reserved.
+ *   Copyright (c) 2023 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,26 +31,57 @@
  *
  ****************************************************************************/
 
-/**
- * @file px4_userspace_init.cpp
- *
- * Initialize px4 userspace in NuttX protected build
- */
+#pragma once
 
-#include <drivers/drv_hrt.h>
-#include <lib/parameters/param.h>
-#include <px4_platform_common/px4_work_queue/WorkQueueManager.hpp>
-#include <px4_platform_common/spi.h>
-#include <uORB/uORB.h>
-#include <sys/boardctl.h>
+#include <px4_platform_common/module.h>
+#include <px4_platform_common/module_params.h>
+#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+#include <uORB/SubscriptionInterval.hpp>
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/actuator_armed.h>
 
-extern "C" void px4_userspace_init(void)
+using namespace time_literals;
+
+class CdcAcmAutostart : public ModuleBase<CdcAcmAutostart>, public ModuleParams, public px4::ScheduledWorkItem
 {
-	hrt_init();
+public:
+	CdcAcmAutostart();
+	~CdcAcmAutostart() override;
 
-	px4_set_spi_buses_from_hw_version();
+	/** @see ModuleBase */
+	static int task_spawn(int argc, char *argv[]);
 
-	px4::WorkQueueManagerStart();
+	/** @see ModuleBase */
+	static int custom_command(int argc, char *argv[]);
 
-	uorb_start();
-}
+	/** @see ModuleBase */
+	static int print_usage(const char *reason = nullptr);
+
+	int Start();
+
+private:
+
+	enum class UsbAutoStartState {
+		disconnected,
+		connecting,
+		connected,
+		disconnecting,
+	};
+
+	void Run() override;
+
+	void UpdateParams(const bool force = false);
+
+	void mavlink_usb_check();
+
+	uORB::Subscription	_actuator_armed_sub{ORB_ID(actuator_armed)};
+	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 500_ms};
+
+	UsbAutoStartState _state{UsbAutoStartState::disconnected};
+	bool _vbus_present_prev = false;
+	int _ttyacm_fd = -1;
+
+	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::MAV_USB_MODE>) _mav_usb_mode
+	)
+};

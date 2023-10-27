@@ -1,0 +1,14 @@
+#!/bin/sh
+# Standard startup script for configuring the USB interface
+#
+
+if param compare MAV_USB_ENABLE 1
+then
+	sercon
+	usleep 1000000
+
+	mavlink start -d /dev/ttyACM0
+
+else
+	cdcacm_autostart start
+fi

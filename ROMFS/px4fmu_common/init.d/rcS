@@ -425,6 +425,9 @@ else
 	# Must be started after the serial config is read
 	rc_input start $RC_INPUT_ARGS
 
+	# Select USB configuration
+	. ${R}etc/init.d/rc.usb
+
 	#
 	# Play the startup tune (if not disabled or there is an error)
 	#
