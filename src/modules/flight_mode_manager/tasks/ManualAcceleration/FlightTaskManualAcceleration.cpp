@@ -67,6 +67,11 @@ bool FlightTaskManualAcceleration::update()
 
 	_constraints.want_takeoff = _checkTakeoff();
 
+	// TODO: collision prevention
+	if (_collision_prevention.is_active()) {
+		_collision_prevention.update();
+	}
+
 	// check if an external yaw handler is active and if yes, let it update the yaw setpoints
 	_weathervane.update();
 

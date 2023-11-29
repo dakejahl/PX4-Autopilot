@@ -67,6 +67,8 @@ public:
 	CollisionPrevention(ModuleParams *parent);
 	~CollisionPrevention() override = default;
 
+	void update();
+
 	/**
 	 * Returns true if Collision Prevention is running
 	 */
