@@ -111,7 +111,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_mavlink(parent),
 	_mavlink_ftp(parent),
 	_mavlink_log_handler(parent),
-	_mission_manager(parent),
+	// _mission_manager(parent),
 	_parameters_manager(parent),
 	_mavlink_timesync(parent)
 {
@@ -135,254 +135,254 @@ MavlinkReceiver::acknowledge(uint8_t sysid, uint8_t compid, uint16_t command, ui
 void
 MavlinkReceiver::handle_message(mavlink_message_t *msg)
 {
-	switch (msg->msgid) {
-	case MAVLINK_MSG_ID_COMMAND_LONG:
-		handle_message_command_long(msg);
-		break;
+// 	switch (msg->msgid) {
+// 	case MAVLINK_MSG_ID_COMMAND_LONG:
+// 		handle_message_command_long(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_COMMAND_INT:
-		handle_message_command_int(msg);
-		break;
+// 	case MAVLINK_MSG_ID_COMMAND_INT:
+// 		handle_message_command_int(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_COMMAND_ACK:
-		handle_message_command_ack(msg);
-		break;
+// 	case MAVLINK_MSG_ID_COMMAND_ACK:
+// 		handle_message_command_ack(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_OPTICAL_FLOW_RAD:
-		handle_message_optical_flow_rad(msg);
-		break;
+// 	case MAVLINK_MSG_ID_OPTICAL_FLOW_RAD:
+// 		handle_message_optical_flow_rad(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_PING:
-		handle_message_ping(msg);
-		break;
+// 	case MAVLINK_MSG_ID_PING:
+// 		handle_message_ping(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_SET_MODE:
-		handle_message_set_mode(msg);
-		break;
+// 	case MAVLINK_MSG_ID_SET_MODE:
+// 		handle_message_set_mode(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_ATT_POS_MOCAP:
-		handle_message_att_pos_mocap(msg);
-		break;
+// 	case MAVLINK_MSG_ID_ATT_POS_MOCAP:
+// 		handle_message_att_pos_mocap(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:
-		handle_message_set_position_target_local_ned(msg);
-		break;
+// 	case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:
+// 		handle_message_set_position_target_local_ned(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_SET_POSITION_TARGET_GLOBAL_INT:
-		handle_message_set_position_target_global_int(msg);
-		break;
+// 	case MAVLINK_MSG_ID_SET_POSITION_TARGET_GLOBAL_INT:
+// 		handle_message_set_position_target_global_int(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_SET_ATTITUDE_TARGET:
-		handle_message_set_attitude_target(msg);
-		break;
+// 	case MAVLINK_MSG_ID_SET_ATTITUDE_TARGET:
+// 		handle_message_set_attitude_target(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_VISION_POSITION_ESTIMATE:
-		handle_message_vision_position_estimate(msg);
-		break;
+// 	case MAVLINK_MSG_ID_VISION_POSITION_ESTIMATE:
+// 		handle_message_vision_position_estimate(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_ODOMETRY:
-		handle_message_odometry(msg);
-		break;
+// 	case MAVLINK_MSG_ID_ODOMETRY:
+// 		handle_message_odometry(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_SET_GPS_GLOBAL_ORIGIN:
-		handle_message_set_gps_global_origin(msg);
-		break;
+// 	case MAVLINK_MSG_ID_SET_GPS_GLOBAL_ORIGIN:
+// 		handle_message_set_gps_global_origin(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_RADIO_STATUS:
-		handle_message_radio_status(msg);
-		break;
+// 	case MAVLINK_MSG_ID_RADIO_STATUS:
+// 		handle_message_radio_status(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_MANUAL_CONTROL:
-		handle_message_manual_control(msg);
-		break;
+// 	case MAVLINK_MSG_ID_MANUAL_CONTROL:
+// 		handle_message_manual_control(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
-		handle_message_rc_channels_override(msg);
-		break;
+// 	case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
+// 		handle_message_rc_channels_override(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_HEARTBEAT:
-		handle_message_heartbeat(msg);
-		break;
+// 	case MAVLINK_MSG_ID_HEARTBEAT:
+// 		handle_message_heartbeat(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_DISTANCE_SENSOR:
-		handle_message_distance_sensor(msg);
-		break;
+// 	case MAVLINK_MSG_ID_DISTANCE_SENSOR:
+// 		handle_message_distance_sensor(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_FOLLOW_TARGET:
-		handle_message_follow_target(msg);
-		break;
+// 	case MAVLINK_MSG_ID_FOLLOW_TARGET:
+// 		handle_message_follow_target(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_LANDING_TARGET:
-		handle_message_landing_target(msg);
-		break;
+// 	case MAVLINK_MSG_ID_LANDING_TARGET:
+// 		handle_message_landing_target(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_CELLULAR_STATUS:
-		handle_message_cellular_status(msg);
-		break;
+// 	case MAVLINK_MSG_ID_CELLULAR_STATUS:
+// 		handle_message_cellular_status(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_ADSB_VEHICLE:
-		handle_message_adsb_vehicle(msg);
-		break;
+// 	case MAVLINK_MSG_ID_ADSB_VEHICLE:
+// 		handle_message_adsb_vehicle(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_UTM_GLOBAL_POSITION:
-		handle_message_utm_global_position(msg);
-		break;
+// 	case MAVLINK_MSG_ID_UTM_GLOBAL_POSITION:
+// 		handle_message_utm_global_position(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_COLLISION:
-		handle_message_collision(msg);
-		break;
+// 	case MAVLINK_MSG_ID_COLLISION:
+// 		handle_message_collision(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_GPS_RTCM_DATA:
-		handle_message_gps_rtcm_data(msg);
-		break;
+// 	case MAVLINK_MSG_ID_GPS_RTCM_DATA:
+// 		handle_message_gps_rtcm_data(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_BATTERY_STATUS:
-		handle_message_battery_status(msg);
-		break;
+// 	case MAVLINK_MSG_ID_BATTERY_STATUS:
+// 		handle_message_battery_status(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_SERIAL_CONTROL:
-		handle_message_serial_control(msg);
-		break;
+// 	case MAVLINK_MSG_ID_SERIAL_CONTROL:
+// 		handle_message_serial_control(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_LOGGING_ACK:
-		handle_message_logging_ack(msg);
-		break;
+// 	// case MAVLINK_MSG_ID_LOGGING_ACK:
+// 	// 	handle_message_logging_ack(msg);
+// 	// 	break;
 
-	case MAVLINK_MSG_ID_PLAY_TUNE:
-		handle_message_play_tune(msg);
-		break;
+// 	case MAVLINK_MSG_ID_PLAY_TUNE:
+// 		handle_message_play_tune(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_PLAY_TUNE_V2:
-		handle_message_play_tune_v2(msg);
-		break;
+// 	case MAVLINK_MSG_ID_PLAY_TUNE_V2:
+// 		handle_message_play_tune_v2(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_OBSTACLE_DISTANCE:
-		handle_message_obstacle_distance(msg);
-		break;
+// 	case MAVLINK_MSG_ID_OBSTACLE_DISTANCE:
+// 		handle_message_obstacle_distance(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_TUNNEL:
-		handle_message_tunnel(msg);
-		break;
+// 	case MAVLINK_MSG_ID_TUNNEL:
+// 		handle_message_tunnel(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_TRAJECTORY_REPRESENTATION_BEZIER:
-		handle_message_trajectory_representation_bezier(msg);
-		break;
+// 	case MAVLINK_MSG_ID_TRAJECTORY_REPRESENTATION_BEZIER:
+// 		handle_message_trajectory_representation_bezier(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_TRAJECTORY_REPRESENTATION_WAYPOINTS:
-		handle_message_trajectory_representation_waypoints(msg);
-		break;
+// 	case MAVLINK_MSG_ID_TRAJECTORY_REPRESENTATION_WAYPOINTS:
+// 		handle_message_trajectory_representation_waypoints(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_ONBOARD_COMPUTER_STATUS:
-		handle_message_onboard_computer_status(msg);
-		break;
+// 	case MAVLINK_MSG_ID_ONBOARD_COMPUTER_STATUS:
+// 		handle_message_onboard_computer_status(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_GENERATOR_STATUS:
-		handle_message_generator_status(msg);
-		break;
+// 	case MAVLINK_MSG_ID_GENERATOR_STATUS:
+// 		handle_message_generator_status(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_STATUSTEXT:
-		handle_message_statustext(msg);
-		break;
+// 	case MAVLINK_MSG_ID_STATUSTEXT:
+// 		handle_message_statustext(msg);
+// 		break;
 
-#if !defined(CONSTRAINED_FLASH)
+// #if !defined(CONSTRAINED_FLASH)
 
-	case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT:
-		handle_message_named_value_float(msg);
-		break;
+// 	case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT:
+// 		handle_message_named_value_float(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_NAMED_VALUE_INT:
-		handle_message_named_value_int(msg);
-		break;
+// 	case MAVLINK_MSG_ID_NAMED_VALUE_INT:
+// 		handle_message_named_value_int(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_DEBUG:
-		handle_message_debug(msg);
-		break;
+// 	case MAVLINK_MSG_ID_DEBUG:
+// 		handle_message_debug(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_DEBUG_VECT:
-		handle_message_debug_vect(msg);
-		break;
+// 	case MAVLINK_MSG_ID_DEBUG_VECT:
+// 		handle_message_debug_vect(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_DEBUG_FLOAT_ARRAY:
-		handle_message_debug_float_array(msg);
-		break;
-#endif // !CONSTRAINED_FLASH
+// 	case MAVLINK_MSG_ID_DEBUG_FLOAT_ARRAY:
+// 		handle_message_debug_float_array(msg);
+// 		break;
+// #endif // !CONSTRAINED_FLASH
 
-	case MAVLINK_MSG_ID_GIMBAL_MANAGER_SET_ATTITUDE:
-		handle_message_gimbal_manager_set_attitude(msg);
-		break;
+// 	case MAVLINK_MSG_ID_GIMBAL_MANAGER_SET_ATTITUDE:
+// 		handle_message_gimbal_manager_set_attitude(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_GIMBAL_MANAGER_SET_MANUAL_CONTROL:
-		handle_message_gimbal_manager_set_manual_control(msg);
-		break;
+// 	case MAVLINK_MSG_ID_GIMBAL_MANAGER_SET_MANUAL_CONTROL:
+// 		handle_message_gimbal_manager_set_manual_control(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_GIMBAL_DEVICE_INFORMATION:
-		handle_message_gimbal_device_information(msg);
-		break;
+// 	case MAVLINK_MSG_ID_GIMBAL_DEVICE_INFORMATION:
+// 		handle_message_gimbal_device_information(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_REQUEST_EVENT:
-		handle_message_request_event(msg);
-		break;
+// 	case MAVLINK_MSG_ID_REQUEST_EVENT:
+// 		handle_message_request_event(msg);
+// 		break;
 
-	case MAVLINK_MSG_ID_GIMBAL_DEVICE_ATTITUDE_STATUS:
-		handle_message_gimbal_device_attitude_status(msg);
-		break;
+// 	case MAVLINK_MSG_ID_GIMBAL_DEVICE_ATTITUDE_STATUS:
+// 		handle_message_gimbal_device_attitude_status(msg);
+// 		break;
 
-#if defined(MAVLINK_MSG_ID_SET_VELOCITY_LIMITS) // For now only defined if development.xml is used
+// #if defined(MAVLINK_MSG_ID_SET_VELOCITY_LIMITS) // For now only defined if development.xml is used
 
-	case MAVLINK_MSG_ID_SET_VELOCITY_LIMITS:
-		handle_message_set_velocity_limits(msg);
-		break;
-#endif
+// 	case MAVLINK_MSG_ID_SET_VELOCITY_LIMITS:
+// 		handle_message_set_velocity_limits(msg);
+// 		break;
+// #endif
 
-	default:
-		break;
-	}
+// 	default:
+// 		break;
+// 	}
 
-	/*
-	 * Only decode hil messages in HIL mode.
-	 *
-	 * The HIL mode is enabled by the HIL bit flag
-	 * in the system mode. Either send a set mode
-	 * COMMAND_LONG message or a SET_MODE message
-	 *
-	 * Accept HIL GPS messages if use_hil_gps flag is true.
-	 * This allows to provide fake gps measurements to the system.
-	 */
-	if (_mavlink->get_hil_enabled()) {
-		switch (msg->msgid) {
-		case MAVLINK_MSG_ID_HIL_SENSOR:
-			handle_message_hil_sensor(msg);
-			break;
+// 	/*
+// 	 * Only decode hil messages in HIL mode.
+// 	 *
+// 	 * The HIL mode is enabled by the HIL bit flag
+// 	 * in the system mode. Either send a set mode
+// 	 * COMMAND_LONG message or a SET_MODE message
+// 	 *
+// 	 * Accept HIL GPS messages if use_hil_gps flag is true.
+// 	 * This allows to provide fake gps measurements to the system.
+// 	 */
+// 	if (_mavlink->get_hil_enabled()) {
+// 		switch (msg->msgid) {
+// 		case MAVLINK_MSG_ID_HIL_SENSOR:
+// 			handle_message_hil_sensor(msg);
+// 			break;
 
-		case MAVLINK_MSG_ID_HIL_STATE_QUATERNION:
-			handle_message_hil_state_quaternion(msg);
-			break;
+// 		case MAVLINK_MSG_ID_HIL_STATE_QUATERNION:
+// 			handle_message_hil_state_quaternion(msg);
+// 			break;
 
-		case MAVLINK_MSG_ID_HIL_OPTICAL_FLOW:
-			handle_message_hil_optical_flow(msg);
-			break;
+// 		case MAVLINK_MSG_ID_HIL_OPTICAL_FLOW:
+// 			handle_message_hil_optical_flow(msg);
+// 			break;
 
-		default:
-			break;
-		}
-	}
+// 		default:
+// 			break;
+// 		}
+// 	}
 
 
-	if (_mavlink->get_hil_enabled() || (_mavlink->get_use_hil_gps() && msg->sysid == mavlink_system.sysid)) {
-		switch (msg->msgid) {
-		case MAVLINK_MSG_ID_HIL_GPS:
-			handle_message_hil_gps(msg);
-			break;
+// 	if (_mavlink->get_hil_enabled() || (_mavlink->get_use_hil_gps() && msg->sysid == mavlink_system.sysid)) {
+// 		switch (msg->msgid) {
+// 		case MAVLINK_MSG_ID_HIL_GPS:
+// 			handle_message_hil_gps(msg);
+// 			break;
 
-		default:
-			break;
-		}
+// 		default:
+// 			break;
+// 		}
 
-	}
+// 	}
 
-	/* If we've received a valid message, mark the flag indicating so.
-	   This is used in the '-w' command-line flag. */
-	_mavlink->set_has_received_messages(true);
+// 	/* If we've received a valid message, mark the flag indicating so.
+// 	   This is used in the '-w' command-line flag. */
+// 	_mavlink->set_has_received_messages(true);
 }
 
 bool
@@ -685,7 +685,7 @@ void MavlinkReceiver::handle_message_command_both(mavlink_message_t *msg, const 
 				// mavlink channel streaming was requested. But in fact it's possible that the logger is
 				// not even running. The main mavlink thread takes care of this by waiting for an ack
 				// from the logger.
-				_mavlink->try_start_ulog_streaming(msg->sysid, msg->compid);
+				// _mavlink->try_start_ulog_streaming(msg->sysid, msg->compid);
 			}
 		}
 
@@ -1793,34 +1793,34 @@ MavlinkReceiver::handle_message_serial_control(mavlink_message_t *msg)
 		return;
 	}
 
-	MavlinkShell *shell = _mavlink->get_shell();
+	// MavlinkShell *shell = _mavlink->get_shell();
 
-	if (shell) {
-		// we ignore the timeout, EXCLUSIVE & BLOCKING flags of the SERIAL_CONTROL message
-		if (serial_control_mavlink.count > 0) {
-			shell->setTargetID(msg->sysid, msg->compid);
-			shell->write(serial_control_mavlink.data, serial_control_mavlink.count);
-		}
+	// if (shell) {
+	// 	// we ignore the timeout, EXCLUSIVE & BLOCKING flags of the SERIAL_CONTROL message
+	// 	if (serial_control_mavlink.count > 0) {
+	// 		shell->setTargetID(msg->sysid, msg->compid);
+	// 		shell->write(serial_control_mavlink.data, serial_control_mavlink.count);
+	// 	}
 
-		// if no response requested, assume the shell is no longer used
-		if ((serial_control_mavlink.flags & SERIAL_CONTROL_FLAG_RESPOND) == 0) {
-			_mavlink->close_shell();
-		}
-	}
+	// 	// if no response requested, assume the shell is no longer used
+	// 	if ((serial_control_mavlink.flags & SERIAL_CONTROL_FLAG_RESPOND) == 0) {
+	// 		_mavlink->close_shell();
+	// 	}
+	// }
 }
 
-void
-MavlinkReceiver::handle_message_logging_ack(mavlink_message_t *msg)
-{
-	mavlink_logging_ack_t logging_ack;
-	mavlink_msg_logging_ack_decode(msg, &logging_ack);
+// void
+// MavlinkReceiver::handle_message_logging_ack(mavlink_message_t *msg)
+// {
+// 	mavlink_logging_ack_t logging_ack;
+// 	mavlink_msg_logging_ack_decode(msg, &logging_ack);
 
-	MavlinkULog *ulog_streaming = _mavlink->get_ulog_streaming();
+// 	MavlinkULog *ulog_streaming = _mavlink->get_ulog_streaming();
 
-	if (ulog_streaming) {
-		ulog_streaming->handle_ack(logging_ack);
-	}
-}
+// 	if (ulog_streaming) {
+// 		ulog_streaming->handle_ack(logging_ack);
+// 	}
+// }
 
 void
 MavlinkReceiver::handle_message_play_tune(mavlink_message_t *msg)
@@ -3233,7 +3233,7 @@ MavlinkReceiver::run()
 						handle_message(&msg);
 
 						/* handle packet with mission manager */
-						_mission_manager.handle_message(&msg);
+						// _mission_manager.handle_message(&msg);
 
 						/* handle packet with parameter component */
 						if (_mavlink->boot_complete()) {
@@ -3308,8 +3308,8 @@ MavlinkReceiver::run()
 		CheckHeartbeats(t);
 
 		if (t - last_send_update > timeout * 1000) {
-			_mission_manager.check_active_mission();
-			_mission_manager.send();
+			// _mission_manager.check_active_mission();
+			// _mission_manager.send();
 
 			if (_mavlink->get_mode() != Mavlink::MAVLINK_MODE::MAVLINK_MODE_IRIDIUM) {
 				_parameters_manager.send();

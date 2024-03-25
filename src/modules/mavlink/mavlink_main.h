@@ -83,8 +83,8 @@
 #include "mavlink_events.h"
 #include "mavlink_messages.h"
 #include "mavlink_receiver.h"
-#include "mavlink_shell.h"
-#include "mavlink_ulog.h"
+// #include "mavlink_shell.h"
+// #include "mavlink_ulog.h"
 
 #define DEFAULT_BAUD_RATE       57600
 #define DEFAULT_DEVICE_NAME     "/dev/ttyS1"
@@ -480,18 +480,18 @@ public:
 
 	/** get the Mavlink shell. Create a new one if there isn't one. It is *always* created via MavlinkReceiver thread.
 	 *  Returns nullptr if shell cannot be created */
-	MavlinkShell		*get_shell();
+	// MavlinkShell		*get_shell();
 	/** close the Mavlink shell if it is open */
-	void			close_shell();
+	// void			close_shell();
 
 	/** get ulog streaming if active, nullptr otherwise */
-	MavlinkULog		*get_ulog_streaming() { return _mavlink_ulog; }
-	void			try_start_ulog_streaming(uint8_t target_system, uint8_t target_component)
-	{
-		if (_mavlink_ulog) { return; }
+	// MavlinkULog		*get_ulog_streaming() { return _mavlink_ulog; }
+	// void			try_start_ulog_streaming(uint8_t target_system, uint8_t target_component)
+	// {
+	// 	if (_mavlink_ulog) { return; }
 
-		_mavlink_ulog = MavlinkULog::try_start(_datarate, 0.7f, target_system, target_component);
-	}
+	// 	_mavlink_ulog = MavlinkULog::try_start(_datarate, 0.7f, target_system, target_component);
+	// }
 
 	const events::SendProtocol &get_events_protocol() const { return _events; };
 	bool ftp_enabled() const { return _ftp_on; }
@@ -566,8 +566,8 @@ private:
 
 	List<MavlinkStream *>		_streams;
 
-	MavlinkShell		*_mavlink_shell{nullptr};
-	MavlinkULog		*_mavlink_ulog{nullptr};
+	// MavlinkShell		*_mavlink_shell{nullptr};
+	// MavlinkULog		*_mavlink_ulog{nullptr};
 	static events::EventBuffer	*_event_buffer;
 	events::SendProtocol		_events{*_event_buffer, *this};
 

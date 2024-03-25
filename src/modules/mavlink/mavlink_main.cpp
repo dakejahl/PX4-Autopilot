@@ -1241,39 +1241,39 @@ Mavlink::pass_message(const mavlink_message_t *msg)
 	}
 }
 
-MavlinkShell *
-Mavlink::get_shell()
-{
-	if (!_mavlink_shell) {
-		MavlinkShell *shell = new MavlinkShell();
+// MavlinkShell *
+// Mavlink::get_shell()
+// {
+// 	if (!_mavlink_shell) {
+// 		MavlinkShell *shell = new MavlinkShell();
 
-		if (!shell) {
-			PX4_ERR("Failed to allocate a shell");
+// 		if (!shell) {
+// 			PX4_ERR("Failed to allocate a shell");
 
-		} else {
-			int ret = shell->start();
+// 		} else {
+// 			int ret = shell->start();
 
-			if (ret == 0) {
-				_mavlink_shell = shell;
+// 			if (ret == 0) {
+// 				_mavlink_shell = shell;
 
-			} else {
-				PX4_ERR("Failed to start shell (%i)", ret);
-				delete shell;
-			}
-		}
-	}
+// 			} else {
+// 				PX4_ERR("Failed to start shell (%i)", ret);
+// 				delete shell;
+// 			}
+// 		}
+// 	}
 
-	return _mavlink_shell;
-}
+// 	return _mavlink_shell;
+// }
 
-void
-Mavlink::close_shell()
-{
-	if (_mavlink_shell) {
-		delete _mavlink_shell;
-		_mavlink_shell = nullptr;
-	}
-}
+// void
+// Mavlink::close_shell()
+// {
+// 	if (_mavlink_shell) {
+// 		delete _mavlink_shell;
+// 		_mavlink_shell = nullptr;
+// 	}
+// }
 
 void
 Mavlink::update_rate_mult()
@@ -1293,9 +1293,9 @@ Mavlink::update_rate_mult()
 
 	float mavlink_ulog_streaming_rate_inv = 1.0f;
 
-	if (_mavlink_ulog) {
-		mavlink_ulog_streaming_rate_inv = 1.0f - _mavlink_ulog->current_data_rate();
-	}
+	// if (_mavlink_ulog) {
+	// 	mavlink_ulog_streaming_rate_inv = 1.0f - _mavlink_ulog->current_data_rate();
+	// }
 
 	/* scale up and down as the link permits */
 	float bandwidth_mult = (float)(_datarate * mavlink_ulog_streaming_rate_inv - const_rate) / rate;
@@ -2352,8 +2352,8 @@ Mavlink::task_main(int argc, char *argv[])
 		}
 
 		/* send command ACK */
-		bool cmd_logging_start_acknowledgement = false;
-		bool cmd_logging_stop_acknowledgement = false;
+		// bool cmd_logging_start_acknowledgement = false;
+		// bool cmd_logging_stop_acknowledgement = false;
 
 		if (_vehicle_command_ack_sub.updated()) {
 			static constexpr size_t COMMAND_ACK_TOTAL_LEN = MAVLINK_MSG_ID_COMMAND_ACK_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
@@ -2386,11 +2386,11 @@ Mavlink::task_main(int argc, char *argv[])
 						mavlink_msg_command_ack_send_struct(get_channel(), &msg);
 
 						if (command_ack.command == vehicle_command_s::VEHICLE_CMD_LOGGING_START) {
-							cmd_logging_start_acknowledgement = true;
+							// cmd_logging_start_acknowledgement = true;
 
 						} else if (command_ack.command == vehicle_command_s::VEHICLE_CMD_LOGGING_STOP
 							   && command_ack.result == vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED) {
-							cmd_logging_stop_acknowledgement = true;
+							// cmd_logging_stop_acknowledgement = true;
 						}
 					}
 				}
@@ -2422,19 +2422,19 @@ Mavlink::task_main(int argc, char *argv[])
 		}
 
 		/* check for shell output */
-		if (_mavlink_shell && _mavlink_shell->available() > 0) {
-			if (get_free_tx_buf() >= MAVLINK_MSG_ID_SERIAL_CONTROL_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) {
-				mavlink_serial_control_t msg;
-				msg.baudrate = 0;
-				msg.flags = SERIAL_CONTROL_FLAG_REPLY;
-				msg.timeout = 0;
-				msg.device = SERIAL_CONTROL_DEV_SHELL;
-				msg.count = _mavlink_shell->read(msg.data, sizeof(msg.data));
-				msg.target_system = _mavlink_shell->targetSysid();
-				msg.target_component = _mavlink_shell->targetCompid();
-				mavlink_msg_serial_control_send_struct(get_channel(), &msg);
-			}
-		}
+		// if (_mavlink_shell && _mavlink_shell->available() > 0) {
+		// 	if (get_free_tx_buf() >= MAVLINK_MSG_ID_SERIAL_CONTROL_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) {
+		// 		mavlink_serial_control_t msg;
+		// 		msg.baudrate = 0;
+		// 		msg.flags = SERIAL_CONTROL_FLAG_REPLY;
+		// 		msg.timeout = 0;
+		// 		msg.device = SERIAL_CONTROL_DEV_SHELL;
+		// 		msg.count = _mavlink_shell->read(msg.data, sizeof(msg.data));
+		// 		msg.target_system = _mavlink_shell->targetSysid();
+		// 		msg.target_component = _mavlink_shell->targetCompid();
+		// 		mavlink_msg_serial_control_send_struct(get_channel(), &msg);
+		// 	}
+		// }
 
 		check_requested_subscriptions();
 
@@ -2457,28 +2457,28 @@ Mavlink::task_main(int argc, char *argv[])
 		}
 
 		/* check for ulog streaming messages */
-		if (_mavlink_ulog) {
-			if (cmd_logging_stop_acknowledgement) {
-				_mavlink_ulog->stop();
-				_mavlink_ulog = nullptr;
+		// if (_mavlink_ulog) {
+		// 	if (cmd_logging_stop_acknowledgement) {
+		// 		_mavlink_ulog->stop();
+		// 		_mavlink_ulog = nullptr;
 
-			} else {
-				if (cmd_logging_start_acknowledgement) {
-					_mavlink_ulog->start_ack_received();
-				}
+		// 	} else {
+		// 		if (cmd_logging_start_acknowledgement) {
+		// 			_mavlink_ulog->start_ack_received();
+		// 		}
 
-				int ret = _mavlink_ulog->handle_update(get_channel());
+		// 		int ret = _mavlink_ulog->handle_update(get_channel());
 
-				if (ret < 0) { //abort the streaming on error
-					if (ret != -1) {
-						PX4_WARN("mavlink ulog stream update failed, stopping (%i)", ret);
-					}
+		// 		if (ret < 0) { //abort the streaming on error
+		// 			if (ret != -1) {
+		// 				PX4_WARN("mavlink ulog stream update failed, stopping (%i)", ret);
+		// 			}
 
-					_mavlink_ulog->stop();
-					_mavlink_ulog = nullptr;
-				}
-			}
-		}
+		// 			_mavlink_ulog->stop();
+		// 			_mavlink_ulog = nullptr;
+		// 		}
+		// 	}
+		// }
 
 		/* handle new events */
 		if (check_events()) {
@@ -2572,10 +2572,10 @@ Mavlink::task_main(int argc, char *argv[])
 		_socket_fd = -1;
 	}
 
-	if (_mavlink_ulog) {
-		_mavlink_ulog->stop();
-		_mavlink_ulog = nullptr;
-	}
+	// if (_mavlink_ulog) {
+	// 	_mavlink_ulog->stop();
+	// 	_mavlink_ulog = nullptr;
+	// }
 
 	pthread_mutex_destroy(&_send_mutex);
 	pthread_mutex_destroy(&_radio_status_mutex);
@@ -2759,7 +2759,7 @@ int Mavlink::start_helper(int argc, char *argv[])
 int
 Mavlink::start(int argc, char *argv[])
 {
-	MavlinkULog::initialize();
+	// MavlinkULog::initialize();
 	MavlinkCommandSender::initialize();
 
 	if (!_event_buffer) {
@@ -2879,10 +2879,10 @@ Mavlink::display_status()
 	_receiver.print_detailed_rx_stats();
 #endif // !CONSTRAINED_FLASH
 
-	if (_mavlink_ulog) {
-		printf("\tULog rate: %.1f%% of max %.1f%%\n", (double)_mavlink_ulog->current_data_rate() * 100.,
-		       (double)_mavlink_ulog->maximum_data_rate() * 100.);
-	}
+	// if (_mavlink_ulog) {
+	// 	printf("\tULog rate: %.1f%% of max %.1f%%\n", (double)_mavlink_ulog->current_data_rate() * 100.,
+	// 	       (double)_mavlink_ulog->maximum_data_rate() * 100.);
+	// }
 
 	printf("\tFTP enabled: %s, TX enabled: %s\n",
 	       _ftp_on ? "YES" : "NO",
