@@ -35,6 +35,7 @@
 
 // PX4 includes
 #include <px4_platform_common/module_params.h>
+#include <lib/pure_pursuit/PurePursuit.hpp>
 
 // uORB includes
 #include <uORB/Publication.hpp>
@@ -81,10 +82,10 @@ public:
 	 * @brief Compute guidance for ackermann rover and return motor_setpoint for throttle and steering.
 	 * @param nav_state Vehicle navigation state
 	 */
-	motor_setpoint purePursuit(const int nav_state);
+	motor_setpoint computeGuidance(int nav_state);
 
 	/**
-	 * @brief Update global/local waypoint coordinates and acceptance radius
+	 * @brief Update global/NED waypoint coordinates and acceptance radius
 	 */
 	void updateWaypoints();
 
@@ -92,45 +93,30 @@ public:
 	 * @brief Returns and publishes the  acceptance radius for current waypoint based on the angle between a line segment
 	 * from the previous to the current waypoint/current to the next waypoint and maximum steer angle of
 	 * the vehicle.
-	 * @param curr_wp_local Current waypoint in local frame.
-	 * @param prev_wp_local Previous waypoint in local frame.
-	 * @param next_wp_local Next waypoint in local frame.
+	 * @param curr_wp_ned Current waypoint in NED frame.
+	 * @param prev_wp_ned Previous waypoint in NED frame.
+	 * @param next_wp_ned Next waypoint in NED frame.
 	 * @param default_acceptance_radius Default acceptance radius for waypoints.
 	 * @param acceptance_radius_gain Scaling of the geometric optimal acceptance radius for the rover to cut corners.
 	 * @param acceptance_radius_max Maximum value for the acceptance radius.
 	 * @param wheel_base Rover wheelbase.
 	 * @param max_steer_angle Rover maximum steer angle.
 	 */
-	float updateAcceptanceRadius(const Vector2f &curr_wp_local, const Vector2f &prev_wp_local,
-				     const Vector2f &next_wp_local, const float &default_acceptance_radius, const float &acceptance_radius_gain,
-				     const float &acceptance_radius_max, const float &wheel_base, const float &max_steer_angle);
+	float updateAcceptanceRadius(const Vector2f &curr_wp_ned, const Vector2f &prev_wp_ned,
+				     const Vector2f &next_wp_ned, float default_acceptance_radius, float acceptance_radius_gain,
+				     float acceptance_radius_max, float wheel_base, float max_steer_angle);
 
 	/**
 	 * @brief Calculate and return desired steering input
-	 * @param curr_wp_local Current waypoint in local frame.
-	 * @param prev_wp_local Previous waypoint in local frame.
-	 * @param curr_pos_local Current position of the vehicle in local frame.
-	 * @param lookahead_gain Tuning parameter for the lookahead distance pure pursuit controller.
-	 * @param lookahead_min Minimum lookahead distance.
-	 * @param lookahead_max Maximum lookahead distance.
+	 * @param curr_wp_ned Current waypoint in NED frame.
+	 * @param prev_wp_ned Previous waypoint in NED frame.
+	 * @param curr_pos_ned Current position of the vehicle in NED frame.
 	 * @param wheel_base Rover wheelbase.
 	 * @param desired_speed Desired speed for the rover.
 	 * @param vehicle_yaw Current yaw of the rover.
 	 */
-	float calcDesiredSteering(const Vector2f &curr_wp_local, const Vector2f &prev_wp_local, const Vector2f &curr_pos_local,
-				  const float &lookahead_gain, const float &lookahead_min, const float &lookahead_max, const float &wheel_base,
-				  const float &desired_speed, const float &vehicle_yaw);
-
-	/**
-	 * @brief Return desired heading to the intersection point between a circle with a radius of
-	 * lookahead_distance around the vehicle and a line segment from the previous to the current waypoint.
-	 * @param curr_wp_local Current waypoint in local frame.
-	 * @param prev_wp_local Previous waypoint in local frame.
-	 * @param curr_pos_local Current position of the vehicle in local frame.
-	 * @param lookahead_distance Radius of circle around vehicle.
-	 */
-	float calcDesiredHeading(const Vector2f &curr_wp_local, const Vector2f &prev_wp_local, const Vector2f &curr_pos_local,
-				 const float &lookahead_distance);
+	float calcDesiredSteering(const Vector2f &curr_wp_ned, const Vector2f &prev_wp_ned, const Vector2f &curr_pos_ned,
+				  float wheel_base, float desired_speed, float vehicle_yaw);
 
 protected:
 	/**
@@ -153,22 +139,24 @@ private:
 	rover_ackermann_guidance_status_s _rover_ackermann_guidance_status{};
 
 
-	MapProjection _global_local_proj_ref{}; // Transform global to local coordinates.
+	MapProjection _global_ned_proj_ref{}; // Transform global to NED coordinates.
+	PurePursuit _pure_pursuit{this}; // Pure pursuit library
 
 	// Rover variables
 	Vector2d _curr_pos{};
-	Vector2f _curr_pos_local{};
+	Vector2f _curr_pos_ned{};
 	PID_t _pid_throttle;
 	hrt_abstime _timestamp{0};
+	float _desired_steering{0.f};
 
 	// Waypoint variables
 	Vector2d _curr_wp{};
 	Vector2d _next_wp{};
 	Vector2d _prev_wp{};
 	Vector2d _home_position{};
-	Vector2f _curr_wp_local{};
-	Vector2f _prev_wp_local{};
-	Vector2f _next_wp_local{};
+	Vector2f _curr_wp_ned{};
+	Vector2f _prev_wp_ned{};
+	Vector2f _next_wp_ned{};
 	float _acceptance_radius{0.5f};
 	float _prev_acceptance_radius{0.5f};
 
@@ -176,9 +164,6 @@ private:
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::RA_WHEEL_BASE>) _param_ra_wheel_base,
 		(ParamFloat<px4::params::RA_MAX_STR_ANG>) _param_ra_max_steer_angle,
-		(ParamFloat<px4::params::RA_LOOKAHD_GAIN>) _param_ra_lookahd_gain,
-		(ParamFloat<px4::params::RA_LOOKAHD_MAX>) _param_ra_lookahd_max,
-		(ParamFloat<px4::params::RA_LOOKAHD_MIN>) _param_ra_lookahd_min,
 		(ParamFloat<px4::params::RA_ACC_RAD_MAX>) _param_ra_acc_rad_max,
 		(ParamFloat<px4::params::RA_ACC_RAD_GAIN>) _param_ra_acc_rad_gain,
 		(ParamFloat<px4::params::RA_MISS_VEL_DEF>) _param_ra_miss_vel_def,

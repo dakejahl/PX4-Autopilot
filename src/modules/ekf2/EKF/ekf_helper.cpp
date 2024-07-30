@@ -319,7 +319,7 @@ void Ekf::resetAccelBias()
 float Ekf::getHeadingInnovationTestRatio() const
 {
 	// return the largest heading innovation test ratio
-	float test_ratio = 0.f;
+	float test_ratio = -1.f;
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
 
@@ -347,10 +347,14 @@ float Ekf::getHeadingInnovationTestRatio() const
 
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
-	return sqrtf(test_ratio);
+	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
+		return sqrtf(test_ratio);
+	}
+
+	return NAN;
 }
 
-float Ekf::getVelocityInnovationTestRatio() const
+float Ekf::getHorizontalVelocityInnovationTestRatio() const
 {
 	// return the largest velocity innovation test ratio
 	float test_ratio = -1.f;
@@ -358,7 +362,7 @@ float Ekf::getVelocityInnovationTestRatio() const
 #if defined(CONFIG_EKF2_GNSS)
 
 	if (_control_status.flags.gps) {
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < 2; i++) { // only xy
 			test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_vel.test_ratio_filtered[i]));
 		}
 	}
@@ -368,7 +372,7 @@ float Ekf::getVelocityInnovationTestRatio() const
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 
 	if (_control_status.flags.ev_vel) {
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < 2; i++) { // only xy
 			test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_vel.test_ratio_filtered[i]));
 		}
 	}
@@ -384,6 +388,34 @@ float Ekf::getVelocityInnovationTestRatio() const
 	}
 
 #endif // CONFIG_EKF2_OPTICAL_FLOW
+
+	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
+		return sqrtf(test_ratio);
+	}
+
+	return NAN;
+}
+
+float Ekf::getVerticalVelocityInnovationTestRatio() const
+{
+	// return the largest velocity innovation test ratio
+	float test_ratio = -1.f;
+
+#if defined(CONFIG_EKF2_GNSS)
+
+	if (_control_status.flags.gps) {
+		test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_vel.test_ratio_filtered[2]));
+	}
+
+#endif // CONFIG_EKF2_GNSS
+
+#if defined(CONFIG_EKF2_EXTERNAL_VISION)
+
+	if (_control_status.flags.ev_vel) {
+		test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_vel.test_ratio_filtered[2]));
+	}
+
+#endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
 		return sqrtf(test_ratio);
@@ -511,70 +543,104 @@ float Ekf::getSyntheticSideslipInnovationTestRatio() const
 
 float Ekf::getHeightAboveGroundInnovationTestRatio() const
 {
-	float test_ratio = -1.f;
+	// return the combined HAGL innovation test ratio
+	float hagl_sum = 0.f;
+	int n_hagl_sources = 0;
 
 #if defined(CONFIG_EKF2_TERRAIN)
+
+# if defined(CONFIG_EKF2_OPTICAL_FLOW)
+
+	if (_control_status.flags.opt_flow_terrain) {
+		hagl_sum += sqrtf(math::max(fabsf(_aid_src_optical_flow.test_ratio_filtered[0]),
+					    _aid_src_optical_flow.test_ratio_filtered[1]));
+		n_hagl_sources++;
+	}
+
+# endif // CONFIG_EKF2_OPTICAL_FLOW
+
 # if defined(CONFIG_EKF2_RANGE_FINDER)
 
 	if (_control_status.flags.rng_terrain) {
-		// return the terrain height innovation test ratio
-		test_ratio = math::max(test_ratio, fabsf(_aid_src_rng_hgt.test_ratio_filtered));
+		hagl_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered));
+		n_hagl_sources++;
 	}
 
 # endif // CONFIG_EKF2_RANGE_FINDER
+
 #endif // CONFIG_EKF2_TERRAIN
 
-	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
-		return sqrtf(test_ratio);
+	if (n_hagl_sources > 0) {
+		return math::max(hagl_sum / static_cast<float>(n_hagl_sources), FLT_MIN);
 	}
 
 	return NAN;
 }
 
-void Ekf::get_ekf_soln_status(uint16_t *status) const
+uint16_t Ekf::get_ekf_soln_status() const
 {
-	ekf_solution_status_u soln_status{};
-	// TODO: Is this accurate enough?
+	// LEGACY Mavlink bitmask containing state of estimator solution (see Mavlink ESTIMATOR_STATUS_FLAGS)
+	union ekf_solution_status_u {
+		struct {
+			uint16_t attitude           : 1;
+			uint16_t velocity_horiz     : 1;
+			uint16_t velocity_vert      : 1;
+			uint16_t pos_horiz_rel      : 1;
+			uint16_t pos_horiz_abs      : 1;
+			uint16_t pos_vert_abs       : 1;
+			uint16_t pos_vert_agl       : 1;
+			uint16_t const_pos_mode     : 1;
+			uint16_t pred_pos_horiz_rel : 1;
+			uint16_t pred_pos_horiz_abs : 1;
+			uint16_t gps_glitch         : 1;
+			uint16_t accel_error        : 1;
+		} flags;
+		uint16_t value;
+	} soln_status{};
+
+	// 1	ESTIMATOR_ATTITUDE	True if the attitude estimate is good
 	soln_status.flags.attitude = attitude_valid();
-	soln_status.flags.velocity_horiz = (isHorizontalAidingActive() || (_control_status.flags.fuse_beta
-					    && _control_status.flags.fuse_aspd)) && (_fault_status.value == 0);
-	soln_status.flags.velocity_vert = (_control_status.flags.baro_hgt || _control_status.flags.ev_hgt
-					   || _control_status.flags.gps_hgt || _control_status.flags.rng_hgt) && (_fault_status.value == 0);
-	soln_status.flags.pos_horiz_rel = (_control_status.flags.gps || _control_status.flags.ev_pos
-					   || _control_status.flags.opt_flow) && (_fault_status.value == 0);
-	soln_status.flags.pos_horiz_abs = (_control_status.flags.gps || _control_status.flags.ev_pos)
-					  && (_fault_status.value == 0);
-	soln_status.flags.pos_vert_abs = soln_status.flags.velocity_vert;
+
+	// 2	ESTIMATOR_VELOCITY_HORIZ	True if the horizontal velocity estimate is good
+	soln_status.flags.velocity_horiz = local_position_is_valid();
+
+	// 4	ESTIMATOR_VELOCITY_VERT	True if the vertical velocity estimate is good
+	soln_status.flags.velocity_vert = isLocalVerticalVelocityValid() || isLocalVerticalPositionValid();
+
+	// 8	ESTIMATOR_POS_HORIZ_REL	True if the horizontal position (relative) estimate is good
+	soln_status.flags.pos_horiz_rel = local_position_is_valid();
+
+	// 16	ESTIMATOR_POS_HORIZ_ABS	True if the horizontal position (absolute) estimate is good
+	soln_status.flags.pos_horiz_abs = global_position_is_valid();
+
+	// 32	ESTIMATOR_POS_VERT_ABS	True if the vertical position (absolute) estimate is good
+	soln_status.flags.pos_vert_abs = isVerticalAidingActive();
+
+	// 64	ESTIMATOR_POS_VERT_AGL	True if the vertical position (above ground) estimate is good
 #if defined(CONFIG_EKF2_TERRAIN)
 	soln_status.flags.pos_vert_agl = isTerrainEstimateValid();
 #endif // CONFIG_EKF2_TERRAIN
-	soln_status.flags.const_pos_mode = !soln_status.flags.velocity_horiz;
-	soln_status.flags.pred_pos_horiz_rel = soln_status.flags.pos_horiz_rel;
-	soln_status.flags.pred_pos_horiz_abs = soln_status.flags.pos_horiz_abs;
 
-	bool mag_innov_good = true;
+	// 128	ESTIMATOR_CONST_POS_MODE	True if the EKF is in a constant position mode and is not using external measurements (eg GPS or optical flow)
+	soln_status.flags.const_pos_mode = _control_status.flags.fake_pos || _control_status.flags.vehicle_at_rest;
 
-#if defined(CONFIG_EKF2_MAGNETOMETER)
+	// 256	ESTIMATOR_PRED_POS_HORIZ_REL	True if the EKF has sufficient data to enter a mode that will provide a (relative) position estimate
+	soln_status.flags.pred_pos_horiz_rel = isHorizontalAidingActive();
 
-	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
-		if (Vector3f(_aid_src_mag.test_ratio).max() < 1.f) {
-			mag_innov_good = false;
-		}
-	}
+	// 512	ESTIMATOR_PRED_POS_HORIZ_ABS	True if the EKF has sufficient data to enter a mode that will provide a (absolute) position estimate
+	soln_status.flags.pred_pos_horiz_abs = _control_status.flags.gps || _control_status.flags.aux_gpos;
 
-#endif // CONFIG_EKF2_MAGNETOMETER
-
+	// 1024	ESTIMATOR_GPS_GLITCH	True if the EKF has detected a GPS glitch
 #if defined(CONFIG_EKF2_GNSS)
 	const bool gps_vel_innov_bad = Vector3f(_aid_src_gnss_vel.test_ratio).max() > 1.f;
 	const bool gps_pos_innov_bad = Vector2f(_aid_src_gnss_pos.test_ratio).max() > 1.f;
-
-	soln_status.flags.gps_glitch = (gps_vel_innov_bad || gps_pos_innov_bad) && mag_innov_good;
-#else
-	(void)mag_innov_good;
+	soln_status.flags.gps_glitch = (gps_vel_innov_bad || gps_pos_innov_bad);
 #endif // CONFIG_EKF2_GNSS
 
-	soln_status.flags.accel_error = _fault_status.flags.bad_acc_vertical;
-	*status = soln_status.value;
+	// 2048	ESTIMATOR_ACCEL_ERROR	True if the EKF has detected bad accelerometer data
+	soln_status.flags.accel_error = _fault_status.flags.bad_acc_vertical || _fault_status.flags.bad_acc_clipping;
+
+	return soln_status.value;
 }
 
 void Ekf::fuse(const VectorState &K, float innovation)
@@ -798,32 +864,6 @@ void Ekf::updateGroundEffect()
 }
 #endif // CONFIG_EKF2_BAROMETER
 
-#if defined(CONFIG_EKF2_WIND)
-void Ekf::resetWind()
-{
-#if defined(CONFIG_EKF2_AIRSPEED)
-
-	if (_control_status.flags.fuse_aspd && isRecent(_airspeed_sample_delayed.time_us, 1e6)) {
-		resetWindUsingAirspeed(_airspeed_sample_delayed);
-		return;
-	}
-
-#endif // CONFIG_EKF2_AIRSPEED
-
-	resetWindToZero();
-}
-
-void Ekf::resetWindToZero()
-{
-	ECL_INFO("reset wind to zero");
-
-	// If we don't have an airspeed measurement, then assume the wind is zero
-	_state.wind_vel.setZero();
-
-	resetWindCov();
-}
-
-#endif // CONFIG_EKF2_WIND
 
 void Ekf::updateIMUBiasInhibit(const imuSample &imu_delayed)
 {

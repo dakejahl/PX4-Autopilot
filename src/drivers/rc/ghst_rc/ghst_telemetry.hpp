@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2019 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2021 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,48 +32,60 @@
  ****************************************************************************/
 
 /**
- * First order "alpha" IIR digital filter with input saturation
+ * @file ghst_telemetry.cpp
+ *
+ * IRC Ghost (Immersion RC Ghost) telemetry.
+ *
+ * @author Igor Misic <igy1000mb@gmail.com>
+ * @author Juraj Ciberlin <jciberlin1@gmail.com>
  */
 
-#include <mathlib/mathlib.h>
+#pragma once
 
-class InnovationLpf final
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/battery_status.h>
+#include <uORB/topics/sensor_gps.h>
+#include <drivers/drv_hrt.h>
+
+/**
+ * High-level class that handles sending of GHST telemetry data
+ */
+class GHSTTelemetry
 {
 public:
-	InnovationLpf() = default;
-	~InnovationLpf() = default;
+	/**
+	 * @param uart_fd file descriptor for the UART to use. It is expected to be configured
+	 * already.
+	 */
+	explicit GHSTTelemetry(int uart_fd);
 
-	void reset(float val = 0.f) { _x = val; }
+	~GHSTTelemetry() = default;
 
 	/**
-	 * Update the filter with a new value and returns the filtered state
-	 * The new value is constained by the limit set in setSpikeLimit
-	 * @param val new input
-	 * @param alpha normalized weight of the new input
-	 * @param spike_limit the amplitude of the saturation at the input of the filter
-	 * @return filtered output
+	 * Send telemetry data. Call this regularly (i.e. at 100Hz), it will automatically
+	 * limit the sending rate.
+	 * @return true if new data sent
 	 */
-	float update(float val, float alpha, float spike_limit)
-	{
-		float val_constrained = math::constrain(val, -spike_limit, spike_limit);
-		float beta = 1.f - alpha;
-
-		_x = beta * _x + alpha * val_constrained;
-
-		return _x;
-	}
-
-	/**
-	 * Helper function to compute alpha from dt and the inverse of tau
-	 * @param dt sampling time in seconds
-	 * @param tau_inv inverse of the time constant of the filter
-	 * @return alpha, the normalized weight of a new measurement
-	 */
-	static float computeAlphaFromDtAndTauInv(float dt, float tau_inv)
-	{
-		return math::constrain(dt * tau_inv, 0.f, 1.f);
-	}
+	bool update(const hrt_abstime &now);
 
 private:
-	float _x{}; ///< current state of the filter
+	bool send_battery_status();
+	bool send_gps1_status();
+	bool send_gps2_status();
+
+	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
+	uORB::Subscription _battery_status_sub{ORB_ID(battery_status)};
+
+	int _uart_fd;
+	hrt_abstime _last_update {0U};
+	uint32_t _next_type {0U};
+
+	static constexpr uint32_t NUM_DATA_TYPES {3U};	// number of different telemetry data types
+	static constexpr uint32_t UPDATE_RATE_HZ {10U};	// update rate [Hz]
+
+	// Factors that should be applied to get correct values
+	static constexpr float FACTOR_VOLTS_TO_10MV {100.0F};
+	static constexpr float FACTOR_AMPS_TO_10MA {100.0F};
+	static constexpr float FACTOR_MAH_TO_10MAH {0.1F};
+
 };

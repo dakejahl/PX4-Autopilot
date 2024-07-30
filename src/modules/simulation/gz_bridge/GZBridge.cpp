@@ -43,6 +43,9 @@
 #include <iostream>
 #include <string>
 
+#include "camera/gz_camera.hpp"
+#include <lib/drivers/device/Device.hpp> // For DeviceId union
+
 GZBridge::GZBridge(const char *world, const char *name, const char *model,
 		   const char *pose_str) :
 	ModuleParams(nullptr),
@@ -196,6 +199,13 @@ int GZBridge::init()
 		return PX4_ERROR;
 	}
 
+	// Laser Scan: optional
+	std::string laser_scan_topic = "/world/" + _world_name + "/model/" + _model_name + "/link/link/sensor/lidar_2d_v2/scan";
+
+	if (!_node.Subscribe(laser_scan_topic, &GZBridge::laserScanCallback, this)) {
+		PX4_WARN("failed to subscribe to %s", laser_scan_topic.c_str());
+	}
+
 #if 0
 	// Airspeed: /world/$WORLD/model/$MODEL/link/airspeed_link/sensor/air_speed/air_speed
 	std::string airpressure_topic = "/world/" + _world_name + "/model/" + _model_name +
@@ -225,6 +235,22 @@ int GZBridge::init()
 		return PX4_ERROR;
 	}
 
+	// Range finder callback
+	std::string rangefinder_topic = "/rangefinder";
+
+	if (!_node.Subscribe(rangefinder_topic, &GZBridge::rangeFinderCallback, this)) {
+		PX4_ERR("failed to subscribe to %s", rangefinder_topic.c_str());
+		return PX4_ERROR;
+	}
+
+	// Video frame callback
+	std::string camera_topic = "/camera";
+
+	if (!_node.Subscribe(camera_topic, &GZBridge::cameraCallback, this)) {
+		PX4_ERR("failed to subscribe to %s", camera_topic.c_str());
+		return PX4_ERROR;
+	}
+
 	if (!_mixing_interface_esc.init(_model_name)) {
 		PX4_ERR("failed to init ESC output");
 		return PX4_ERROR;
@@ -242,6 +268,78 @@ int GZBridge::init()
 
 	ScheduleNow();
 	return OK;
+}
+
+void GZBridge::cameraCallback(const gz::msgs::Image &image_msg)
+{
+	float flow_x = 0;
+	float flow_y = 0;
+	int integration_time = 0;
+	int quality = calculate_flow(image_msg, hrt_absolute_time(), integration_time, flow_x, flow_y);
+
+	if (quality <= 0) {
+		quality = 0;
+	}
+
+	// Construct SensorOpticalFlow message
+	sensor_optical_flow_s msg = {};
+
+	msg.pixel_flow[0] = flow_x;
+	msg.pixel_flow[1] = flow_y;
+	msg.quality = quality;
+	msg.integration_timespan_us = integration_time;
+	// msg.integration_timespan_us = {1000000 / 30};  // 30 fps;
+
+	// Static data
+	msg.timestamp = hrt_absolute_time();
+	msg.timestamp_sample = msg.timestamp;
+	device::Device::DeviceId id;
+	id.devid_s.bus_type = device::Device::DeviceBusType::DeviceBusType_SIMULATION;
+	id.devid_s.bus = 0;
+	id.devid_s.address = 0;
+	id.devid_s.devtype = DRV_FLOW_DEVTYPE_SIM;
+	msg.device_id = id.devid;
+
+	// values taken from PAW3902
+	msg.mode = sensor_optical_flow_s::MODE_LOWLIGHT;
+	msg.max_flow_rate = 7.4f;
+	msg.min_ground_distance = 0.08f;
+	msg.max_ground_distance = 30;
+	msg.error_count = 0;
+
+	// No delta angle
+	// No distance
+
+	// This means that delta angle will come from vehicle gyro
+	// Distance will come from vehicle distance sensor
+
+	// Must publish even if quality is zero to initialize flow fusion
+	_optical_flow_pub.publish(msg);
+}
+
+void GZBridge::rangeFinderCallback(const gz::msgs::LaserScan &scan)
+{
+	distance_sensor_s msg = {};
+	msg.timestamp = hrt_absolute_time();
+
+	device::Device::DeviceId id;
+	id.devid_s.bus_type = device::Device::DeviceBusType::DeviceBusType_SIMULATION;
+	id.devid_s.bus = 1;
+	id.devid_s.address = 1;
+	id.devid_s.devtype = DRV_DIST_DEVTYPE_SIM;
+	msg.device_id = id.devid;
+
+	msg.min_distance = static_cast<float>(scan.range_min());
+	msg.max_distance = static_cast<float>(scan.range_max());
+	msg.current_distance = static_cast<float>(scan.ranges()[0]);
+	msg.variance = 0.0f;
+	msg.signal_quality = -1;
+	msg.type = distance_sensor_s::MAV_DISTANCE_SENSOR_LASER;
+	msg.h_fov = 0;
+	msg.v_fov = 0;
+	msg.orientation = distance_sensor_s::ROTATION_DOWNWARD_FACING;
+
+	_distance_sensor_pub.publish(msg);
 }
 
 int GZBridge::task_spawn(int argc, char *argv[])
@@ -739,6 +837,87 @@ void GZBridge::navSatCallback(const gz::msgs::NavSat &nav_sat)
 	}
 
 	pthread_mutex_unlock(&_node_mutex);
+}
+
+void GZBridge::laserScanCallback(const gz::msgs::LaserScan &scan)
+{
+	static constexpr int SECTOR_SIZE_DEG = 10; // PX4 Collision Prevention only has 36 sectors of 10 degrees each
+
+	double angle_min_deg = scan.angle_min() * 180 / M_PI;
+	double angle_step_deg = scan.angle_step() * 180 / M_PI;
+
+	int samples_per_sector = std::round(SECTOR_SIZE_DEG / angle_step_deg);
+	int number_of_sectors = scan.ranges_size() / samples_per_sector;
+
+	std::vector<double> ds_array(number_of_sectors, UINT16_MAX);
+
+	// Downsample -- take average of samples per sector
+	for (int i = 0; i < number_of_sectors; i++) {
+
+		double sum = 0;
+
+		int samples_used_in_sector = 0;
+
+		for (int j = 0; j < samples_per_sector; j++) {
+
+			double distance = scan.ranges()[i * samples_per_sector + j];
+
+			// inf values mean no object
+			if (isinf(distance)) {
+				continue;
+			}
+
+			sum += distance;
+			samples_used_in_sector++;
+		}
+
+		// If all samples in a sector are inf then it means the sector is clear
+		if (samples_used_in_sector == 0) {
+			ds_array[i] = scan.range_max();
+
+		} else {
+			ds_array[i] = sum / samples_used_in_sector;
+		}
+	}
+
+	// Publish to uORB
+	obstacle_distance_s obs {};
+
+	// Initialize unknown
+	for (auto &i : obs.distances) {
+		i = UINT16_MAX;
+	}
+
+	obs.timestamp = hrt_absolute_time();
+	obs.frame = obstacle_distance_s::MAV_FRAME_BODY_FRD;
+	obs.sensor_type = obstacle_distance_s::MAV_DISTANCE_SENSOR_LASER;
+	obs.min_distance = static_cast<uint16_t>(scan.range_min() * 100.);
+	obs.max_distance = static_cast<uint16_t>(scan.range_max() * 100.);
+	obs.angle_offset = static_cast<float>(angle_min_deg);
+	obs.increment = static_cast<float>(SECTOR_SIZE_DEG);
+
+	// Map samples in FOV into sectors in ObstacleDistance
+	int index = 0;
+
+	// Iterate in reverse because array is FLU and we need FRD
+	for (std::vector<double>::reverse_iterator i = ds_array.rbegin(); i != ds_array.rend(); ++i) {
+
+		uint16_t distance_cm = (*i) * 100.;
+
+		if (distance_cm >= obs.max_distance) {
+			obs.distances[index] = obs.max_distance + 1;
+
+		} else if (distance_cm < obs.min_distance) {
+			obs.distances[index] = 0;
+
+		} else {
+			obs.distances[index] = distance_cm;
+		}
+
+		index++;
+	}
+
+	_obstacle_distance_pub.publish(obs);
 }
 
 void GZBridge::rotateQuaternion(gz::math::Quaterniond &q_FRD_to_NED, const gz::math::Quaterniond q_FLU_to_ENU)

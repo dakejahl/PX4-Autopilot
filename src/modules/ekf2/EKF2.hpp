@@ -42,7 +42,6 @@
 #define EKF2_HPP
 
 #include "EKF/ekf.h"
-#include "Utility/PreFlightChecker.hpp"
 
 #include "EKF2Selector.hpp"
 
@@ -478,8 +477,6 @@ private:
 	uORB::PublicationMulti<estimator_aid_source3d_s> _estimator_aid_src_gravity_pub{ORB_ID(estimator_aid_src_gravity)};
 #endif // CONFIG_EKF2_GRAVITY_FUSION
 
-	PreFlightChecker _preflt_checker;
-
 	Ekf _ekf;
 
 	parameters *_params;	///< pointer to ekf parameter struct (located in _ekf class instance)
@@ -659,6 +656,8 @@ private:
 		// optical flow fusion
 		(ParamExtInt<px4::params::EKF2_OF_CTRL>)
 		_param_ekf2_of_ctrl, ///< optical flow fusion selection
+		(ParamExtInt<px4::params::EKF2_OF_GYR_SRC>)
+		_param_ekf2_of_gyr_src,
 		(ParamExtFloat<px4::params::EKF2_OF_DELAY>)
 		_param_ekf2_of_delay, ///< optical flow measurement delay relative to the IMU (mSec) - this is to the middle of the optical flow integration interval
 		(ParamExtFloat<px4::params::EKF2_OF_N_MIN>)
