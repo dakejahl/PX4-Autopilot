@@ -141,7 +141,7 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 			io_timer_set_dshot_mode(timer_index, dshot_pwm_freq,
 						io_timers_channel_mapping.element[timer_index].channel_count_including_gaps);
 
-			dshot_handler[timer_index].dma_handle = stm32_dmachannel(io_timers[timer_index].dshot.dmamap);
+			dshot_handler[timer_index].dma_handle = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_up);
 
 			if (NULL == dshot_handler[timer_index].dma_handle) {
 				ret_val = ERROR;
