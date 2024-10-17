@@ -351,7 +351,6 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 
 void up_dshot_trigger(void)
 {
-
 	for (unsigned channel = 0; channel < MAX_TIMER_IO_CHANNELS; channel++) {
 		if (_channels_init_mask & (1 << channel)) {
 
@@ -540,8 +539,13 @@ void process_capture_results(void *arg)
 * bit 	12		- dshot telemetry enable/disable
 * bits 	13-16	- XOR checksum
 **/
-void dshot_motor_data_set(unsigned motor_number, uint16_t throttle, bool telemetry)
+void dshot_motor_data_set(unsigned channel, uint16_t throttle, bool telemetry)
 {
+	if (!(_channels_init_mask & (1 << channel))) {
+		// this channel is not configured for dshot
+		return;
+	}
+
 	uint16_t packet = 0;
 	uint16_t checksum = 0;
 
@@ -558,13 +562,19 @@ void dshot_motor_data_set(unsigned motor_number, uint16_t throttle, bool telemet
 		csum_data >>= NIBBLES_SIZE;
 	}
 
-	packet |= (checksum & 0x0F);
+	if (bidirectional_dshot_enabled) {
+		packet |= ((~checksum) & 0x0F);
 
-	unsigned timer = timer_io_channels[motor_number].timer_index;
+	} else {
+		packet |= ((checksum) & 0x0F);
+	}
+
+	unsigned timer = timer_io_channels[channel].timer_index;
+
 	uint32_t *buffer = dshot_burst_buffer[timer];
 	const io_timers_channel_mapping_element_t *mapping = &io_timers_channel_mapping.element[timer];
 	unsigned num_motors = mapping->channel_count_including_gaps;
-	unsigned timer_channel_index = timer_io_channels[motor_number].timer_channel - mapping->lowest_timer_channel;
+	unsigned timer_channel_index = timer_io_channels[channel].timer_channel - mapping->lowest_timer_channel;
 
 	for (unsigned motor_data_index = 0; motor_data_index < ONE_MOTOR_DATA_SIZE; motor_data_index++) {
 		buffer[motor_data_index * num_motors + timer_channel_index] =
@@ -581,23 +591,28 @@ int up_dshot_arm(bool armed)
 
 int up_bdshot_get_erpm(uint8_t channel, int *erpm)
 {
-	// Not implemented
-	// *erpm = _erpms[channel];
-	// return 0;
-	return -1;
+	if (_channels_init_mask & (1 << channel)) {
+		*erpm = _erpms[channel];
+		return PX4_OK;
+	}
+	// this channel is not configured for dshot
+	return PX4_ERROR;
 }
 
 int up_bdshot_channel_status(uint8_t channel)
 {
-	// return <0 on error / not supported, 0 on offline, 1 on online
-	// return 1;
+	// TODO: track that each channel is communicating
+	if (_channels_init_mask & (1 << channel)) {
+		return 1;
+	}
 
-	// Not implemented
-	return -1;
+	return 0;
 }
 
 void up_bdshot_status(void)
 {
+	PX4_INFO("dshot driver stats: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
+		read_ok, read_fail_nibble, read_fail_crc, read_fail_zero);
 }
 
 #endif

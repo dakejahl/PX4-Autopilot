@@ -96,7 +96,7 @@ __EXPORT extern int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq
 /**
  * Set Dshot motor data, used by up_dshot_motor_data_set() and up_dshot_motor_command() (internal method)
  */
-__EXPORT extern void dshot_motor_data_set(unsigned motor_number, uint16_t throttle, bool telemetry);
+__EXPORT extern void dshot_motor_data_set(unsigned channel, uint16_t throttle, bool telemetry);
 
 /**
  * Set the current dshot throttle value for a channel (motor).
