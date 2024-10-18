@@ -80,6 +80,8 @@ typedef enum io_timer_channel_mode_t {
 	IOTimerChanMode_LED     = 7,
 	IOTimerChanMode_PPS     = 8,
 	IOTimerChanMode_Other   = 9,
+	IOTimerChanMode_DshotInverted = 10,
+	IOTimerChanMode_CaptureDMA = 11,
 	IOTimerChanModeSize
 } io_timer_channel_mode_t;
 
@@ -158,8 +160,12 @@ __EXPORT int io_timer_unallocate_channel(unsigned channel);
 __EXPORT int io_timer_get_channel_mode(unsigned channel);
 __EXPORT int io_timer_get_mode_channels(io_timer_channel_mode_t mode);
 __EXPORT extern void io_timer_trigger(unsigned channels_mask);
-__EXPORT void io_timer_update_dma_req(uint8_t timer, bool enable);
+__EXPORT void io_timer_enable_update_dma_req(uint8_t timer);
+__EXPORT void io_timer_disable_update_dma_req(uint8_t timer);
+__EXPORT void io_timer_enable_capture_dma_req(uint8_t timer);
+__EXPORT void io_timer_disable_capture_dma_req(uint8_t timer);
 
+__EXPORT int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_rate, unsigned channel);
 /**
  * Reserve a timer
  * @return 0 on success (if not used yet, or already set to the mode)

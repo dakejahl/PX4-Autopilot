@@ -135,7 +135,7 @@ static inline constexpr timer_io_channels_t initIOTimerChannel(const io_timers_t
 	return ret;
 }
 
-static inline constexpr io_timers_t initIOTimer(Timer::Timer timer, DMA dshot_dma = {})
+static inline constexpr io_timers_t initIOTimer(Timer::Timer timer, DMA dma = {})
 {
 	bool nuttx_config_timer_enabled = false;
 	io_timers_t ret{};
@@ -306,9 +306,10 @@ static inline constexpr io_timers_t initIOTimer(Timer::Timer timer, DMA dshot_dm
 	constexpr_assert(!nuttx_config_timer_enabled, "IO Timer requires NuttX timer config to be disabled (STM32_TIMx)");
 
 	// DShot
-	if (dshot_dma.index != DMA::Invalid) {
-		ret.dshot.dma_base = getDMABaseRegister(dshot_dma);
-		ret.dshot.dmamap = getTimerUpdateDMAMap(timer, dshot_dma);
+	if (dma.index != DMA::Invalid) {
+		ret.dshot.dma_base = getDMABaseRegister(dma);
+		ret.dshot.dma_map_up = getTimerUpdateDMAMap(timer, dma);
+		getTimerChannelDMAMap(timer, dma, ret.dshot.dma_map_ch);
 	}
 
 	return ret;
