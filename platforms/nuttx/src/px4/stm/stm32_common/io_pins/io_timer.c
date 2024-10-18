@@ -511,26 +511,26 @@ static inline void io_timer_set_oneshot_mode(unsigned timer)
 	rEGR(timer) = GTIM_EGR_UG;
 }
 
-void io_timer_update_dma_req(uint8_t timer, bool enable)
+void io_timer_enable_update_dma_req(uint8_t timer)
 {
-	if (enable) {
-		rDIER(timer) |= ATIM_DIER_UDE;
-
-	} else {
-		rDIER(timer) &= ~ATIM_DIER_UDE;
-	}
+	rDIER(timer) |= ATIM_DIER_UDE;
 }
 
-void io_timer_capture_update_dma_req(uint8_t timer, bool enable)
+void io_timer_disable_update_dma_req(uint8_t timer)
 {
-	if (enable) {
-		rDIER(timer) |= ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE;
-		rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
+	rDIER(timer) &= ~ATIM_DIER_UDE;
+}
 
-	} else {
-		rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
-		rDIER(timer) &= ~(ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE);
-	}
+void io_timer_enable_capture_dma_req(uint8_t timer)
+{
+	rDIER(timer) |= ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE;
+	rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
+}
+
+void io_timer_disable_capture_dma_req(uint8_t timer)
+{
+	rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
+	rDIER(timer) &= ~(ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE);
 }
 
 int io_timer_set_dshot_mode(uint8_t timer, unsigned dshot_pwm_freq, uint8_t dma_burst_length)
@@ -588,7 +588,7 @@ int io_timer_set_dshot_mode(uint8_t timer, unsigned dshot_pwm_freq, uint8_t dma_
 	return ret_val;
 }
 
-int io_timer_set_capture_mode(uint8_t timer, unsigned dshot_pwm_freq, unsigned channel)
+int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq, unsigned channel)
 {
 	rARR(timer)  = -1;
 	rEGR(timer)  = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;

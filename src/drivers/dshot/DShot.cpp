@@ -534,6 +534,8 @@ void DShot::Run()
 
 	if (_outputs_on != outputs_on) {
 		enable_dshot_outputs(outputs_on);
+		PX4_INFO("DSHOT OUTPUTS ENABLED");
+		px4_usleep(100'000);
 	}
 
 	if (_telemetry) {
