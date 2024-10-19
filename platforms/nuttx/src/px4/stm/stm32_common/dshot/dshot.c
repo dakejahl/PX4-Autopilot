@@ -104,6 +104,9 @@ static uint32_t read_fail_zero = 0;
 
 static int32_t jakechannelcounter[8] = { -7, -7, -7, -7, -7, -7, -7 , -7 };
 static uint32_t jakecounter = 0;
+static uint32_t jakedmaupallocated = 0;
+static uint32_t jakedmaupallocatedarray[MAX_TIMER_IO_CHANNELS] = {};
+
 
 // We need local permanent memory for indices, channels, and callbacks for each output
 static uint8_t timer_index_array[MAX_IO_TIMERS] = {};
@@ -262,6 +265,8 @@ void up_dshot_trigger(void)
 					PX4_INFO("DMA allocation for timer %u failed", timer_index);
 					return;
 				}
+
+				jakedmaupallocated++;
 			}
 
 			// Set timer in dshot mode
@@ -283,7 +288,10 @@ void up_dshot_trigger(void)
 
 			// Trigger DMA (DShot Outputs)
 			timer_index_array[timer_index] = timer_index;
+
+			// TODO: this is for sure screwing everything up
 			stm32_dmastart(dshot_handler[timer_index].dma_up_handle, _bidirectional ? dma_callback_capture_start : NULL, &timer_index_array[timer_index], false);
+			// stm32_dmastart(dshot_handler[timer_index].dma_up_handle, NULL, NULL, false);
 
 			// Enable DMA update request
 			io_timer_enable_update_dma_req(timer_index);
@@ -297,11 +305,11 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 
 	uint8_t timer_index = *((uint8_t*)arg);
 
-	// // Clear DMA UP configuration
+	// Clean DMA UP configuration
 	stm32_dmastop(handle);
 	stm32_dmafree(handle);
-
-	// NOTE: The dma_up_handle is now invalid
+	handle = NULL;
+	// dshot_handler[timer_index].dma_up_handle = NULL;
 
 	// Disable DMA capture request
 	io_timer_disable_capture_dma_req(timer_index);
@@ -312,16 +320,13 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
 		bool channel_enabled = _channels_init_mask & (1 << output_channel);
 
-		// if ((output_channel != 1) && (output_channel != 2) && (output_channel != 3)) {
-		// 	continue;
-		// }
-
 		if (is_this_timer && channel_enabled) {
 			uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
 			// Allocate DMA
 			if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
 				dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_ch[timer_channel_index]);
+				jakedmaupallocatedarray[output_channel]++;
 			}
 
 			// If DMA handler is valid, start DMA
@@ -371,6 +376,10 @@ static void dma_callback_capture_complete(DMA_HANDLE handle, uint8_t status, voi
 
 	stm32_dmastop(handle);
 	stm32_dmafree(handle);
+	handle = NULL;
+
+	// TODO: how do we set the handle to null?
+	// dshot_handler[timer_index].dma_ch_handle[timer_channel_index]
 
 	up_invalidate_dcache((uintptr_t)dshot_capture_buffer[output_channel],
 			 (uintptr_t)dshot_capture_buffer[output_channel] +
@@ -489,6 +498,10 @@ void up_bdshot_status(void)
 	int32_t* jc = jakechannelcounter;
 	PX4_INFO("ch0 %ld, ch1 %ld, ch2 %ld, ch3 %ld, ch4 %ld, ch5 %ld, ch6 %ld, ch7 %ld,", jc[0], jc[1], jc[2], jc[3], jc[4], jc[5], jc[6], jc[7]);
 	PX4_INFO("jakecounter %lu", jakecounter);
+	PX4_INFO("jakedmaupallocated %lu", jakedmaupallocated);
+	uint32_t* jca = jakedmaupallocatedarray;
+	PX4_INFO("alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld,", jca[0], jca[1], jca[2], jca[3], jca[4], jca[5], jca[6], jca[7]);
+
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)
