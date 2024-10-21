@@ -90,8 +90,12 @@ static uint32_t *dshot_output_buffer[MAX_IO_TIMERS] = {};
 static uint16_t dshot_capture_buffer[MAX_TIMER_IO_CHANNELS][32] px4_cache_aligned_data() = {};
 
 
-static void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg);
-static void dma_callback_capture_complete(DMA_HANDLE handle, uint8_t status, void *arg);
+static void dma_callback_capture_start_trampoline(DMA_HANDLE handle, uint8_t status, void *arg);
+static void dma_callback_capture_start(void *arg);
+
+static void dma_callback_capture_complete_trampoline(DMA_HANDLE handle, uint8_t status, void *arg);
+static void dma_callback_capture_complete(void *arg);
+
 
 static void process_capture_results(int8_t output_channel);
 
@@ -104,8 +108,17 @@ static uint32_t read_fail_zero = 0;
 
 static int32_t jakechannelcounter[8] = { -7, -7, -7, -7, -7, -7, -7 , -7 };
 static uint32_t jakecounter = 0;
+static uint32_t jakecounterearly = 0;
+
 static uint32_t jakedmaupallocated = 0;
 static uint32_t jakedmaupallocatedarray[MAX_TIMER_IO_CHANNELS] = {};
+
+static uint8_t dmastatus_dma_up[MAX_IO_TIMERS] = { [0 ... MAX_IO_TIMERS - 1] = 69 };
+static uint8_t dmastatus_dma_ch[MAX_TIMER_IO_CHANNELS] = { [0 ... MAX_TIMER_IO_CHANNELS - 1] = 69 };
+
+
+static struct hrt_call _dma_start_callback_call[MAX_IO_TIMERS];
+static struct hrt_call _dma_capture_callback_call[MAX_TIMER_IO_CHANNELS];
 
 
 // We need local permanent memory for indices, channels, and callbacks for each output
@@ -230,6 +243,8 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 // Kicks off a DMA transmit for each configured timer and the associated channels
 void up_dshot_trigger(void)
 {
+	jakecounterearly++;
+
 	// For bidirectional dshot we need to re-initialize the timers every time here.
 	// In normal mode, we just do it once.
 	if (_bidirectional) {
@@ -290,7 +305,7 @@ void up_dshot_trigger(void)
 			timer_index_array[timer_index] = timer_index;
 
 			// TODO: this is for sure screwing everything up
-			stm32_dmastart(dshot_handler[timer_index].dma_up_handle, _bidirectional ? dma_callback_capture_start : NULL, &timer_index_array[timer_index], false);
+			stm32_dmastart(dshot_handler[timer_index].dma_up_handle, _bidirectional ? dma_callback_capture_start_trampoline : NULL, &timer_index_array[timer_index], false);
 			// stm32_dmastart(dshot_handler[timer_index].dma_up_handle, NULL, NULL, false);
 
 			// Enable DMA update request
@@ -299,16 +314,29 @@ void up_dshot_trigger(void)
 	}
 }
 
-void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
+void dma_callback_capture_start_trampoline(DMA_HANDLE handle, uint8_t status, void *arg)
 {
-	(void)status;
-
+	// (void)status;
 	uint8_t timer_index = *((uint8_t*)arg);
 
+	dmastatus_dma_up[timer_index] = status;
+
+	hrt_call_after(&_dma_start_callback_call[timer_index], 1, dma_callback_capture_start, arg);
+}
+
+void dma_callback_capture_start(void *arg)
+{
+	uint8_t timer_index = *((uint8_t*)arg);
+
+	if (dshot_handler[timer_index].dma_up_handle != NULL) {
+		stm32_dmastop(dshot_handler[timer_index].dma_up_handle);
+		stm32_dmafree(dshot_handler[timer_index].dma_up_handle);
+		dshot_handler[timer_index].dma_up_handle = NULL;
+	}
+
 	// Clean DMA UP configuration
-	stm32_dmastop(handle);
-	stm32_dmafree(handle);
-	handle = NULL;
+	// stm32_dmastop(dshot_handler[timer_index].dma_up_handle);
+	// stm32_dmafree(dshot_handler[timer_index].dma_up_handle);
 	// dshot_handler[timer_index].dma_up_handle = NULL;
 
 	// Disable DMA capture request
@@ -316,6 +344,10 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 
 	// Allocate DMA for all channels on this timer
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
+
+		if (output_channel != 0) {
+			continue;
+		}
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
 		bool channel_enabled = _channels_init_mask & (1 << output_channel);
@@ -361,7 +393,7 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 
 			// Start DMA with callback if bidi dshot is enabled
 			output_channel_array[output_channel] = output_channel;
-			stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], dma_callback_capture_complete, &output_channel_array[output_channel], false);
+			stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], dma_callback_capture_complete_trampoline, &output_channel_array[output_channel], false);
 		}
 	}
 
@@ -369,17 +401,29 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 	io_timer_enable_capture_dma_req(timer_index);
 }
 
-static void dma_callback_capture_complete(DMA_HANDLE handle, uint8_t status, void *arg)
+static void dma_callback_capture_complete_trampoline(DMA_HANDLE handle, uint8_t status, void *arg)
+{
+	// (void)status;
+	uint8_t output_channel = *((uint8_t*)arg);
+
+	dmastatus_dma_ch[output_channel] = status;
+
+	hrt_call_after(&_dma_capture_callback_call[output_channel], 1, dma_callback_capture_complete, arg);
+}
+
+static void dma_callback_capture_complete(void *arg)
 {
 	// TODO: capture complete callback firing too early? Data is zero...
 	uint8_t output_channel = *((uint8_t*)arg);
 
-	stm32_dmastop(handle);
-	stm32_dmafree(handle);
-	handle = NULL;
+	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
+	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
-	// TODO: how do we set the handle to null?
-	// dshot_handler[timer_index].dma_ch_handle[timer_channel_index]
+	if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
+		stm32_dmastop(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
+		stm32_dmafree(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
+		dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = NULL;
+	}
 
 	up_invalidate_dcache((uintptr_t)dshot_capture_buffer[output_channel],
 			 (uintptr_t)dshot_capture_buffer[output_channel] +
@@ -498,10 +542,15 @@ void up_bdshot_status(void)
 	int32_t* jc = jakechannelcounter;
 	PX4_INFO("ch0 %ld, ch1 %ld, ch2 %ld, ch3 %ld, ch4 %ld, ch5 %ld, ch6 %ld, ch7 %ld,", jc[0], jc[1], jc[2], jc[3], jc[4], jc[5], jc[6], jc[7]);
 	PX4_INFO("jakecounter %lu", jakecounter);
+	PX4_INFO("jakecounterearly %lu", jakecounterearly);
 	PX4_INFO("jakedmaupallocated %lu", jakedmaupallocated);
 	uint32_t* jca = jakedmaupallocatedarray;
 	PX4_INFO("alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld,", jca[0], jca[1], jca[2], jca[3], jca[4], jca[5], jca[6], jca[7]);
 
+	uint8_t* stup = dmastatus_dma_up;
+	PX4_INFO("st0 %u, st1 %u, st2 %u", stup[0], stup[1], stup[2]);
+	uint8_t* st = dmastatus_dma_ch;
+	PX4_INFO("st0 %u, st1 %u, st2 %u, st3 %u, st4 %u, st5 %u, st6 %u, st7 %u,", st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)
