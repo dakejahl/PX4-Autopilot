@@ -100,7 +100,12 @@ static void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *
 
 static void dma_callback_capture_complete(void *arg);
 
-// static void dma_callback_capture_complete_timeout(void *arg);
+static void capture_complete_callback_tim0_out1(void *arg);
+static void capture_complete_callback_tim0_out2(void *arg);
+static void capture_complete_callback_tim0_out3(void *arg);
+static void capture_complete_callback_tim0_out4(void *arg);
+
+// static void capture_complete_callback_timeout(void *arg);
 
 static void process_capture_results(int8_t output_channel);
 
@@ -114,20 +119,25 @@ static uint32_t read_fail_zero = 0;
 
 static struct hrt_call _dma_capture_callback_call[MAX_TIMER_IO_CHANNELS];
 
+typedef void (*hrt_callback_t)(void *arg);
+static hrt_callback_t _cc_callbacks[4] = {
+    capture_complete_callback_tim0_out1,
+    capture_complete_callback_tim0_out2,
+    capture_complete_callback_tim0_out3,
+    capture_complete_callback_tim0_out4
+};
+
 // begin debug variables
-static int32_t capturecompletechannel[8] = { -7, -7, -7, -7, -7, -7, -7 , -7 };
+static uint32_t capturecompletechannel[8] = {};
 static uint32_t dmaupallocatedcount = 0;
 static uint32_t dmaupdeallocatedcount = 0;
 static uint32_t dmaupallocatedcountarray[MAX_TIMER_IO_CHANNELS] = {};
-static uint32_t dmanotallocated = 0;
 
 static uint32_t cycles = 0;
 static uint32_t interruptcounter = 0;
 static uint8_t dmastatus_dma_up[MAX_IO_TIMERS] = { [0 ... MAX_IO_TIMERS - 1] = 69 };
-static uint8_t dmastatus_dma_ch[MAX_TIMER_IO_CHANNELS] = { [0 ... MAX_TIMER_IO_CHANNELS - 1] = 69 };
 
 static uint32_t capturecompletecounter = 0;
-static uint32_t capturecompletetimeout[MAX_TIMER_IO_CHANNELS] = {};
 
 // end debug variables
 
@@ -273,7 +283,6 @@ void up_dshot_trigger()
 			// io_timer_unallocate_channel(output_channel);
 			// io_timer_channel_init(output_channel, IOTimerChanMode_DshotInverted, NULL, NULL);
 
-
 	if (_bidirectional) {
 		// For each channel, bidirectional dshot needs to initialize each timer every time
 		for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
@@ -303,21 +312,7 @@ void up_dshot_trigger()
 					return;
 				}
 			}
-
-
-			// io_timer_capture_dma_req(timer_index, false);
 		}
-
-		// For each timer, bidirectional dshot needs to initialize DMA UP each time
-		// for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
-		// 	if (_timers_init_mask & (1 << timer_index)) {
-		// 		if (dshot_handler[timer_index].dma_up_handle != NULL) {
-		// 			stm32_dmastop(dshot_handler[timer_index].dma_up_handle);
-		// 			stm32_dmafree(dshot_handler[timer_index].dma_up_handle);
-		// 			dshot_handler[timer_index].dma_up_handle = NULL;
-		// 		}
-		// 	}
-		// }
 	}
 
 	// Enable all timers configured as dshot (weird way of doing this...)
@@ -401,7 +396,7 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 	// Allocate DMA for all channels on this timer
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
-		// if (output_channel != 0) {
+		// if (output_channel != 3) {
 		// 	continue;
 		// }
 
@@ -415,8 +410,6 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 			if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
 				dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_ch[timer_channel_index]);
 				dmaupallocatedcountarray[output_channel]++;
-			} else {
-				dmanotallocated++;
 			}
 
 			// If DMA handler is valid, start DMA
@@ -451,16 +444,14 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 
 			// Start DMA with callback if bidi dshot is enabled
 			output_channel_array[output_channel] = output_channel;
-			// stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], dma_callback_capture_complete, &output_channel_array[output_channel], false);
 
-
-			// NOTE: we can't use DMA callback since GCR encoding means the number of pulses in the pulse train (eRPM frame)
+			// NOTE: we can't use DMA callback since GCR encoding creates a variable length pulse train.
 			// is variable. The number of pulses (which are decoded into uint16_t) is variable and depends on the frame.
 			// Instead we must use a timer callback since dshot frames have fixed timings.
 			stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], NULL, NULL, false);
 
-			// It takes ~50us, we we'll wait 75us
-			hrt_call_after(&_dma_capture_callback_call[output_channel], 75, dma_callback_capture_complete, &output_channel_array[output_channel]);
+			// It takes ~50us, we we'll wait 60us
+			hrt_call_after(&_dma_capture_callback_call[output_channel], 60, _cc_callbacks[output_channel], &output_channel_array[output_channel]);
 
 			if (output_channel == 0) {
 				px4_arch_gpiowrite(GPIO_FMU_CH8, true);
@@ -472,7 +463,7 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 	io_timer_capture_dma_req(timer_index, true);
 }
 
-// static void dma_callback_capture_complete_timeout(void *arg)
+// static void capture_complete_callback_timeout(void *arg)
 // {
 // 	uint8_t output_channel = *((uint8_t*)arg);
 
@@ -495,19 +486,20 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 // 	io_timer_channel_init(output_channel, IOTimerChanMode_DshotInverted, NULL, NULL);
 // }
 
-static void dma_callback_capture_complete(void *arg)
+
+
+// TODO: use a single callback for processing data from all 4 channels!!!
+// - iterate over all output_channels
+
+static void capture_complete(uint8_t output_channel)
 {
-	irqstate_t flags = px4_enter_critical_section();
-
-	uint8_t output_channel = *((uint8_t*)arg);
-
 	capturecompletecounter++;
 
 	// TODO: capture complete callback firing too early? Data is zero...
 	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
 	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
-	capturecompletechannel[output_channel] = output_channel;
+	capturecompletechannel[output_channel]++;
 
 	if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
 		stm32_dmastop(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
@@ -528,9 +520,32 @@ static void dma_callback_capture_complete(void *arg)
 	if (output_channel == 0) {
 		px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 	}
-
-	px4_leave_critical_section(flags);
 }
+
+static void capture_complete_callback_tim0_out1(void *arg)
+{
+	uint8_t output_channel = *((uint8_t*)arg);
+	capture_complete(output_channel);
+}
+
+static void capture_complete_callback_tim0_out2(void *arg)
+{
+	uint8_t output_channel = *((uint8_t*)arg);
+	capture_complete(output_channel);
+}
+
+static void capture_complete_callback_tim0_out3(void *arg)
+{
+	uint8_t output_channel = *((uint8_t*)arg);
+	capture_complete(output_channel);
+}
+
+static void capture_complete_callback_tim0_out4(void *arg)
+{
+	uint8_t output_channel = *((uint8_t*)arg);
+	capture_complete(output_channel);
+}
+
 
 // static void dma_callback_capture_complete(DMA_HANDLE handle, uint8_t status, void *arg)
 // {
@@ -674,29 +689,22 @@ void up_bdshot_status(void)
 
 	// PX4_INFO("ch0 %ld, ch1 %ld, ch2 %ld, ch3 %ld,", _erpms[0], _erpms[1], _erpms[2], _erpms[3]);
 
-	int32_t* jc = capturecompletechannel;
-	PX4_INFO("ch0 %ld, ch1 %ld, ch2 %ld, ch3 %ld, ch4 %ld, ch5 %ld, ch6 %ld, ch7 %ld,", jc[0], jc[1], jc[2], jc[3], jc[4], jc[5], jc[6], jc[7]);
+	PX4_INFO("cycles %lu", cycles);
+	PX4_INFO("interruptcounter %lu", interruptcounter);
+	PX4_INFO("capturecompletecounter %lu", capturecompletecounter);
+
+	uint32_t* jc = capturecompletechannel;
+	PX4_INFO("ch0 %lu, ch1 %lu, ch2 %lu, ch3 %lu, ch4 %lu, ch5 %lu, ch6 %lu, ch7 %lu,", jc[0], jc[1], jc[2], jc[3], jc[4], jc[5], jc[6], jc[7]);
 
 	PX4_INFO("dmaupallocatedcount %lu", dmaupallocatedcount);
 	PX4_INFO("dmaupdeallocatedcount %lu", dmaupdeallocatedcount);
-	PX4_INFO("dmanotallocated %lu", dmanotallocated);
-
-	PX4_INFO("cycles %lu", cycles);
-	PX4_INFO("interruptcounter %lu", interruptcounter);
 
 	uint32_t* jca = dmaupallocatedcountarray;
 	PX4_INFO("alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld, alloc %ld,", jca[0], jca[1], jca[2], jca[3], jca[4], jca[5], jca[6], jca[7]);
 
 	uint8_t* stup = dmastatus_dma_up;
 	PX4_INFO("st0 %u, st1 %u, st2 %u", stup[0], stup[1], stup[2]);
-	uint8_t* st = dmastatus_dma_ch;
-	PX4_INFO("st0 %u, st1 %u, st2 %u, st3 %u, st4 %u, st5 %u, st6 %u, st7 %u,", st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
 
-
-	PX4_INFO("capturecompletecounter %lu", capturecompletecounter);
-
-	uint32_t* ccto = capturecompletetimeout;
-	PX4_INFO("ccto0 %lu, ccto1 %lu, ccto2 %lu, ccto3 %lu, ccto4 %lu, ccto5 %lu, ccto6 %lu, ccto7 %lu,", ccto[0], ccto[1], ccto[2], ccto[3], ccto[4], ccto[5], ccto[6], ccto[7]);
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)
