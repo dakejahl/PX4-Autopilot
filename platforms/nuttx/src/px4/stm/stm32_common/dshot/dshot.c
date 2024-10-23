@@ -265,24 +265,6 @@ void up_dshot_trigger()
 {
 	cycles++;
 
-			// uint8_t timer_index = timer_io_channels[output_channel].timer_index;
-			// uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
-
-			// if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
-			// 	stm32_dmastop(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
-			// 	stm32_dmafree(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
-			// 	dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = NULL;
-			// }
-
-			// up_invalidate_dcache((uintptr_t)dshot_capture_buffer[output_channel],
-			// 		 (uintptr_t)dshot_capture_buffer[output_channel] +
-			// 		 sizeof(dshot_capture_buffer[output_channel]));
-
-
-			// // TODO: do we need to unallocate / reinit timers here? It's done at the start..
-			// io_timer_unallocate_channel(output_channel);
-			// io_timer_channel_init(output_channel, IOTimerChanMode_DshotInverted, NULL, NULL);
-
 	if (_bidirectional) {
 		// For each channel, bidirectional dshot needs to initialize each timer every time
 		for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
@@ -356,7 +338,6 @@ void up_dshot_trigger()
 
 			// Trigger DMA (DShot Outputs)
 			timer_index_array[timer_index] = timer_index;
-
 
 			if (_bidirectional) {
 				stm32_dmastart(dshot_handler[timer_index].dma_up_handle, dma_callback_capture_start, &timer_index_array[timer_index], false);
@@ -463,34 +444,6 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 	io_timer_capture_dma_req(timer_index, true);
 }
 
-// static void capture_complete_callback_timeout(void *arg)
-// {
-// 	uint8_t output_channel = *((uint8_t*)arg);
-
-// 	capturecompletetimeout[output_channel]++;
-
-// 	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
-// 	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
-
-// 	if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
-// 		stm32_dmastop(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
-// 		stm32_dmafree(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
-// 		dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = NULL;
-// 	}
-
-// 	up_invalidate_dcache((uintptr_t)dshot_capture_buffer[output_channel],
-// 			 (uintptr_t)dshot_capture_buffer[output_channel] +
-// 			 sizeof(dshot_capture_buffer[output_channel]));
-
-// 	io_timer_unallocate_channel(output_channel);
-// 	io_timer_channel_init(output_channel, IOTimerChanMode_DshotInverted, NULL, NULL);
-// }
-
-
-
-// TODO: use a single callback for processing data from all 4 channels!!!
-// - iterate over all output_channels
-
 static void capture_complete(uint8_t output_channel)
 {
 	capturecompletecounter++;
@@ -545,47 +498,6 @@ static void capture_complete_callback_tim0_out4(void *arg)
 	uint8_t output_channel = *((uint8_t*)arg);
 	capture_complete(output_channel);
 }
-
-
-// static void dma_callback_capture_complete(DMA_HANDLE handle, uint8_t status, void *arg)
-// {
-// 	uint8_t output_channel = *((uint8_t*)arg);
-
-// 	// cancel watchdog
-// 	hrt_cancel(&_dma_capture_callback_call[output_channel]);
-
-// 	capturecompletecounter++;
-
-// 	if (output_channel == 0) {
-// 		px4_arch_gpiowrite(GPIO_FMU_CH8, false);
-// 	}
-
-// 	dmastatus_dma_ch[output_channel] = status;
-
-// 	// TODO: capture complete callback firing too early? Data is zero...
-// 	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
-// 	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
-
-// 	capturecompletechannel[output_channel] = output_channel;
-
-// 	if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
-// 		stm32_dmastop(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
-// 		stm32_dmafree(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
-// 		dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = NULL;
-// 	}
-
-// 	up_invalidate_dcache((uintptr_t)dshot_capture_buffer[output_channel],
-// 			 (uintptr_t)dshot_capture_buffer[output_channel] +
-// 			 sizeof(dshot_capture_buffer[output_channel]));
-
-// 	process_capture_results(output_channel);
-
-// 	// TODO: do we need to unallocate / reinit timers here? It's done at the start..
-// 	io_timer_unallocate_channel(output_channel);
-// 	io_timer_channel_init(output_channel, IOTimerChanMode_DshotInverted, NULL, NULL);
-
-// 	px4_arch_gpiowrite(GPIO_FMU_CH8, true);
-// }
 
 void process_capture_results(int8_t output_channel)
 {
