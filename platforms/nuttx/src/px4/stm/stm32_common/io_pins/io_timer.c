@@ -215,8 +215,8 @@ static int io_timer_handler(uint16_t timer_index)
 
 				if (channel_handlers[chan_index].callback) {
 					channel_handlers[chan_index].callback(channel_handlers[chan_index].context, tmr,
-										  chan_index, &timer_io_channels[chan_index],
-										  now, count);
+									      chan_index, &timer_io_channels[chan_index],
+									      now, count);
 				}
 			}
 
@@ -355,8 +355,8 @@ int io_timer_validate_channel_index(unsigned channel)
 		/* test timer for validity */
 
 		if ((io_timers[timer].base != 0) &&
-			(timer_io_channels[channel].gpio_out != 0) &&
-			(timer_io_channels[channel].gpio_in != 0)) {
+		    (timer_io_channels[channel].gpio_out != 0) &&
+		    (timer_io_channels[channel].gpio_in != 0)) {
 			rv = 0;
 		}
 	}
@@ -372,10 +372,10 @@ uint32_t io_timer_channel_get_gpio_output(unsigned channel)
 
 #ifdef CONFIG_STM32_STM32F10XX
 	return (timer_io_channels[channel].gpio_out & (GPIO_PORT_MASK | GPIO_PIN_MASK)) |
-		   (GPIO_OUTPUT | GPIO_CNF_OUTPP | GPIO_MODE_50MHz | GPIO_OUTPUT_CLEAR);
+	       (GPIO_OUTPUT | GPIO_CNF_OUTPP | GPIO_MODE_50MHz | GPIO_OUTPUT_CLEAR);
 #else
 	return (timer_io_channels[channel].gpio_out & (GPIO_PORT_MASK | GPIO_PIN_MASK)) |
-		   (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | GPIO_OUTPUT_CLEAR);
+	       (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | GPIO_OUTPUT_CLEAR);
 #endif
 }
 
@@ -525,6 +525,7 @@ void io_timer_capture_dma_req(uint8_t timer, bool enable)
 	if (enable) {
 		rDIER(timer) |= ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE;
 		rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
+
 	} else {
 		rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
 		rDIER(timer) &= ~(ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE);
@@ -692,9 +693,9 @@ int io_timer_init_timer(unsigned timer, io_timer_channel_mode_t mode)
 		rDCR(timer) = 0;
 
 		if ((io_timers[timer].base == STM32_TIM1_BASE)
-			|| (io_timers[timer].base == STM32_TIM8_BASE)
+		    || (io_timers[timer].base == STM32_TIM8_BASE)
 #ifdef STM32_TIM15_BASE
-			|| (io_timers[timer].base == STM32_TIM15_BASE)
+		    || (io_timers[timer].base == STM32_TIM15_BASE)
 #endif
 		   ) {
 
@@ -763,7 +764,7 @@ int io_timer_set_pwm_rate(unsigned timer, unsigned rate)
 	/* Get the channel bits that belong to the timer and are in PWM or OneShot mode */
 
 	uint32_t channels = get_timer_channels(timer) & (io_timer_get_mode_channels(IOTimerChanMode_OneShot) |
-				io_timer_get_mode_channels(IOTimerChanMode_PWMOut));
+			    io_timer_get_mode_channels(IOTimerChanMode_PWMOut));
 
 	/* Request to use OneShot ?*/
 
@@ -999,11 +1000,11 @@ int io_timer_set_enable(bool state, io_timer_channel_mode_t mode, io_timer_chann
 			action_cache[timer].dier_setbits   |= dier_bit << shifts;
 
 			if ((state &&
-				 (mode == IOTimerChanMode_PWMOut ||
-				  mode == IOTimerChanMode_OneShot ||
-				  mode == IOTimerChanMode_Dshot ||
-				  mode == IOTimerChanMode_DshotInverted ||
-				  mode == IOTimerChanMode_Trigger))) {
+			     (mode == IOTimerChanMode_PWMOut ||
+			      mode == IOTimerChanMode_OneShot ||
+			      mode == IOTimerChanMode_Dshot ||
+			      mode == IOTimerChanMode_DshotInverted ||
+			      mode == IOTimerChanMode_Trigger))) {
 				action_cache[timer].gpio[shifts] = timer_io_channels[chan_index].gpio_out;
 			}
 		}
@@ -1061,10 +1062,10 @@ int io_timer_set_ccr(unsigned channel, uint16_t value)
 
 	if (rv == 0) {
 		if ((mode != IOTimerChanMode_PWMOut) &&
-			(mode != IOTimerChanMode_OneShot) &&
-			(mode != IOTimerChanMode_Dshot) &&
-			(mode != IOTimerChanMode_DshotInverted) &&
-			(mode != IOTimerChanMode_Trigger)) {
+		    (mode != IOTimerChanMode_OneShot) &&
+		    (mode != IOTimerChanMode_Dshot) &&
+		    (mode != IOTimerChanMode_DshotInverted) &&
+		    (mode != IOTimerChanMode_Trigger)) {
 
 			rv = -EIO;
 
@@ -1087,8 +1088,8 @@ uint16_t io_channel_get_ccr(unsigned channel)
 		int mode = io_timer_get_channel_mode(channel);
 
 		if ((mode == IOTimerChanMode_PWMOut) ||
-			(mode == IOTimerChanMode_OneShot) ||
-			(mode == IOTimerChanMode_Trigger)) {
+		    (mode == IOTimerChanMode_OneShot) ||
+		    (mode == IOTimerChanMode_Trigger)) {
 			value = REG(channels_timer(channel), timer_io_channels[channel].ccr_offset);
 		}
 	}
