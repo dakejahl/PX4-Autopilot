@@ -587,49 +587,41 @@ int io_timer_set_dshot_mode(uint8_t timer, unsigned dshot_pwm_freq, uint8_t dma_
 	return ret_val;
 }
 
-int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq, unsigned channel)
+// TODO: pass channel_mask as arg to choose which channels to trigger CC
+int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq)
 {
+	// Timer Autor Reload Register -- why -1?
 	rARR(timer)  = -1;
+
+	// Timer Event Generation Register -- update generation, captcomp 1 - 4
 	rEGR(timer)  = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;
 
+	// Timer Prescalar
 	rPSC(timer) = ((int)(io_timers[timer].clock_freq / (dshot_pwm_freq * 5 / 4)) / DSHOT_MOTOR_PWM_BIT_WIDTH) - 1;
 
-	// TODO: hardcoded for v6x?
-	switch (timer_io_channels[channel].timer_channel) {
-	case 1:
-		// We need to disable CC1E before we can switch to CC1S to input
-		rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC1P | GTIM_CCER_CC1NP);
-		rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1  << GTIM_CCMR1_CC1S_SHIFT);
-		rCR1(timer) |= GTIM_CR1_CEN;
-		rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC1P | GTIM_CCER_CC1NP);
-		// We need to pass the offset of the register to read by DMA divided by 4.
-		rDCR(timer)  = 0xD; // 0x34 / 4, offset for CC1
-		break;
+	// 4 transfers, CCR1 to CCR4
+	rDCR(timer)  = TIM_DMABASE_CCR1 | TIM_DMABURSTLENGTH_4TRANSFERS;
+	// rDCR(timer)  = TIM_DMABASE_CCR1 | TIM_DMABURSTLENGTH_1TRANSFER;
+	// rDCR(timer)  = TIM_DMABASE_CCR1 | TIM_DMABURSTLENGTH_2TRANSFERS;
 
-	case 2:
-		rCCER(timer) &= ~(GTIM_CCER_CC2E | GTIM_CCER_CC2P | GTIM_CCER_CC2NP);
-		rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1  << GTIM_CCMR1_CC2S_SHIFT);
-		rCR1(timer) |= GTIM_CR1_CEN;
-		rCCER(timer) |= (GTIM_CCER_CC2E | GTIM_CCER_CC2P | GTIM_CCER_CC2NP);
-		rDCR(timer)  = 0xE; // 0x38 / 4, offset for CC2
-		break;
 
-	case 3:
-		rCCER(timer) &= ~(GTIM_CCER_CC3E | GTIM_CCER_CC3P | GTIM_CCER_CC3NP);
-		rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1  << GTIM_CCMR2_CC3S_SHIFT);
-		rCR1(timer) |= GTIM_CR1_CEN;
-		rCCER(timer) |= (GTIM_CCER_CC3E | GTIM_CCER_CC3P | GTIM_CCER_CC3NP);
-		rDCR(timer)  = 0xF; // 0x3C / 4, offset for CC3
-		break;
+	rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
+	rCCER(timer) &= ~(GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
+	rCCER(timer) &= ~(GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
 
-	case 4:
-		rCCER(timer) &= ~(GTIM_CCER_CC4E | GTIM_CCER_CC4P | GTIM_CCER_CC4NP);
-		rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1  << GTIM_CCMR2_CC4S_SHIFT);
-		rCR1(timer) |= GTIM_CR1_CEN;
-		rCCER(timer) |= (GTIM_CCER_CC4E | GTIM_CCER_CC4P | GTIM_CCER_CC4NP);
-		rDCR(timer)  = 0x10; // 0x40 / 4, offset for CC4
-		break;
-	}
+    // Set all channels to input capture mode
+    rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);  // CC1 input
+    rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);  // CC2 input
+    rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);  // CC3 input
+    rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);  // CC4 input
+
+    // Enable channels
+    rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
+    rCCER(timer) |= (GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
+    rCCER(timer) |= (GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
+
+	// Enable the timer
+	rCR1(timer) |= GTIM_CR1_CEN;
 
 	return 0;
 }

@@ -163,7 +163,8 @@ __EXPORT extern void io_timer_trigger(unsigned channels_mask);
 __EXPORT void io_timer_update_dma_req(uint8_t timer, bool enable);
 __EXPORT void io_timer_capture_dma_req(uint8_t timer, bool enable);
 
-__EXPORT int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_rate, unsigned channel);
+__EXPORT int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_rate);
+
 /**
  * Reserve a timer
  * @return 0 on success (if not used yet, or already set to the mode)

@@ -8,14 +8,14 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *	notice, this list of conditions and the following disclaimer.
+ *  notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *	notice, this list of conditions and the following disclaimer in
- *	the documentation and/or other materials provided with the
- *	distribution.
+ *  notice, this list of conditions and the following disclaimer in
+ *  the documentation and/or other materials provided with the
+ *  distribution.
  * 3. Neither the name PX4 nor the names of its contributors may be
- *	used to endorse or promote products derived from this software
- *	without specific prior written permission.
+ *  used to endorse or promote products derived from this software
+ *  without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -49,22 +49,21 @@
 #include <stdio.h>
 #include <drivers/drv_input_capture.h>
 
-#define MOTOR_PWM_BIT_1				14u
-#define MOTOR_PWM_BIT_0				7u
-#define ONE_MOTOR_DATA_SIZE			16u
-// #define CHANNEL_OUTPUT_BUFF_SIZE	17u
-#define CHANNEL_OUTPUT_BUFF_SIZE	18u
-// #define CHANNEL_OUTPUT_BUFF_SIZE	28u
+#define MOTOR_PWM_BIT_1             14u
+#define MOTOR_PWM_BIT_0             7u
+#define ONE_MOTOR_DATA_SIZE         16u
+#define CHANNEL_OUTPUT_BUFF_SIZE    18u
+
+// #define CHANNEL_CAPTURE_BUFF_SIZE   16u
+#define CHANNEL_CAPTURE_BUFF_SIZE   32u
 
 
-#define CHANNEL_CAPTURE_BUFF_SIZE	16u
 
-
-#define DSHOT_THROTTLE_POSITION		5u
-#define DSHOT_TELEMETRY_POSITION	4u
-#define NIBBLES_SIZE 				4u
-#define DSHOT_NUMBER_OF_NIBBLES		3u
-#define MAX_NUM_CHANNELS_PER_TIMER	4u // CCR1-CCR4
+#define DSHOT_THROTTLE_POSITION     5u
+#define DSHOT_TELEMETRY_POSITION    4u
+#define NIBBLES_SIZE                4u
+#define DSHOT_NUMBER_OF_NIBBLES     3u
+#define MAX_NUM_CHANNELS_PER_TIMER  4u // CCR1-CCR4
 
 #define DSHOT_DMA_SCR (DMA_SCR_PRIHI | DMA_SCR_MSIZE_32BITS | DMA_SCR_PSIZE_32BITS | DMA_SCR_MINC | \
 			   DMA_SCR_DIR_M2P | DMA_SCR_TCIE | DMA_SCR_TEIE | DMA_SCR_DMEIE)
@@ -75,8 +74,8 @@
 					 DMA_SCR_DIR_P2M | DMA_SCR_TCIE | DMA_SCR_TEIE | DMA_SCR_DMEIE)
 
 typedef struct dshot_handler_t {
-	DMA_HANDLE		dma_up_handle; // DMA stream for DMA update
-	DMA_HANDLE		dma_ch_handle[4]; // DMA streams for bidi capture compare
+	DMA_HANDLE      dma_up_handle; // DMA stream for DMA update
+	DMA_HANDLE      dma_ch_handle[4]; // DMA streams for bidi capture compare
 } dshot_handler_t;
 
 #if defined(CONFIG_ARMV7M_DCACHE)
@@ -85,19 +84,16 @@ typedef struct dshot_handler_t {
 #else
 #define DMA_ALIGN_UP(n) (n)
 #endif
-#define DSHOT_OUTPUT_BUFFER_SIZE(channel_count) (DMA_ALIGN_UP(sizeof(uint32_t)*CHANNEL_OUTPUT_BUFF_SIZE*channel_count))
+#define DSHOT_OUTPUT_BUFFER_SIZE(channel_count) (DMA_ALIGN_UP(sizeof(uint32_t) * CHANNEL_OUTPUT_BUFF_SIZE * channel_count))
+#define DSHOT_CAPTURE_BUFFER_SIZE(channel_count) (DMA_ALIGN_UP(sizeof(uint16_t)* CHANNEL_CAPTURE_BUFF_SIZE * channel_count))
 
 static dshot_handler_t dshot_handler[MAX_IO_TIMERS] = {};
+
 static uint8_t dshot_burst_buffer_array[MAX_IO_TIMERS * DSHOT_OUTPUT_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER)]
 px4_cache_aligned_data() = {};
 static uint32_t *dshot_output_buffer[MAX_IO_TIMERS] = {};
 
-// static uint16_t dshot_capture_buffer[32] px4_cache_aligned_data() = {};
-// static uint16_t dshot_capture_buffer[MAX_TIMER_IO_CHANNELS][32] px4_cache_aligned_data() = {};
-// static uint16_t dshot_capture_buffer[MAX_TIMER_IO_CHANNELS][CHANNEL_CAPTURE_BUFF_SIZE] px4_cache_aligned_data() = {};
-static uint16_t dshot_capture_buffer[MAX_TIMER_IO_CHANNELS][32] px4_cache_aligned_data() = {};
-
-
+static uint16_t dshot_capture_buffer[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER][CHANNEL_CAPTURE_BUFF_SIZE] px4_cache_aligned_data() = {};
 
 static void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg);
 
@@ -105,12 +101,10 @@ static void capture_complete_callback_tim0(void *arg);
 static void capture_complete_callback_tim1(void *arg);
 static void capture_complete_callback_tim2(void *arg);
 
-// static void capture_complete_callback_timeout(void *arg);
 
-static void process_capture_results(int8_t output_channel);
+static void process_capture_results(uint8_t timer_index);
 
-static unsigned calculate_period(uint8_t output_channel);
-// static unsigned calculate_period_from_erpm_frame(uint16_t* buffer, size_t buffer_size);
+static unsigned calculate_period(uint8_t timer_index, uint8_t channel_index);
 
 // decoding status
 static uint32_t read_ok = 0;
@@ -122,9 +116,9 @@ static struct hrt_call _dma_capture_callback_call[MAX_TIMER_IO_CHANNELS];
 
 typedef void (*hrt_callback_t)(void *arg);
 static hrt_callback_t _cc_callbacks[3] = {
-    capture_complete_callback_tim0,
-    capture_complete_callback_tim1,
-    capture_complete_callback_tim2,
+	capture_complete_callback_tim0,
+	capture_complete_callback_tim1,
+	capture_complete_callback_tim2,
 };
 
 // begin debug variables
@@ -144,7 +138,7 @@ static uint32_t _dshot_frequency = 0;
 static int _timers_init_mask = 0;
 static int _channels_init_mask = 0;
 
-static int32_t _erpms[MAX_TIMER_IO_CHANNELS] = {};
+static int32_t _erpms[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
 
 int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bidirectional_dshot)
 {
@@ -228,7 +222,7 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 	}
 
 	// TODO: what are we doing here and why can't this be defined at compile time?
-	unsigned buffer_offset = 0;
+	unsigned output_buffer_offset = 0;
 
 	for (unsigned timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
 		if (_timers_init_mask & (1 << timer_index)) {
@@ -239,12 +233,13 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 			// we know the uint8_t* cast to uint32_t* is fine, since we're aligned to cache line size
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
-			dshot_output_buffer[timer_index] = (uint32_t *) &dshot_burst_buffer_array[buffer_offset];
+			dshot_output_buffer[timer_index] = (uint32_t *) &dshot_burst_buffer_array[output_buffer_offset];
+
 #pragma GCC diagnostic pop
 			uint32_t channel_count = io_timers_channel_mapping.element[timer_index].channel_count_including_gaps;
-			buffer_offset += DSHOT_OUTPUT_BUFFER_SIZE(channel_count);
+			output_buffer_offset += DSHOT_OUTPUT_BUFFER_SIZE(channel_count);
 
-			if (buffer_offset > sizeof(dshot_burst_buffer_array)) {
+			if (output_buffer_offset > sizeof(dshot_burst_buffer_array)) {
 				return -EINVAL; // something is wrong with the board configuration or some other logic
 			}
 		}
@@ -350,9 +345,9 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
 		bool channel_enabled = _channels_init_mask & (1 << output_channel);
+		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
 		if (is_this_timer && channel_enabled) {
-			uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
 			// Allocate DMA
 			if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
@@ -366,40 +361,47 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 			}
 
 			// Flush cache so DMA sees the data
-			memset(dshot_capture_buffer[output_channel], 0, sizeof(dshot_capture_buffer[output_channel]));
-			// up_clean_dcache((uintptr_t) dshot_capture_buffer[output_channel],
-			// 		(uintptr_t) dshot_capture_buffer[output_channel] +
-			// 		sizeof(dshot_capture_buffer[output_channel]));
+			memset(dshot_capture_buffer[timer_index][timer_channel_index], 0, sizeof(dshot_capture_buffer[timer_index][timer_channel_index]));
 
 			// Setup DMA for this channel
 			px4_stm32_dmasetup(dshot_handler[timer_index].dma_ch_handle[timer_channel_index],
 					   io_timers[timer_index].base + STM32_GTIM_DMAR_OFFSET, // DMA address for burst mode (16-bit, TIM2-5 only)
-					   (uint32_t) dshot_capture_buffer[output_channel],
-					   sizeof(dshot_capture_buffer[output_channel]),
+					   (uint32_t) dshot_capture_buffer[timer_index][timer_channel_index],
+					   // sizeof(dshot_capture_buffer[timer_index][timer_channel_index]),
+					   32, // number of transfer (each transfer is 16bits, we have 16 32bit values so 32 16 bit transers)
 					   DSHOT_BIDIRECTIONAL_DMA_SCR);
-
-
-			///////////////////////////////////
-			// THIS IS IT!!! This function causes the IO to idle FLOAT, when they should idle HIGH
-			io_timer_set_dshot_capture_mode(timer_index, _dshot_frequency, output_channel);
-			///////////////////////////////////
-
-			// NOTE: we can't use DMA callback since GCR encoding creates a variable length pulse train.
-			// Instead we must use a timer callback since we can rely on dshot frame fixed timing.
-			stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], NULL, NULL, false);
 		}
 	}
 
-	// It takes ~50us, we we'll wait 60us
-	hrt_call_after(&_dma_capture_callback_call[timer_index], 100, _cc_callbacks[timer_index], arg);
+	up_clean_dcache((uintptr_t) dshot_capture_buffer[timer_index],
+		(uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
 
-	// Enable CaptureDMA and on all channels
-	io_timer_set_enable(true, IOTimerChanMode_CaptureDMA, IO_TIMER_ALL_MODES_CHANNELS);
+	io_timer_set_dshot_capture_mode(timer_index, _dshot_frequency);
 
 	// Enable CaptureDMA on this timer
 	io_timer_capture_dma_req(timer_index, true);
 
+	// Enable CaptureDMA and on all channels
+	io_timer_set_enable(true, IOTimerChanMode_CaptureDMA, IO_TIMER_ALL_MODES_CHANNELS);
+
+	// Enable DMA on the channels
+	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
+
+		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
+		bool channel_enabled = _channels_init_mask & (1 << output_channel);
+		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+
+		if (is_this_timer && channel_enabled) {
+			stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], NULL, NULL, false);
+		}
+	}
+
 	px4_arch_gpiowrite(GPIO_FMU_CH8, true);
+
+	// NOTE: we can't use DMA callback since GCR encoding creates a variable length pulse train.
+	// Instead we must use a timer callback since we can rely on dshot frame fixed timing.
+	// It takes ~50us, we we'll wait 60us
+	hrt_call_after(&_dma_capture_callback_call[timer_index], 100, _cc_callbacks[timer_index], arg);
 }
 
 static void capture_complete(uint8_t timer_index)
@@ -410,9 +412,9 @@ static void capture_complete(uint8_t timer_index)
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
 		bool channel_enabled = _channels_init_mask & (1 << output_channel);
+		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
 		if (is_this_timer && channel_enabled) {
-			uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 			if (dshot_handler[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
 				stm32_dmastop(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
 				stm32_dmafree(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
@@ -420,18 +422,21 @@ static void capture_complete(uint8_t timer_index)
 			}
 		}
 
-		// up_invalidate_dcache((uintptr_t)dshot_capture_buffer[output_channel],
-		// 		     (uintptr_t)dshot_capture_buffer[output_channel] +
-		// 		     sizeof(dshot_capture_buffer[output_channel]));
+		up_invalidate_dcache((uintptr_t) dshot_capture_buffer[timer_index],
+			// (uintptr_t) dshot_capture_buffer[timer_index] + 64); // clean 16 32bit regions x 4
+			 (uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
 
-		process_capture_results(output_channel);
 		io_timer_unallocate_channel(output_channel);
 	}
 
 	// Disable capture DMA
 	io_timer_capture_dma_req(timer_index, false);
+
 	// Unallocate the timer as CaptureDMA
 	io_timer_unallocate_timer(timer_index);
+
+	// Process all channels on this timer
+	process_capture_results(timer_index);
 
 	// Re-init the channels (and timer as a consequence)
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
@@ -468,31 +473,30 @@ static void capture_complete_callback_tim2(void *arg)
 	capture_complete(timer_index);
 }
 
-void process_capture_results(int8_t output_channel)
+void process_capture_results(uint8_t timer_index)
 {
-	// const unsigned period = calculate_period_from_erpm_frame((uint8_t*)dshot_capture_buffer[output_channel], sizeof(dshot_capture_buffer[output_channel]));
-	// const unsigned period = calculate_period_from_erpm_frame(dshot_capture_buffer[output_channel], CHANNEL_CAPTURE_BUFF_SIZE);
+	for (uint8_t channel_index = 0; channel_index < MAX_NUM_CHANNELS_PER_TIMER; channel_index++) {
 
-	const unsigned period = calculate_period(output_channel);
+		// Calculate the period for each channel
+		const unsigned period = calculate_period(timer_index, channel_index);
 
-	if (period == 0) {
-		// If the parsing failed, we get 0.
-		_erpms[output_channel] = 0;
-
-	} else if (period == 65408) {
-		// For still, we get this magic 65408 value.
-		_erpms[output_channel] = 0;
-
-	} else {
-		// from period in us to eRPM
-		_erpms[output_channel] = 1000000 * 60 / period;
+		if (period == 0) {
+			// If the parsing failed, set the eRPM to 0
+			_erpms[timer_index][channel_index] = 0;
+		} else if (period == 65408) {
+			// Special case for zero motion (e.g., stationary motor)
+			_erpms[timer_index][channel_index] = 0;
+		} else {
+			// Convert the period to eRPM
+			_erpms[timer_index][channel_index] = (1000000 * 60) / period;
+		}
 	}
 }
 
 /**
-* bits 	1-11	- throttle value (0-47 are reserved, 48-2047 give 2000 steps of throttle resolution)
-* bit 	12		- dshot telemetry enable/disable
-* bits 	13-16	- XOR checksum
+* bits  1-11    - throttle value (0-47 are reserved, 48-2047 give 2000 steps of throttle resolution)
+* bit   12      - dshot telemetry enable/disable
+* bits  13-16   - XOR checksum
 **/
 void dshot_motor_data_set(unsigned channel, uint16_t throttle, bool telemetry)
 {
@@ -544,10 +548,13 @@ int up_dshot_arm(bool armed)
 				   IO_TIMER_ALL_MODES_CHANNELS);
 }
 
-int up_bdshot_get_erpm(uint8_t channel, int *erpm)
+int up_bdshot_get_erpm(uint8_t output_channel, int *erpm)
 {
-	if (_channels_init_mask & (1 << channel)) {
-		*erpm = _erpms[channel];
+	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
+	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+
+	if (_channels_init_mask & (1 << output_channel)) {
+		*erpm = _erpms[timer_index][timer_channel_index];
 		return PX4_OK;
 	}
 	// this channel is not configured for dshot
@@ -633,76 +640,70 @@ uint8_t nibbles_from_mapped(uint8_t mapped)
 	}
 }
 
-unsigned calculate_period(uint8_t output_channel)
+unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 {
 	uint32_t value = 0;
-
-	// We start off with high
-	uint32_t high = 1;
-
+	uint32_t high = 1; // We start off with high
 	unsigned shifted = 0;
 	unsigned previous = 0;
 
-	for (unsigned i = 1; i < (32); ++i) {
+	// Loop through the capture buffer for the specified channel
+	for (unsigned i = 1; i < CHANNEL_CAPTURE_BUFF_SIZE; ++i) {
 
-		// We can ignore the very first data point as it's the pulse before it starts.
+		// Ignore the first data point, which is the pulse before it starts
 		if (i > 1) {
 
-			if (dshot_capture_buffer[output_channel][i] == 0) {
-				// Once we get zeros we're through.
+			if (dshot_capture_buffer[timer_index][channel_index][i] == 0) {
+				// Once we hit zeros, the data has ended
 				break;
 			}
 
-			// This seemss to work with dshot 150, 300, 600, 1200
-			// The values were found by trial and error to get the quantization just right.
-			const uint32_t bits = (dshot_capture_buffer[output_channel][i] - previous + 5) / 20;
+			// Quantization logic for DShot 150, 300, 600, 1200
+			const uint32_t bits = (dshot_capture_buffer[timer_index][channel_index][i] - previous + 5) / 20;
 
+			// Shift the bits into the value
 			for (unsigned bit = 0; bit < bits; ++bit) {
-				value = value << 1;
-				value |= high;
+				value = (value << 1) | high;
 				++shifted;
 			}
 
-			// The next edge toggles.
+			// Toggle the high/low state on the next edge
 			high = !high;
 		}
 
-		previous = dshot_capture_buffer[output_channel][i];
+		previous = dshot_capture_buffer[timer_index][channel_index][i];
 	}
 
 	if (shifted == 0) {
-		// no data yet, or this time
+		// If no data was shifted, the read failed
 		++read_fail_zero;
 		return 0;
 	}
 
-	// We need to make sure we shifted 21 times. We might have missed some low "pulses" at the very end.
-	value = value << (21 - shifted);
+	// Ensure we've shifted 21 times; otherwise, we pad with zeros
+	value <<= (21 - shifted);
 
-	// Note: At 0 throttle, the value is 0x1AD6AE, so 0b110101101011010101110
-
-	// From GCR to eRPM according to:
-	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/#erpm-transmission
+	// Gray code (GCR) to eRPM conversion logic
 	unsigned gcr = (value ^ (value >> 1));
 
 	uint32_t data = 0;
 
-	// 20bits -> 5 mapped -> 4 nibbles
+	// Decode 4 nibbles (5-bit gray code -> 4-bit nibbles)
 	for (unsigned i = 0; i < 4; ++i) {
-		uint32_t nibble = nibbles_from_mapped(gcr & (0x1F)) << (4 * i);
+		uint32_t nibble = nibbles_from_mapped(gcr & 0x1F) << (4 * i);
 
-		if (nibble == 0xff) {
+		if (nibble == 0xFF) {
 			++read_fail_nibble;
 			return 0;
 		}
 
 		data |= nibble;
-		gcr = gcr >> 5;
+		gcr >>= 5;
 	}
 
 	unsigned shift = (data & 0xE000) >> 13;
 	unsigned period = ((data & 0x1FF0) >> 4) << shift;
-	unsigned crc = (data & 0xf);
+	unsigned crc = data & 0xF;
 
 	unsigned payload = (data & 0xFFF0) >> 4;
 	unsigned calculated_crc = (~(payload ^ (payload >> 4) ^ (payload >> 8))) & 0x0F;
@@ -715,88 +716,5 @@ unsigned calculate_period(uint8_t output_channel)
 	++read_ok;
 	return period;
 }
-
-// unsigned calculate_period_from_erpm_frame(uint16_t* buffer, size_t buffer_size)
-// {
-// 	uint32_t value = 0;
-
-// 	// We start off with high
-// 	uint32_t high = 1;
-
-// 	unsigned shifted = 0;
-// 	unsigned previous = 0;
-
-// 	for (unsigned i = 1; i < buffer_size; ++i) {
-
-// 		// We can ignore the very first data point as it's the pulse before it starts.
-// 		if (i > 1) {
-
-// 			if (buffer[i] == 0) {
-// 				// Once we get zeros we're through.
-// 				break;
-// 			}
-
-// 			// This seemss to work with dshot 150, 300, 600, 1200
-// 			// The values were found by trial and error to get the quantization just right.
-// 			const uint32_t bits = (buffer[i] - previous + 5) / 20;
-
-// 			for (unsigned bit = 0; bit < bits; ++bit) {
-// 				value = value << 1;
-// 				value |= high;
-// 				++shifted;
-// 			}
-
-// 			// The next edge toggles.
-// 			high = !high;
-// 		}
-
-// 		previous = buffer[i];
-// 	}
-
-// 	if (shifted == 0) {
-// 		// no data yet, or this time
-// 		++read_fail_zero;
-// 		return 0;
-// 	}
-
-// 	// We need to make sure we shifted 21 times. We might have missed some low "pulses" at the very end.
-// 	value = value << (21 - shifted);
-
-// 	// Note: At 0 throttle, the value is 0x1AD6AE, so 0b110101101011010101110
-
-// 	// From GCR to eRPM according to:
-// 	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/#erpm-transmission
-// 	unsigned gcr = (value ^ (value >> 1));
-
-// 	uint32_t data = 0;
-
-// 	// 20bits -> 5 mapped -> 4 nibbles
-// 	for (unsigned i = 0; i < 4; ++i) {
-// 		uint32_t nibble = nibbles_from_mapped(gcr & (0x1F)) << (4 * i);
-
-// 		if (nibble == 0xff) {
-// 			++read_fail_nibble;
-// 			return 0;
-// 		}
-
-// 		data |= nibble;
-// 		gcr = gcr >> 5;
-// 	}
-
-// 	unsigned shift = (data & 0xE000) >> 13;
-// 	unsigned period = ((data & 0x1FF0) >> 4) << shift;
-// 	unsigned crc = (data & 0xf);
-
-// 	unsigned payload = (data & 0xFFF0) >> 4;
-// 	unsigned calculated_crc = (~(payload ^ (payload >> 4) ^ (payload >> 8))) & 0x0F;
-
-// 	if (crc != calculated_crc) {
-// 		++read_fail_crc;
-// 		return 0;
-// 	}
-
-// 	++read_ok;
-// 	return period;
-// }
 
 #endif
