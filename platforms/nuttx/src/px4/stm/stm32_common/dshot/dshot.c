@@ -54,10 +54,7 @@
 #define ONE_MOTOR_DATA_SIZE         16u
 #define CHANNEL_OUTPUT_BUFF_SIZE    18u
 
-// #define CHANNEL_CAPTURE_BUFF_SIZE   16u
 #define CHANNEL_CAPTURE_BUFF_SIZE   32u
-
-
 
 #define DSHOT_THROTTLE_POSITION     5u
 #define DSHOT_TELEMETRY_POSITION    4u
@@ -114,6 +111,7 @@ static uint32_t read_fail_zero = 0;
 
 static struct hrt_call _dma_capture_callback_call[MAX_TIMER_IO_CHANNELS];
 
+// Separate HRT callbacks for each timer
 typedef void (*hrt_callback_t)(void *arg);
 static hrt_callback_t _cc_callbacks[3] = {
 	capture_complete_callback_tim0,
@@ -121,14 +119,7 @@ static hrt_callback_t _cc_callbacks[3] = {
 	capture_complete_callback_tim2,
 };
 
-// begin debug variables
-static uint32_t cycles = 0;
-static uint32_t interruptcounter = 0;
-static uint32_t capturecompletecounter = 0;
-
-
-// end debug variables
-
+static uint32_t delay_hrt = 0;
 
 // We need local permanent memory for indices, channels, and callbacks for each output
 static uint8_t timer_index_array[MAX_IO_TIMERS] = {};
@@ -251,8 +242,6 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 // Kicks off a DMA transmit for each configured timer and the associated channels
 void up_dshot_trigger()
 {
-	cycles++;
-
 	// Enable all timers configured as dshot (weird way of doing this...)
 	io_timer_set_enable(true, _bidirectional ? IOTimerChanMode_DshotInverted : IOTimerChanMode_Dshot,
 				IO_TIMER_ALL_MODES_CHANNELS);
@@ -309,11 +298,10 @@ void up_dshot_trigger()
 
 void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 {
+	// DEBUGGING
 	px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 
 	uint8_t timer_index = *((uint8_t*)arg);
-
-	interruptcounter++;
 
 	// Clean DMA UP configuration
 	if (dshot_handler[timer_index].dma_up_handle != NULL) {
@@ -360,24 +348,27 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 				continue;
 			}
 
-			// Flush cache so DMA sees the data
-			memset(dshot_capture_buffer[timer_index][timer_channel_index], 0, sizeof(dshot_capture_buffer[timer_index][timer_channel_index]));
+			uint32_t periph_addr = io_timers[timer_index].base + STM32_GTIM_CCR1_OFFSET + (4 * timer_channel_index);
 
 			// Setup DMA for this channel
 			px4_stm32_dmasetup(dshot_handler[timer_index].dma_ch_handle[timer_channel_index],
-					   io_timers[timer_index].base + STM32_GTIM_DMAR_OFFSET, // DMA address for burst mode (16-bit, TIM2-5 only)
+					   periph_addr,
 					   (uint32_t) dshot_capture_buffer[timer_index][timer_channel_index],
-					   // sizeof(dshot_capture_buffer[timer_index][timer_channel_index]),
-					   32, // number of transfer (each transfer is 16bits, we have 16 32bit values so 32 16 bit transers)
+					   CHANNEL_CAPTURE_BUFF_SIZE,
 					   DSHOT_BIDIRECTIONAL_DMA_SCR);
 		}
 	}
 
+	// Flush cache so DMA sees the data
+	memset(dshot_capture_buffer[timer_index], 0, sizeof(dshot_capture_buffer[timer_index]));
 	up_clean_dcache((uintptr_t) dshot_capture_buffer[timer_index],
 		(uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
 
+	// TODO: timer channels mask
+	// Enable CaptComp for the channels
 	io_timer_set_dshot_capture_mode(timer_index, _dshot_frequency);
 
+	// TODO: timer channels mask
 	// Enable CaptureDMA on this timer
 	io_timer_capture_dma_req(timer_index, true);
 
@@ -392,21 +383,25 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
 		if (is_this_timer && channel_enabled) {
+			// NOTE: we can't use DMA callback since GCR encoding creates a variable length pulse train
 			stm32_dmastart(dshot_handler[timer_index].dma_ch_handle[timer_channel_index], NULL, NULL, false);
 		}
 	}
 
-	px4_arch_gpiowrite(GPIO_FMU_CH8, true);
+	// 30us to switch regardless of DShot frequency + eRPM frame time + 10us for good measure
+	hrt_abstime frame_us = (16 * 1000000) / _dshot_frequency; // 16 bits * us_per_s / bits_per_s
+	hrt_abstime delay = 30 + frame_us + 10;
+	delay_hrt = delay;
+	hrt_call_after(&_dma_capture_callback_call[timer_index], delay, _cc_callbacks[timer_index], arg);
 
-	// NOTE: we can't use DMA callback since GCR encoding creates a variable length pulse train.
-	// Instead we must use a timer callback since we can rely on dshot frame fixed timing.
-	// It takes ~50us, we we'll wait 60us
-	hrt_call_after(&_dma_capture_callback_call[timer_index], 100, _cc_callbacks[timer_index], arg);
+	// DEBUGGING
+	px4_arch_gpiowrite(GPIO_FMU_CH8, true);
 }
 
 static void capture_complete(uint8_t timer_index)
 {
-	capturecompletecounter++;
+	// DEBUGGING
+	px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
@@ -420,13 +415,9 @@ static void capture_complete(uint8_t timer_index)
 				stm32_dmafree(dshot_handler[timer_index].dma_ch_handle[timer_channel_index]);
 				dshot_handler[timer_index].dma_ch_handle[timer_channel_index] = NULL;
 			}
+
+			io_timer_unallocate_channel(output_channel);
 		}
-
-		up_invalidate_dcache((uintptr_t) dshot_capture_buffer[timer_index],
-			// (uintptr_t) dshot_capture_buffer[timer_index] + 64); // clean 16 32bit regions x 4
-			 (uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
-
-		io_timer_unallocate_channel(output_channel);
 	}
 
 	// Disable capture DMA
@@ -435,10 +426,14 @@ static void capture_complete(uint8_t timer_index)
 	// Unallocate the timer as CaptureDMA
 	io_timer_unallocate_timer(timer_index);
 
-	// Process all channels on this timer
+	// Invalidate the dcache to ensure most recent data is available
+	up_invalidate_dcache((uintptr_t) dshot_capture_buffer[timer_index],
+		(uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
+
+	// Process eRPM frames from all channels on this timer
 	process_capture_results(timer_index);
 
-	// Re-init the channels (and timer as a consequence)
+	// Initialize back to DShotInverted to bring IO back to the expected idle state
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
@@ -449,10 +444,8 @@ static void capture_complete(uint8_t timer_index)
 		}
 	}
 
+	// Enable all channels on this timer configured as DShotInverted
 	io_timer_set_enable(true, IOTimerChanMode_DshotInverted, IO_TIMER_ALL_MODES_CHANNELS);
-
-	// DEBUGGING
-	px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 }
 
 static void capture_complete_callback_tim0(void *arg)
@@ -576,11 +569,7 @@ void up_bdshot_status(void)
 	PX4_INFO("dshot driver stats: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
 		read_ok, read_fail_nibble, read_fail_crc, read_fail_zero);
 
-	// PX4_INFO("ch0 %ld, ch1 %ld, ch2 %ld, ch3 %ld,", _erpms[0], _erpms[1], _erpms[2], _erpms[3]);
-
-	PX4_INFO("cycles %lu", cycles);
-	PX4_INFO("interruptcounter %lu", interruptcounter);
-	PX4_INFO("capturecompletecounter %lu", capturecompletecounter);
+	PX4_INFO("delay %lu", delay_hrt);
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)

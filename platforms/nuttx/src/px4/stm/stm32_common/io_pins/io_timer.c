@@ -587,33 +587,29 @@ int io_timer_set_dshot_mode(uint8_t timer, unsigned dshot_pwm_freq, uint8_t dma_
 	return ret_val;
 }
 
-// TODO: pass channel_mask as arg to choose which channels to trigger CC
 int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq)
 {
-	// Timer Autor Reload Register -- why -1?
-	rARR(timer)  = -1;
+	// Timer Autor Reload Register max value
+	rARR(timer) = 0xFFFFFFFF;
 
-	// Timer Event Generation Register -- update generation, captcomp 1 - 4
-	rEGR(timer)  = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;
+	// Timer Event Generation Register -- update generation, CC1 - CC4
+	rEGR(timer) = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;
 
 	// Timer Prescalar
+	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/
 	rPSC(timer) = ((int)(io_timers[timer].clock_freq / (dshot_pwm_freq * 5 / 4)) / DSHOT_MOTOR_PWM_BIT_WIDTH) - 1;
 
-	// 4 transfers, CCR1 to CCR4
-	rDCR(timer)  = TIM_DMABASE_CCR1 | TIM_DMABURSTLENGTH_4TRANSFERS;
-	// rDCR(timer)  = TIM_DMABASE_CCR1 | TIM_DMABURSTLENGTH_1TRANSFER;
-	// rDCR(timer)  = TIM_DMABASE_CCR1 | TIM_DMABURSTLENGTH_2TRANSFERS;
-
-
+	// Disable CaptComp on all channels
 	rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
 	rCCER(timer) &= ~(GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
 	rCCER(timer) &= ~(GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
 
-    // Set all channels to input capture mode
-    rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);  // CC1 input
-    rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);  // CC2 input
-    rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);  // CC3 input
-    rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);  // CC4 input
+	// TODO: channels_mask arg
+    // Enable CaptComp input on all channels
+    rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);
+    rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);
+    rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);
+    rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);
 
     // Enable channels
     rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
