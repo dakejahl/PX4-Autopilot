@@ -324,6 +324,7 @@ void dma_callback_capture_start(DMA_HANDLE handle, uint8_t status, void *arg)
 
 		if (is_this_timer && channel_enabled) {
 			io_timer_unallocate_channel(output_channel);
+			// TODO: this needs to do what  io_timer_set_dshot_capture_mode  is currently doing
 			io_timer_channel_init(output_channel, IOTimerChanMode_CaptureDMA, NULL, NULL);
 		}
 	}

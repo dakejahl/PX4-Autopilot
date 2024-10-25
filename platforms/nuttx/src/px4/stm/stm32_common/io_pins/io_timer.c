@@ -860,14 +860,6 @@ int io_timer_channel_init(unsigned channel, io_timer_channel_mode_t mode,
 
 		rv = io_timer_init_timer(timer, mode);
 
-		if (rv == -16) {
-			// TODO:
-			// FIXME: I don't understand why exactly this is the way it is.
-			// With this hack I'm able to to toggle the dshot pins from output
-			// to input without problem. But there should be a nicer way.
-			rv = 0;
-		}
-
 		if (rv != 0 && previous_mode == IOTimerChanMode_NotUsed) {
 			/* free the channel if it was not used before */
 			io_timer_unallocate_channel(channel);
