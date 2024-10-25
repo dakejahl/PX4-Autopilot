@@ -129,27 +129,27 @@ static inline constexpr void getTimerChannelDMAMap(Timer::Timer timer, const DMA
 		break;
 
 	case Timer::Timer9:
-		// Non-existant
+		// Non-existent
 		break;
 
 	case Timer::Timer10:
-		// Non-existant
+		// Non-existent
 		break;
 
 	case Timer::Timer11:
-		// Non-existant
+		// Non-existent
 		break;
 
 	case Timer::Timer12:
-		// Non-existant
+		// Non-existent
 		break;
 
 	case Timer::Timer13:
-		// Non-existant
+		// Non-existent
 		break;
 
 	case Timer::Timer14:
-		// Non-existant
+		// Non-existent
 		break;
 
 	case Timer::Timer15:

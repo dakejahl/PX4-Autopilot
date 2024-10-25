@@ -163,6 +163,8 @@ __EXPORT extern void io_timer_trigger(unsigned channels_mask);
 __EXPORT void io_timer_update_dma_req(uint8_t timer, bool enable);
 __EXPORT void io_timer_capture_dma_req(uint8_t timer, bool enable);
 
+
+__EXPORT extern int io_timer_set_dshot_burst_mode(uint8_t timer, unsigned dshot_pwm_rate, uint8_t dma_burst_length);
 __EXPORT int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_rate);
 
 /**
@@ -173,7 +175,6 @@ __EXPORT int io_timer_allocate_timer(unsigned timer, io_timer_channel_mode_t mod
 
 __EXPORT int io_timer_unallocate_timer(unsigned timer);
 
-__EXPORT extern int io_timer_set_dshot_mode(uint8_t timer, unsigned dshot_pwm_rate, uint8_t dma_burst_length);
 
 /**
  * Returns the pin configuration for a specific channel, to be used as GPIO output.
