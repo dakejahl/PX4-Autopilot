@@ -113,7 +113,6 @@ static int      _channels_init_mask = 0;
 static uint8_t _timer_index_array[MAX_IO_TIMERS] = {};
 static int32_t _erpms[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
 
-// We need local permanent memory for indices, channels, and callbacks for each output
 static struct hrt_call _dma_capture_callback_call[MAX_TIMER_IO_CHANNELS];
 
 // Separate HRT callbacks for each timer
@@ -125,11 +124,10 @@ static hrt_callback_t _cc_callbacks[3] = {
 };
 
 // decoding status
-static uint32_t read_ok = 0;
-static uint32_t read_fail_nibble = 0;
-static uint32_t read_fail_crc = 0;
-static uint32_t read_fail_zero = 0;
-static uint32_t delay_hrt = 0;
+static uint32_t read_ok[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_fail_nibble[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_fail_crc[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_fail_zero[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
 
 int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bidirectional_dshot)
 {
@@ -392,7 +390,6 @@ void dma_start_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 	// 30us to switch regardless of DShot frequency + eRPM frame time + 10us for good measure
 	hrt_abstime frame_us = (16 * 1000000) / _dshot_frequency; // 16 bits * us_per_s / bits_per_s
 	hrt_abstime delay = 30 + frame_us + 10;
-	delay_hrt = delay;
 	hrt_call_after(&_dma_capture_callback_call[timer_index], delay, _cc_callbacks[timer_index], arg);
 
 	// DEBUGGING
@@ -570,10 +567,21 @@ int up_bdshot_channel_status(uint8_t channel)
 
 void up_bdshot_status(void)
 {
-	PX4_INFO("dshot driver stats: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
-		 read_ok, read_fail_nibble, read_fail_crc, read_fail_zero);
+    PX4_INFO("dshot driver stats:");
 
-	PX4_INFO("delay %lu", delay_hrt);
+    for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
+        for (uint8_t channel_index = 0; channel_index < MAX_NUM_CHANNELS_PER_TIMER; channel_index++) {
+
+            if (_channels_init_mask & (1 << (timer_index * MAX_NUM_CHANNELS_PER_TIMER + channel_index))) {
+                PX4_INFO("Timer %u, Channel %u: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
+                         timer_index, channel_index,
+                         read_ok[timer_index][channel_index],
+                         read_fail_nibble[timer_index][channel_index],
+                         read_fail_crc[timer_index][channel_index],
+                         read_fail_zero[timer_index][channel_index]);
+            }
+        }
+    }
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)
@@ -669,7 +677,7 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 
 	if (shifted == 0) {
 		// If no data was shifted, the read failed
-		++read_fail_zero;
+		++read_fail_zero[timer_index][channel_index];
 		return 0;
 	}
 
@@ -686,7 +694,7 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 		uint32_t nibble = nibbles_from_mapped(gcr & 0x1F) << (4 * i);
 
 		if (nibble == 0xFF) {
-			++read_fail_nibble;
+			++read_fail_nibble[timer_index][channel_index];;
 			return 0;
 		}
 
@@ -702,11 +710,11 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 	unsigned calculated_crc = (~(payload ^ (payload >> 4) ^ (payload >> 8))) & 0x0F;
 
 	if (crc != calculated_crc) {
-		++read_fail_crc;
+		++read_fail_crc[timer_index][channel_index];;
 		return 0;
 	}
 
-	++read_ok;
+	++read_ok[timer_index][channel_index];;
 	return period;
 }
 
