@@ -99,7 +99,7 @@ typedef struct timer_config_t {
 	bool initialized;               // Timer initialized
 	bool initialized_channels[4];   // Timer channels initialized (successfully started)
 	bool bidirectional;             // Timer in bidi (inverted) mode
-	bool captcomp_channels[4]; 		// Channels configured for CaptComp
+	bool captcomp_channels[4];      // Channels configured for CaptComp
 	uint8_t timer_index;            // Timer index. Necessary to have memory for passing pointer to hrt callback
 } timer_config_t;
 
@@ -301,7 +301,7 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 	_bidirectional = enable_bidirectional_dshot;
 
 	if (_bidirectional) {
-		PX4_DEBUG("Bidirectional DShot enabled, only one timer will be used");
+		PX4_INFO("Bidirectional DShot enabled, only one timer will be used");
 	}
 
 	// NOTE: if bidirectional is enabled only 1 timer can be used. This is because Burst mode uses 1 DMA channel per timer
@@ -640,7 +640,7 @@ int up_bdshot_channel_status(uint8_t channel)
 
 void up_bdshot_status(void)
 {
-	PX4_DEBUG("dshot driver stats:");
+	PX4_INFO("dshot driver stats:");
 
 	uint8_t timer_index = _bidi_timer_index;
 
@@ -648,12 +648,12 @@ void up_bdshot_status(void)
 		bool channel_initialized = timer_configs[timer_index].initialized_channels[timer_channel_index];
 
 		if (channel_initialized) {
-			PX4_DEBUG("Timer %u, Channel %u: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
-				  timer_index, timer_channel_index,
-				  read_ok[timer_channel_index],
-				  read_fail_nibble[timer_channel_index],
-				  read_fail_crc[timer_channel_index],
-				  read_fail_zero[timer_channel_index]);
+			PX4_INFO("Timer %u, Channel %u: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
+				 timer_index, timer_channel_index,
+				 read_ok[timer_channel_index],
+				 read_fail_nibble[timer_channel_index],
+				 read_fail_crc[timer_channel_index],
+				 read_fail_zero[timer_channel_index]);
 		}
 	}
 }
