@@ -528,33 +528,40 @@ void io_timer_capture_dma_req(uint8_t timer, uint8_t timer_channel_index, bool e
 			rDIER(timer) |= ATIM_DIER_CC1DE;
 			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC1G);
 			break;
+
 		case 1:
 			rDIER(timer) |= ATIM_DIER_CC2DE;
 			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC2G);
 			break;
+
 		case 2:
 			rDIER(timer) |= ATIM_DIER_CC3DE;
 			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC3G);
 			break;
+
 		case 3:
 			rDIER(timer) |= ATIM_DIER_CC4DE;
 			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC4G);
 			break;
 		}
+
 	} else {
 		switch (timer_channel_index) {
 		case 0:
 			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC1G);
 			rDIER(timer) &= ~ATIM_DIER_CC1DE;
 			break;
+
 		case 1:
 			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC2G);
 			rDIER(timer) &= ~ATIM_DIER_CC2DE;
 			break;
+
 		case 2:
 			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC3G);
 			rDIER(timer) &= ~ATIM_DIER_CC3DE;
 			break;
+
 		case 3:
 			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC4G);
 			rDIER(timer) &= ~ATIM_DIER_CC4DE;
@@ -633,18 +640,21 @@ int io_timer_set_dshot_capture_mode(uint8_t timer, uint8_t timer_channel_index, 
 		rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC1P | GTIM_CCER_CC1NP);
 
 		break;
+
 	case 1:
 		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC2G;
 		rCCER(timer) &= ~(GTIM_CCER_CC2E | GTIM_CCER_CC2P | GTIM_CCER_CC2NP);
 		rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);
 		rCCER(timer) |= (GTIM_CCER_CC2E | GTIM_CCER_CC2P | GTIM_CCER_CC2NP);
 		break;
+
 	case 2:
 		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC3G;
 		rCCER(timer) &= ~(GTIM_CCER_CC3E | GTIM_CCER_CC3P | GTIM_CCER_CC3NP);
 		rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);
 		rCCER(timer) |= (GTIM_CCER_CC3E | GTIM_CCER_CC3P | GTIM_CCER_CC3NP);
 		break;
+
 	case 3:
 		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC4G;
 		rCCER(timer) &= ~(GTIM_CCER_CC4E | GTIM_CCER_CC4P | GTIM_CCER_CC4NP);
