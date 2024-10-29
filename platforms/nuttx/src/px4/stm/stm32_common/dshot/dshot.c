@@ -324,6 +324,7 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 	}
 
 	int32_t channels_init_mask = 0;
+
 	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
 		channels_init_mask |= init_timer_channels(timer_index);
 	}
@@ -648,11 +649,11 @@ void up_bdshot_status(void)
 
 		if (channel_initialized) {
 			PX4_DEBUG("Timer %u, Channel %u: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
-				 timer_index, timer_channel_index,
-				 read_ok[timer_channel_index],
-				 read_fail_nibble[timer_channel_index],
-				 read_fail_crc[timer_channel_index],
-				 read_fail_zero[timer_channel_index]);
+				  timer_index, timer_channel_index,
+				  read_ok[timer_channel_index],
+				  read_fail_nibble[timer_channel_index],
+				  read_fail_crc[timer_channel_index],
+				  read_fail_zero[timer_channel_index]);
 		}
 	}
 }

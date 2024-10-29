@@ -59,6 +59,7 @@ static inline constexpr void getTimerChannelDMAMap(Timer::Timer timer, const DMA
 			dma_map_ch[2] = DMAMAP_TIM4_CH3;
 			dma_map_ch[3] = 0;
 		}
+
 		break;
 
 	case Timer::Timer5:
