@@ -653,46 +653,8 @@ int io_timer_set_dshot_capture_mode(uint8_t timer, uint8_t timer_channel_index, 
 		break;
 	}
 
-	// Enable the timer
-	// rCR1(timer) |= GTIM_CR1_CEN;
-
 	return 0;
 }
-
-// int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq)
-// {
-// 	// Timer Autor Reload Register max value
-// 	rARR(timer) = 0xFFFFFFFF;
-
-// 	// Timer Event Generation Register -- update generation, CC1 - CC4
-// 	rEGR(timer) = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;
-
-// 	// Timer Prescalar
-// 	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/
-// 	rPSC(timer) = ((int)(io_timers[timer].clock_freq / (dshot_pwm_freq * 5 / 4)) / DSHOT_MOTOR_PWM_BIT_WIDTH) - 1;
-
-// 	// Disable CaptComp on all channels
-// 	rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
-// 	rCCER(timer) &= ~(GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
-// 	rCCER(timer) &= ~(GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
-
-// 	// TODO: channels_mask arg
-// 	// Enable CaptComp input on all channels
-// 	rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);
-// 	rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);
-// 	rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);
-// 	rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);
-
-// 	// Enable channels
-// 	rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
-// 	rCCER(timer) |= (GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
-// 	rCCER(timer) |= (GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
-
-// 	// Enable the timer
-// 	// rCR1(timer) |= GTIM_CR1_CEN;
-
-// 	return 0;
-// }
 
 static inline void io_timer_set_PWM_mode(unsigned timer)
 {

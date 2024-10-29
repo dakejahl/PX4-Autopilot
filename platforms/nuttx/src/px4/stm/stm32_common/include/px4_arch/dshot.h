@@ -60,6 +60,4 @@ typedef struct dshot_conf_t {
 	uint32_t			dma_base;
 	uint32_t			dma_map_up;
 	uint32_t			dma_map_ch[4];
-	// TODO: we just check for non-zero to determine if channel is available
-	// uint32_t			dma_ch_count;
 } dshot_conf_t;
