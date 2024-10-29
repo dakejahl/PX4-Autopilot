@@ -91,11 +91,14 @@ static inline constexpr void getTimerChannelDMAMap(Timer::Timer timer, const DMA
 			dma_map_ch[0] = DMAMAP_DMA12_TIM4CH1_0;
 			dma_map_ch[1] = DMAMAP_DMA12_TIM4CH2_0;
 			dma_map_ch[2] = DMAMAP_DMA12_TIM4CH3_0;
+			dma_map_ch[3] = 0;
+
 
 		} else {
 			dma_map_ch[0] = DMAMAP_DMA12_TIM4CH1_1;
 			dma_map_ch[1] = DMAMAP_DMA12_TIM4CH2_1;
 			dma_map_ch[2] = DMAMAP_DMA12_TIM4CH3_1;
+			dma_map_ch[3] = 0;
 		}
 
 		break;

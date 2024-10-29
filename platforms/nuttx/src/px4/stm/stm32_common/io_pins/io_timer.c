@@ -520,15 +520,46 @@ void io_timer_update_dma_req(uint8_t timer, bool enable)
 	}
 }
 
-void io_timer_capture_dma_req(uint8_t timer, bool enable)
+void io_timer_capture_dma_req(uint8_t timer, uint8_t timer_channel_index, bool enable)
 {
 	if (enable) {
-		rDIER(timer) |= ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE;
-		rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
-
+		switch (timer_channel_index) {
+		case 0:
+			rDIER(timer) |= ATIM_DIER_CC1DE;
+			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC1G);
+			break;
+		case 1:
+			rDIER(timer) |= ATIM_DIER_CC2DE;
+			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC2G);
+			break;
+		case 2:
+			rDIER(timer) |= ATIM_DIER_CC3DE;
+			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC3G);
+			break;
+		case 3:
+			rDIER(timer) |= ATIM_DIER_CC4DE;
+			rEGR(timer)  |= (ATIM_EGR_UG | ATIM_EGR_CC4G);
+			break;
+		}
 	} else {
-		rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC1G | ATIM_EGR_CC2G | ATIM_EGR_CC3G | ATIM_EGR_CC4G);
-		rDIER(timer) &= ~(ATIM_DIER_CC1DE | ATIM_DIER_CC2DE | ATIM_DIER_CC3DE | ATIM_DIER_CC4DE);
+		switch (timer_channel_index) {
+		case 0:
+			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC1G);
+			rDIER(timer) &= ~ATIM_DIER_CC1DE;
+			break;
+		case 1:
+			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC2G);
+			rDIER(timer) &= ~ATIM_DIER_CC2DE;
+			break;
+		case 2:
+			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC3G);
+			rDIER(timer) &= ~ATIM_DIER_CC3DE;
+			break;
+		case 3:
+			rEGR(timer)  &= ~(ATIM_EGR_UG | ATIM_EGR_CC4G);
+			rDIER(timer) &= ~ATIM_DIER_CC4DE;
+			break;
+		}
 	}
 }
 
@@ -587,40 +618,81 @@ int io_timer_set_dshot_burst_mode(uint8_t timer, unsigned dshot_pwm_freq, uint8_
 	return ret_val;
 }
 
-int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq)
+int io_timer_set_dshot_capture_mode(uint8_t timer, uint8_t timer_channel_index, unsigned dshot_pwm_freq)
 {
 	// Timer Autor Reload Register max value
 	rARR(timer) = 0xFFFFFFFF;
-
-	// Timer Event Generation Register -- update generation, CC1 - CC4
-	rEGR(timer) = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;
-
 	// Timer Prescalar
-	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/
 	rPSC(timer) = ((int)(io_timers[timer].clock_freq / (dshot_pwm_freq * 5 / 4)) / DSHOT_MOTOR_PWM_BIT_WIDTH) - 1;
 
-	// Disable CaptComp on all channels
-	rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
-	rCCER(timer) &= ~(GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
-	rCCER(timer) &= ~(GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
+	switch (timer_channel_index) {
+	case 0:
+		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC1G;
+		rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC1P | GTIM_CCER_CC1NP);
+		rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);
+		rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC1P | GTIM_CCER_CC1NP);
 
-	// TODO: channels_mask arg
-	// Enable CaptComp input on all channels
-	rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);
-	rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);
-	rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);
-	rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);
-
-	// Enable channels
-	rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
-	rCCER(timer) |= (GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
-	rCCER(timer) |= (GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
+		break;
+	case 1:
+		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC2G;
+		rCCER(timer) &= ~(GTIM_CCER_CC2E | GTIM_CCER_CC2P | GTIM_CCER_CC2NP);
+		rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);
+		rCCER(timer) |= (GTIM_CCER_CC2E | GTIM_CCER_CC2P | GTIM_CCER_CC2NP);
+		break;
+	case 2:
+		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC3G;
+		rCCER(timer) &= ~(GTIM_CCER_CC3E | GTIM_CCER_CC3P | GTIM_CCER_CC3NP);
+		rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);
+		rCCER(timer) |= (GTIM_CCER_CC3E | GTIM_CCER_CC3P | GTIM_CCER_CC3NP);
+		break;
+	case 3:
+		rEGR(timer) |= ATIM_EGR_UG | GTIM_EGR_CC4G;
+		rCCER(timer) &= ~(GTIM_CCER_CC4E | GTIM_CCER_CC4P | GTIM_CCER_CC4NP);
+		rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);
+		rCCER(timer) |= (GTIM_CCER_CC4E | GTIM_CCER_CC4P | GTIM_CCER_CC4NP);
+		break;
+	}
 
 	// Enable the timer
-	rCR1(timer) |= GTIM_CR1_CEN;
+	// rCR1(timer) |= GTIM_CR1_CEN;
 
 	return 0;
 }
+
+// int io_timer_set_dshot_capture_mode(uint8_t timer, unsigned dshot_pwm_freq)
+// {
+// 	// Timer Autor Reload Register max value
+// 	rARR(timer) = 0xFFFFFFFF;
+
+// 	// Timer Event Generation Register -- update generation, CC1 - CC4
+// 	rEGR(timer) = ATIM_EGR_UG | GTIM_EGR_CC1G | GTIM_EGR_CC2G | GTIM_EGR_CC3G | GTIM_EGR_CC4G;
+
+// 	// Timer Prescalar
+// 	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/
+// 	rPSC(timer) = ((int)(io_timers[timer].clock_freq / (dshot_pwm_freq * 5 / 4)) / DSHOT_MOTOR_PWM_BIT_WIDTH) - 1;
+
+// 	// Disable CaptComp on all channels
+// 	rCCER(timer) &= ~(GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
+// 	rCCER(timer) &= ~(GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
+// 	rCCER(timer) &= ~(GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
+
+// 	// TODO: channels_mask arg
+// 	// Enable CaptComp input on all channels
+// 	rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC1S_SHIFT);
+// 	rCCMR1(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR1_CC2S_SHIFT);
+// 	rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC3S_SHIFT);
+// 	rCCMR2(timer) |= (GTIM_CCMR_CCS_CCIN1 << GTIM_CCMR2_CC4S_SHIFT);
+
+// 	// Enable channels
+// 	rCCER(timer) |= (GTIM_CCER_CC1E | GTIM_CCER_CC2E | GTIM_CCER_CC3E | GTIM_CCER_CC4E);
+// 	rCCER(timer) |= (GTIM_CCER_CC1P | GTIM_CCER_CC2P | GTIM_CCER_CC3P | GTIM_CCER_CC4P);
+// 	rCCER(timer) |= (GTIM_CCER_CC1NP | GTIM_CCER_CC2NP | GTIM_CCER_CC3NP | GTIM_CCER_CC4NP);
+
+// 	// Enable the timer
+// 	// rCR1(timer) |= GTIM_CR1_CEN;
+
+// 	return 0;
+// }
 
 static inline void io_timer_set_PWM_mode(unsigned timer)
 {

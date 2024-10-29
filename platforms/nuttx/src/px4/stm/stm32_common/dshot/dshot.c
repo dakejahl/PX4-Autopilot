@@ -61,11 +61,11 @@
 
 // DMA stream configuration registers
 #define DSHOT_DMA_SCR (DMA_SCR_PRIHI | DMA_SCR_MSIZE_32BITS | DMA_SCR_PSIZE_32BITS | DMA_SCR_MINC | \
-		       DMA_SCR_DIR_M2P | DMA_SCR_TCIE | DMA_SCR_TEIE | DMA_SCR_DMEIE)
+			   DMA_SCR_DIR_M2P | DMA_SCR_TCIE | DMA_SCR_TEIE | DMA_SCR_DMEIE)
 
 // 16-bit because not all of the General Purpose Timers support 32-bit
 #define DSHOT_BIDIRECTIONAL_DMA_SCR (DMA_SCR_PRIHI | DMA_SCR_MSIZE_16BITS | DMA_SCR_PSIZE_16BITS | DMA_SCR_MINC | \
-				     DMA_SCR_DIR_P2M | DMA_SCR_TCIE | DMA_SCR_TEIE | DMA_SCR_DMEIE)
+					 DMA_SCR_DIR_P2M | DMA_SCR_TCIE | DMA_SCR_TEIE | DMA_SCR_DMEIE)
 
 #if defined(CONFIG_ARMV7M_DCACHE)
 #  define DMA_BUFFER_MASK    (ARMV7M_DCACHE_LINESIZE - 1)
@@ -80,139 +80,217 @@
 #define DSHOT_OUTPUT_BUFFER_SIZE(channel_count) (DMA_ALIGN_UP(sizeof(uint32_t) * CHANNEL_OUTPUT_BUFF_SIZE * channel_count))
 #define DSHOT_CAPTURE_BUFFER_SIZE(channel_count) (DMA_ALIGN_UP(sizeof(uint16_t)* CHANNEL_CAPTURE_BUFF_SIZE * channel_count))
 
-// Holds DMA handles (UP / CH1-4)
-typedef struct timer_dma_handles_t {
+
+static void init_dshot_timers(void);
+static void init_dshot_bidirectional(uint8_t timer_index);
+
+static void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void *arg);
+static void capture_complete_callback(void *arg);
+
+static void process_capture_results(uint8_t timer_index);
+static unsigned calculate_period(uint8_t timer_index, uint8_t channel_index);
+
+// Timer configuration struct
+typedef struct timer_config_t {
 	DMA_HANDLE dma_up_handle;       // DMA stream for DMA update
 	DMA_HANDLE dma_ch_handle[4];    // DMA streams for bidi capture compare
-} timer_dma_handles_t;
+	bool enabled;
+	bool enabled_channels[4];
+	bool initialized;
+	bool initialized_channels[4];
+	bool bidirectional;
+	bool bidirectional_channels[4];
+	uint8_t timer_index;
+} timer_config_t;
 
-static timer_dma_handles_t timer_dma_handles[MAX_IO_TIMERS] = {};
+static timer_config_t timer_configs[MAX_IO_TIMERS] = {};
 
 // Output buffer of interleaved motor output bytes
 static uint8_t dshot_burst_buffer_array[MAX_IO_TIMERS * DSHOT_OUTPUT_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER)]
 px4_cache_aligned_data() = {};
 static uint32_t *dshot_output_buffer[MAX_IO_TIMERS] = {};
 
-// Array of buffers for timer/channel erpm data
-static uint16_t dshot_capture_buffer[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER][CHANNEL_CAPTURE_BUFF_SIZE]
+// Buffer containing channel capture data for a single timer
+static uint16_t dshot_capture_buffer[MAX_NUM_CHANNELS_PER_TIMER][CHANNEL_CAPTURE_BUFF_SIZE]
 px4_cache_aligned_data() = {};
 
-static void dma_start_callback(DMA_HANDLE handle, uint8_t status, void *arg);
-static void cc_callback_timer_index_0(void *arg);
-static void cc_callback_timer_index_1(void *arg);
-static void cc_callback_timer_index_2(void *arg);
-
-static void process_capture_results(uint8_t timer_index);
-static unsigned calculate_period(uint8_t timer_index, uint8_t channel_index);
-
 static bool     _bidirectional = false;
+static uint8_t  _bidi_timer_index = 0; // TODO: BDSHOT_TIM param to select timer index?
 static uint32_t _dshot_frequency = 0;
-static int      _timers_init_mask = 0;
-static int      _channels_init_mask = 0;
 
-static uint8_t _timer_index_array[MAX_IO_TIMERS] = {};
-static int32_t _erpms[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
+// eRPM data from a single timer
+static int32_t _erpms[MAX_NUM_CHANNELS_PER_TIMER] = {};
 
-static struct hrt_call _dma_capture_callback_call[MAX_TIMER_IO_CHANNELS];
-
-// Separate HRT callbacks for each timer
-typedef void (*hrt_callback_t)(void *arg);
-static hrt_callback_t _cc_callbacks[3] = {
-	cc_callback_timer_index_0,
-	cc_callback_timer_index_1,
-	cc_callback_timer_index_2,
-};
+static struct hrt_call _cc_call;
 
 // decoding status
-static uint32_t read_ok[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
-static uint32_t read_fail_nibble[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
-static uint32_t read_fail_crc[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
-static uint32_t read_fail_zero[MAX_IO_TIMERS][MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_ok[MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_fail_nibble[MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_fail_crc[MAX_NUM_CHANNELS_PER_TIMER] = {};
+static uint32_t read_fail_zero[MAX_NUM_CHANNELS_PER_TIMER] = {};
+
+// Initializes dshot on configured timers if DShot mode is enabled and DMA is available.
+static void init_dshot_timers(void)
+{
+	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
+
+		if (!timer_configs[timer_index].enabled) {
+			// timer is not enabled for dshot
+			continue;
+		}
+
+		if (io_timers[timer_index].dshot.dma_map_up == 0) {
+			// timer does not have DMA UP mapped
+			continue;
+		}
+
+		// Attempt to allocate DMA for Burst
+		timer_configs[timer_index].dma_up_handle = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_up);
+
+		if (timer_configs[timer_index].dma_up_handle == NULL) {
+			PX4_INFO("Failed to allocate Timer %u DMA UP", timer_index);
+			continue;
+		}
+
+		PX4_INFO("Allocated DMA UP Timer Index %u", timer_index);
+		timer_configs[timer_index].initialized = true;
+	}
+
+	// Free the allocated DMA channels
+	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
+		if (timer_configs[timer_index].dma_up_handle != NULL) {
+			stm32_dmafree(timer_configs[timer_index].dma_up_handle);
+			timer_configs[timer_index].dma_up_handle = NULL;
+		}
+	}
+}
+
+static void init_dshot_bidirectional(uint8_t timer_index)
+{
+	if (timer_configs[timer_index].enabled && timer_configs[timer_index].initialized) {
+
+		// Allocate DMA for each enabled channel
+		for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
+			// For each enabled channel on this timer, try allocating DMA
+			uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+			bool this_timer = timer_index == timer_io_channels[output_channel].timer_index;
+			bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+
+			if (this_timer && channel_enabled) {
+				uint32_t dma_map_ch = io_timers[timer_index].dshot.dma_map_ch[timer_channel_index];
+
+				if (dma_map_ch == 0) {
+					// Timer channel is not mapped
+					PX4_WARN("Error! Timer %u Channel %u DMA is unmapped", timer_index, timer_channel_index);
+					continue;
+				}
+
+				// Allocate DMA
+				timer_configs[timer_index].dma_ch_handle[timer_channel_index] = stm32_dmachannel(dma_map_ch);
+
+				if (timer_configs[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
+					PX4_WARN("Failed to allocate Timer %u Channel DMA CH %u, output_channel %u", timer_index, timer_channel_index,
+						 output_channel);
+					break;
+				}
+
+				PX4_INFO("Allocated DMA CH Timer Index %u Channel %u", timer_index, timer_channel_index);
+				// Mark this timer channel as bidirectional
+				timer_configs[timer_index].bidirectional_channels[timer_channel_index] = true;
+			}
+		}
+
+		// De-allocate DMA for each channel
+		for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
+			if (timer_index == timer_io_channels[output_channel].timer_index) {
+				uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+				if (timer_configs[timer_index].dma_ch_handle[timer_channel_index]) {
+					stm32_dmafree(timer_configs[timer_index].dma_ch_handle[timer_channel_index]);
+					timer_configs[timer_index].dma_ch_handle[timer_channel_index] = NULL;
+				}
+			}
+		}
+	}
+}
 
 int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bidirectional_dshot)
 {
-	_bidirectional = enable_bidirectional_dshot;
 	_dshot_frequency = dshot_pwm_freq;
+	_bidirectional = enable_bidirectional_dshot;
 
-	// Initialize the timer channels
+	// First things first mark the timers we want to use
 	for (unsigned output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 		if (channel_mask & (1 << output_channel)) {
 			uint8_t timer_index = timer_io_channels[output_channel].timer_index;
+			uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
 
 			if (io_timers[timer_index].dshot.dma_base == 0) {
 				// board does not configure dshot on this timer
 				continue;
 			}
 
-			io_timer_channel_mode_t mode = _bidirectional ? IOTimerChanMode_DshotInverted : IOTimerChanMode_Dshot;
-			int ret = io_timer_channel_init(output_channel, mode, NULL, NULL);
+			// NOTE: this is necessary to pass timer_index to DMA callback
+			timer_configs[timer_index].timer_index = timer_index;
+			// Mark timer as enabled
+			timer_configs[timer_index].enabled = true;
+			// Mark channel as enabled
+			timer_configs[timer_index].enabled_channels[timer_channel_index] = true;
 
-			if (ret != OK) {
-				PX4_INFO("io_timer_channel_init %u failed", output_channel);
-				return ret;
+			// Mark timer as bidirectional
+			if (enable_bidirectional_dshot && timer_index == _bidi_timer_index) {
+				timer_configs[timer_index].bidirectional = true;
 			}
-
-			_channels_init_mask |= (1 << output_channel);
-			_timers_init_mask |= (1 << timer_index);
 		}
 	}
 
-	// For each dshot timer, test the DMA UP configuration.
+	// Initializes dshot on each timer if DShot mode is enabled and DMA is available
+	init_dshot_timers();
+
+	// Initializes a single timer in Bidirectional DShot mode
+	if (enable_bidirectional_dshot) {
+		// Use first configured DShot timer (Timer index 0)
+		// TODO: BDSHOT_TIM param to select timer index?
+		init_dshot_bidirectional(_bidi_timer_index);
+	}
+
+	// Initialize each timer/channel
+	int32_t channels_init_mask = 0;
 	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
-		if (_timers_init_mask & (1 << timer_index)) {
-			if (timer_dma_handles[timer_index].dma_up_handle == NULL) {
 
-				// Set the DMA buffer size to hold all DMA data
-				uint32_t channel_count = io_timers_channel_mapping.element[timer_index].channel_count_including_gaps;
-
-				// Configure timer in dshot mode
-				io_timer_set_dshot_burst_mode(timer_index, _dshot_frequency, channel_count);
-
-				// Configure DMA UP handle
-				timer_dma_handles[timer_index].dma_up_handle = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_up);
-
-				if (timer_dma_handles[timer_index].dma_up_handle == NULL) {
-					PX4_INFO("could not allocate timer %u DMA UP handle", timer_index);
-					return -ENOSR;
-				}
-
-				// This was just for testing. We will initialize again at run time.
-				stm32_dmafree(timer_dma_handles[timer_index].dma_up_handle);
-				timer_dma_handles[timer_index].dma_up_handle = NULL;
-			}
+		if (!timer_configs[timer_index].enabled || !timer_configs[timer_index].initialized) {
+			// timer is not enabled or could not be initialized
+			continue;
 		}
-	}
 
-	// For each dshot channel, test the input DMA Capture Compare configuration
-	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
-		if (_channels_init_mask & (1 << output_channel)) {
-			uint8_t timer_index = timer_io_channels[output_channel].timer_index;
+		io_timer_channel_mode_t mode = timer_configs[timer_index].bidirectional ? IOTimerChanMode_DshotInverted : IOTimerChanMode_Dshot;
+
+		for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 			uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+			bool this_timer = timer_index == timer_io_channels[output_channel].timer_index;
+			bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
 
-			DMA_HANDLE *dma_handle = &timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index];
-			uint32_t dma_map_ch = io_timers[timer_index].dshot.dma_map_ch[timer_channel_index];
-
-			if (dma_map_ch) {
-				*dma_handle = stm32_dmachannel(dma_map_ch);
-
-				if (*dma_handle == NULL) {
-					PX4_INFO("could not allocate timer %u DMA CH%u handle, output_channel %u", timer_index, timer_channel_index,
-						 output_channel);
-					return -ENOSR;
+			if (this_timer && channel_enabled) {
+				int ret = io_timer_channel_init(output_channel, mode, NULL, NULL);
+				if (ret != OK) {
+					PX4_INFO("io_timer_channel_init %u failed", output_channel);
+					continue;
 				}
 
-				// This was just for testing. We will initialize again at run time.
-				stm32_dmafree(*dma_handle);
-				*dma_handle = NULL;
+				timer_configs[timer_index].initialized_channels[timer_channel_index] = true;
+				channels_init_mask |= (1 << output_channel);
+				if (timer_configs[timer_index].bidirectional) {
+					PX4_INFO("Bidi-DShot initialized OutputChannel %u", output_channel);
+				} else {
+					PX4_INFO("DShot initialized OutputChannel %u", output_channel);
+				}
 			}
 		}
 	}
 
-	// TODO: can we define this differently?
 	unsigned output_buffer_offset = 0;
 
 	for (unsigned timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
-		if (_timers_init_mask & (1 << timer_index)) {
+		if (timer_configs[timer_index].initialized) {
 			if (io_timers[timer_index].base == 0) { // no more timers configured
 				break;
 			}
@@ -232,32 +310,31 @@ int up_dshot_init(uint32_t channel_mask, unsigned dshot_pwm_freq, bool enable_bi
 		}
 	}
 
-	return _channels_init_mask;
+	return channels_init_mask;
 }
 
 // Kicks off a DMA transmit for each configured timer and the associated channels
 void up_dshot_trigger()
 {
 	// Enable DShot inverted on all channels
+	// TODO: we may have DShot and Bidi-DShot simultaneously?
 	io_timer_set_enable(true, _bidirectional ? IOTimerChanMode_DshotInverted : IOTimerChanMode_Dshot,
-			    IO_TIMER_ALL_MODES_CHANNELS);
+				IO_TIMER_ALL_MODES_CHANNELS);
 
 	// For each timer, begin DMA transmit
 	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
-		if (_timers_init_mask & (1 << timer_index)) {
+		if (timer_configs[timer_index].enabled && timer_configs[timer_index].initialized) {
 
-			// Set timer in dshot mode
 			uint32_t channel_count = io_timers_channel_mapping.element[timer_index].channel_count_including_gaps;
+
 			io_timer_set_dshot_burst_mode(timer_index, _dshot_frequency, channel_count);
 
-			// Allocate DMA if necessary
-			if (timer_dma_handles[timer_index].dma_up_handle == NULL) {
-
-				timer_dma_handles[timer_index].dma_up_handle = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_up);
-
-				if (timer_dma_handles[timer_index].dma_up_handle == NULL) {
+			// Allocate DMA
+			if (timer_configs[timer_index].dma_up_handle == NULL) {
+				timer_configs[timer_index].dma_up_handle = stm32_dmachannel(io_timers[timer_index].dshot.dma_map_up);
+				if (timer_configs[timer_index].dma_up_handle == NULL) {
 					PX4_INFO("DMA allocation for timer %u failed", timer_index);
-					return;
+					continue;
 				}
 			}
 
@@ -266,7 +343,7 @@ void up_dshot_trigger()
 					(uintptr_t) dshot_output_buffer[timer_index] +
 					DSHOT_OUTPUT_BUFFER_SIZE(channel_count));
 
-			px4_stm32_dmasetup(timer_dma_handles[timer_index].dma_up_handle,
+			px4_stm32_dmasetup(timer_configs[timer_index].dma_up_handle,
 					   io_timers[timer_index].base + STM32_GTIM_DMAR_OFFSET,
 					   (uint32_t)(dshot_output_buffer[timer_index]),
 					   channel_count * CHANNEL_OUTPUT_BUFF_SIZE,
@@ -276,35 +353,35 @@ void up_dshot_trigger()
 			io_timer_update_dma_req(timer_index, false);
 
 			// Trigger DMA (DShot Outputs)
-			_timer_index_array[timer_index] = timer_index;
-
-			if (_bidirectional) {
-				stm32_dmastart(timer_dma_handles[timer_index].dma_up_handle, dma_start_callback, &_timer_index_array[timer_index],
-					       false);
+			if (timer_configs[timer_index].bidirectional) {
+				stm32_dmastart(timer_configs[timer_index].dma_up_handle, dma_burst_finished_callback, &timer_configs[timer_index].timer_index,
+						   false);
 
 			} else {
-				stm32_dmastart(timer_dma_handles[timer_index].dma_up_handle,  NULL, NULL, false);
+				stm32_dmastart(timer_configs[timer_index].dma_up_handle,  NULL, NULL, false);
 			}
 
 			// Enable DMA update request
 			io_timer_update_dma_req(timer_index, true);
-			px4_arch_gpiowrite(GPIO_FMU_CH8, true);
+
+			// DEBUGGING
+			// px4_arch_gpiowrite(GPIO_FMU_CH8, true);
 		}
 	}
 }
 
-void dma_start_callback(DMA_HANDLE handle, uint8_t status, void *arg)
+void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 {
 	// DEBUGGING
-	px4_arch_gpiowrite(GPIO_FMU_CH8, false);
+	// px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 
 	uint8_t timer_index = *((uint8_t *)arg);
 
 	// Clean DMA UP configuration
-	if (timer_dma_handles[timer_index].dma_up_handle != NULL) {
-		stm32_dmastop(timer_dma_handles[timer_index].dma_up_handle);
-		stm32_dmafree(timer_dma_handles[timer_index].dma_up_handle);
-		timer_dma_handles[timer_index].dma_up_handle = NULL;
+	if (timer_configs[timer_index].dma_up_handle != NULL) {
+		stm32_dmastop(timer_configs[timer_index].dma_up_handle);
+		stm32_dmafree(timer_configs[timer_index].dma_up_handle);
+		timer_configs[timer_index].dma_up_handle = NULL;
 	}
 
 	// Disable DMA update request
@@ -317,59 +394,60 @@ void dma_start_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
-		bool channel_enabled = _channels_init_mask & (1 << output_channel);
+		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+		bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+		bool bidirectional_enabled = timer_configs[timer_index].bidirectional_channels[timer_channel_index];
 
-		if (is_this_timer && channel_enabled) {
+		if (is_this_timer && channel_enabled && bidirectional_enabled) {
 			io_timer_unallocate_channel(output_channel);
 			io_timer_channel_init(output_channel, IOTimerChanMode_CaptureDMA, NULL, NULL);
 		}
 	}
 
-	// Allocate DMA for all channels on this timer
+	// Allocate DMA for all enabled channels on this timer
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
-		bool channel_enabled = _channels_init_mask & (1 << output_channel);
 		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+		bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+		bool bidirectional_enabled = timer_configs[timer_index].bidirectional_channels[timer_channel_index];
 
-		if (is_this_timer && channel_enabled) {
+		if (is_this_timer && channel_enabled && bidirectional_enabled) {
 
 			// Allocate DMA
-			if (timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
-				timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index] = stm32_dmachannel(
+			if (timer_configs[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
+				timer_configs[timer_index].dma_ch_handle[timer_channel_index] = stm32_dmachannel(
 							io_timers[timer_index].dshot.dma_map_ch[timer_channel_index]);
 			}
 
 			// If DMA handler is valid, start DMA
-			if (timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
+			if (timer_configs[timer_index].dma_ch_handle[timer_channel_index] == NULL) {
 				PX4_INFO("failed to allocate dma for timer %u channel %u", timer_index, timer_channel_index);
-				continue;
+				// continue;
+				return;
 			}
+
+			// Set Capture mode for this channel
+			io_timer_set_dshot_capture_mode(timer_index, timer_channel_index, _dshot_frequency);
+			io_timer_capture_dma_req(timer_index, timer_channel_index, true);
 
 			// Choose which CC register for this DMA stream
 			uint32_t periph_addr = io_timers[timer_index].base + STM32_GTIM_CCR1_OFFSET + (4 * timer_channel_index);
 
 			// Setup DMA for this channel
-			px4_stm32_dmasetup(timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index],
+			px4_stm32_dmasetup(timer_configs[timer_index].dma_ch_handle[timer_channel_index],
 					   periph_addr,
-					   (uint32_t) dshot_capture_buffer[timer_index][timer_channel_index],
+					   (uint32_t) dshot_capture_buffer[timer_channel_index],
 					   CHANNEL_CAPTURE_BUFF_SIZE,
 					   DSHOT_BIDIRECTIONAL_DMA_SCR);
 		}
 	}
 
 	// Flush cache so DMA sees the data
-	memset(dshot_capture_buffer[timer_index], 0, sizeof(dshot_capture_buffer[timer_index]));
-	up_clean_dcache((uintptr_t) dshot_capture_buffer[timer_index],
-			(uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
+	memset(dshot_capture_buffer, 0, sizeof(dshot_capture_buffer));
+	up_clean_dcache((uintptr_t) dshot_capture_buffer,
+			(uintptr_t) dshot_capture_buffer + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
 
-	// TODO: timer channels mask, right now we enable all 4 channels
-	// Enable CaptComp for the channels
-	io_timer_set_dshot_capture_mode(timer_index, _dshot_frequency);
-
-	// TODO: timer channels mask, right now we enable all 4 channels
-	// Enable CaptureDMA on this timer
-	io_timer_capture_dma_req(timer_index, true);
 
 	// Enable CaptureDMA and on all channels
 	io_timer_set_enable(true, IOTimerChanMode_CaptureDMA, IO_TIMER_ALL_MODES_CHANNELS);
@@ -378,55 +456,59 @@ void dma_start_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
-		bool channel_enabled = _channels_init_mask & (1 << output_channel);
 		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+		bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+		bool bidirectional_enabled = timer_configs[timer_index].bidirectional_channels[timer_channel_index];
 
-		if (is_this_timer && channel_enabled) {
+		if (is_this_timer && channel_enabled && bidirectional_enabled) {
 			// NOTE: we can't use DMA callback since GCR encoding creates a variable length pulse train
-			stm32_dmastart(timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index], NULL, NULL, false);
+			stm32_dmastart(timer_configs[timer_index].dma_ch_handle[timer_channel_index], NULL, NULL, false);
 		}
 	}
 
 	// 30us to switch regardless of DShot frequency + eRPM frame time + 10us for good measure
 	hrt_abstime frame_us = (16 * 1000000) / _dshot_frequency; // 16 bits * us_per_s / bits_per_s
 	hrt_abstime delay = 30 + frame_us + 10;
-	hrt_call_after(&_dma_capture_callback_call[timer_index], delay, _cc_callbacks[timer_index], arg);
+	hrt_call_after(&_cc_call, delay, capture_complete_callback, arg);
 
 	// DEBUGGING
-	px4_arch_gpiowrite(GPIO_FMU_CH8, true);
+	// px4_arch_gpiowrite(GPIO_FMU_CH8, true);
 }
 
-static void capture_complete(uint8_t timer_index)
+static void capture_complete_callback(void *arg)
 {
+	uint8_t timer_index = *((uint8_t *)arg);
+
 	// DEBUGGING
-	px4_arch_gpiowrite(GPIO_FMU_CH8, false);
+	// px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
-		bool channel_enabled = _channels_init_mask & (1 << output_channel);
 		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+		bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+		bool bidirectional_enabled = timer_configs[timer_index].bidirectional_channels[timer_channel_index];
 
-		if (is_this_timer && channel_enabled) {
-			if (timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
-				stm32_dmastop(timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index]);
-				stm32_dmafree(timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index]);
-				timer_dma_handles[timer_index].dma_ch_handle[timer_channel_index] = NULL;
+		if (is_this_timer && channel_enabled && bidirectional_enabled) {
+			// Disable capture DMA
+			io_timer_capture_dma_req(timer_index, timer_channel_index, false);
+
+			if (timer_configs[timer_index].dma_ch_handle[timer_channel_index] != NULL) {
+				stm32_dmastop(timer_configs[timer_index].dma_ch_handle[timer_channel_index]);
+				stm32_dmafree(timer_configs[timer_index].dma_ch_handle[timer_channel_index]);
+				timer_configs[timer_index].dma_ch_handle[timer_channel_index] = NULL;
 			}
 
 			io_timer_unallocate_channel(output_channel);
 		}
 	}
 
-	// Disable capture DMA
-	io_timer_capture_dma_req(timer_index, false);
-
 	// Unallocate the timer as CaptureDMA
 	io_timer_unallocate_timer(timer_index);
 
 	// Invalidate the dcache to ensure most recent data is available
-	up_invalidate_dcache((uintptr_t) dshot_capture_buffer[timer_index],
-			     (uintptr_t) dshot_capture_buffer[timer_index] + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
+	up_invalidate_dcache((uintptr_t) dshot_capture_buffer,
+				 (uintptr_t) dshot_capture_buffer + DSHOT_CAPTURE_BUFFER_SIZE(MAX_NUM_CHANNELS_PER_TIMER));
 
 	// Process eRPM frames from all channels on this timer
 	process_capture_results(timer_index);
@@ -435,33 +517,17 @@ static void capture_complete(uint8_t timer_index)
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
 		bool is_this_timer = timer_index == timer_io_channels[output_channel].timer_index;
-		bool channel_enabled = _channels_init_mask & (1 << output_channel);
+		uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+		bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+		bool bidirectional_enabled = timer_configs[timer_index].bidirectional_channels[timer_channel_index];
 
-		if (is_this_timer && channel_enabled) {
+		if (is_this_timer && channel_enabled && bidirectional_enabled) {
 			io_timer_channel_init(output_channel, IOTimerChanMode_DshotInverted, NULL, NULL);
 		}
 	}
 
 	// Enable all channels on this timer configured as DShotInverted
 	io_timer_set_enable(true, IOTimerChanMode_DshotInverted, IO_TIMER_ALL_MODES_CHANNELS);
-}
-
-static void cc_callback_timer_index_0(void *arg)
-{
-	uint8_t timer_index = *((uint8_t *)arg);
-	capture_complete(timer_index);
-}
-
-static void cc_callback_timer_index_1(void *arg)
-{
-	uint8_t timer_index = *((uint8_t *)arg);
-	capture_complete(timer_index);
-}
-
-static void cc_callback_timer_index_2(void *arg)
-{
-	uint8_t timer_index = *((uint8_t *)arg);
-	capture_complete(timer_index);
 }
 
 void process_capture_results(uint8_t timer_index)
@@ -473,15 +539,15 @@ void process_capture_results(uint8_t timer_index)
 
 		if (period == 0) {
 			// If the parsing failed, set the eRPM to 0
-			_erpms[timer_index][channel_index] = 0;
+			_erpms[channel_index] = 0;
 
 		} else if (period == 65408) {
 			// Special case for zero motion (e.g., stationary motor)
-			_erpms[timer_index][channel_index] = 0;
+			_erpms[channel_index] = 0;
 
 		} else {
 			// Convert the period to eRPM
-			_erpms[timer_index][channel_index] = (1000000 * 60) / period;
+			_erpms[channel_index] = (1000000 * 60) / period;
 		}
 	}
 }
@@ -493,8 +559,11 @@ void process_capture_results(uint8_t timer_index)
 **/
 void dshot_motor_data_set(unsigned channel, uint16_t throttle, bool telemetry)
 {
-	if (!(_channels_init_mask & (1 << channel))) {
-		// this channel is not configured for dshot
+	uint8_t timer_index = timer_io_channels[channel].timer_index;
+	uint8_t timer_channel_index = timer_io_channels[channel].timer_channel - 1;
+	bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+
+	if (!channel_enabled) {
 		return;
 	}
 
@@ -509,7 +578,7 @@ void dshot_motor_data_set(unsigned channel, uint16_t throttle, bool telemetry)
 	/* XOR checksum calculation */
 	csum_data >>= NIBBLES_SIZE;
 
-	for (unsigned i = 0; i < DSHOT_NUMBER_OF_NIBBLES; i++) {
+	for (uint8_t i = 0; i < DSHOT_NUMBER_OF_NIBBLES; i++) {
 		checksum ^= (csum_data & 0x0F); // XOR data by nibbles
 		csum_data >>= NIBBLES_SIZE;
 	}
@@ -521,15 +590,13 @@ void dshot_motor_data_set(unsigned channel, uint16_t throttle, bool telemetry)
 		packet |= ((checksum) & 0x0F);
 	}
 
-	unsigned timer = timer_io_channels[channel].timer_index;
 
-	uint32_t *buffer = dshot_output_buffer[timer];
-	const io_timers_channel_mapping_element_t *mapping = &io_timers_channel_mapping.element[timer];
-	unsigned num_motors = mapping->channel_count_including_gaps;
-	unsigned timer_channel = timer_io_channels[channel].timer_channel - mapping->lowest_timer_channel;
+	const io_timers_channel_mapping_element_t *mapping = &io_timers_channel_mapping.element[timer_index];
+	uint8_t num_motors = mapping->channel_count_including_gaps;
+	uint8_t timer_channel = timer_io_channels[channel].timer_channel - mapping->lowest_timer_channel;
 
-	for (unsigned motor_data_index = 0; motor_data_index < ONE_MOTOR_DATA_SIZE; motor_data_index++) {
-		buffer[motor_data_index * num_motors + timer_channel] =
+	for (uint8_t motor_data_index = 0; motor_data_index < ONE_MOTOR_DATA_SIZE; motor_data_index++) {
+		dshot_output_buffer[timer_index][motor_data_index * num_motors + timer_channel] =
 			(packet & 0x8000) ? MOTOR_PWM_BIT_1 : MOTOR_PWM_BIT_0;  // MSB first
 		packet <<= 1;
 	}
@@ -545,9 +612,10 @@ int up_bdshot_get_erpm(uint8_t output_channel, int *erpm)
 {
 	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
 	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+	bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
 
-	if (_channels_init_mask & (1 << output_channel)) {
-		*erpm = _erpms[timer_index][timer_channel_index];
+	if (channel_enabled) {
+		*erpm = _erpms[timer_channel_index];
 		return PX4_OK;
 	}
 
@@ -557,8 +625,12 @@ int up_bdshot_get_erpm(uint8_t output_channel, int *erpm)
 
 int up_bdshot_channel_status(uint8_t channel)
 {
+	uint8_t timer_index = timer_io_channels[channel].timer_index;
+	uint8_t timer_channel_index = timer_io_channels[channel].timer_channel - 1;
+	bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+
 	// TODO: track that each channel is communicating
-	if (_channels_init_mask & (1 << channel)) {
+	if (channel_enabled) {
 		return 1;
 	}
 
@@ -567,21 +639,22 @@ int up_bdshot_channel_status(uint8_t channel)
 
 void up_bdshot_status(void)
 {
-    PX4_INFO("dshot driver stats:");
+	PX4_INFO("dshot driver stats:");
 
-    for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
-        for (uint8_t channel_index = 0; channel_index < MAX_NUM_CHANNELS_PER_TIMER; channel_index++) {
+	uint8_t timer_index = _bidi_timer_index;
 
-            if (_channels_init_mask & (1 << (timer_index * MAX_NUM_CHANNELS_PER_TIMER + channel_index))) {
-                PX4_INFO("Timer %u, Channel %u: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
-                         timer_index, channel_index,
-                         read_ok[timer_index][channel_index],
-                         read_fail_nibble[timer_index][channel_index],
-                         read_fail_crc[timer_index][channel_index],
-                         read_fail_zero[timer_index][channel_index]);
-            }
-        }
-    }
+	for (uint8_t timer_channel_index = 0; timer_channel_index < MAX_NUM_CHANNELS_PER_TIMER; timer_channel_index++) {
+		bool channel_enabled = timer_configs[timer_index].enabled_channels[timer_channel_index];
+
+		if (channel_enabled) {
+			PX4_INFO("Timer %u, Channel %u: read %lu, failed nibble %lu, failed CRC %lu, invalid/zero %lu",
+					 timer_index, timer_channel_index,
+					 read_ok[timer_channel_index],
+					 read_fail_nibble[timer_channel_index],
+					 read_fail_crc[timer_channel_index],
+					 read_fail_zero[timer_channel_index]);
+		}
+	}
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)
@@ -654,13 +727,13 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 		// Ignore the first data point, which is the pulse before it starts
 		if (i > 1) {
 
-			if (dshot_capture_buffer[timer_index][channel_index][i] == 0) {
+			if (dshot_capture_buffer[channel_index][i] == 0) {
 				// Once we hit zeros, the data has ended
 				break;
 			}
 
 			// Quantization logic for DShot 150, 300, 600, 1200
-			const uint32_t bits = (dshot_capture_buffer[timer_index][channel_index][i] - previous + 5) / 20;
+			const uint32_t bits = (dshot_capture_buffer[channel_index][i] - previous + 5) / 20;
 
 			// Shift the bits into the value
 			for (unsigned bit = 0; bit < bits; ++bit) {
@@ -672,12 +745,12 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 			high = !high;
 		}
 
-		previous = dshot_capture_buffer[timer_index][channel_index][i];
+		previous = dshot_capture_buffer[channel_index][i];
 	}
 
 	if (shifted == 0) {
 		// If no data was shifted, the read failed
-		++read_fail_zero[timer_index][channel_index];
+		++read_fail_zero[channel_index];
 		return 0;
 	}
 
@@ -694,7 +767,7 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 		uint32_t nibble = nibbles_from_mapped(gcr & 0x1F) << (4 * i);
 
 		if (nibble == 0xFF) {
-			++read_fail_nibble[timer_index][channel_index];;
+			++read_fail_nibble[channel_index];;
 			return 0;
 		}
 
@@ -710,11 +783,11 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 	unsigned calculated_crc = (~(payload ^ (payload >> 4) ^ (payload >> 8))) & 0x0F;
 
 	if (crc != calculated_crc) {
-		++read_fail_crc[timer_index][channel_index];;
+		++read_fail_crc[channel_index];;
 		return 0;
 	}
 
-	++read_ok[timer_index][channel_index];;
+	++read_ok[channel_index];;
 	return period;
 }
 
