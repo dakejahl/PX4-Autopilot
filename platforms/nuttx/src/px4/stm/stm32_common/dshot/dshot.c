@@ -93,14 +93,14 @@ static unsigned calculate_period(uint8_t timer_index, uint8_t channel_index);
 // Timer configuration struct
 typedef struct timer_config_t {
 	DMA_HANDLE dma_up_handle;       // DMA stream for DMA update
-	DMA_HANDLE dma_ch_handle[4];    // DMA streams for bidi capture compare
-	bool enabled;
-	bool enabled_channels[4];
-	bool initialized;
-	bool initialized_channels[4];
-	bool bidirectional;
-	bool bidirectional_channels[4];
-	uint8_t timer_index;
+	DMA_HANDLE dma_ch_handle[4];    // DMA streams for bidi CaptComp
+	bool enabled;                   // Timer enabled
+	bool enabled_channels[4];       // Timer Channels enabled
+	bool initialized;               // Timer initialized
+	bool initialized_channels[4];   // Timer channels initialized
+	bool bidirectional;             // Timer in bidi (inverted) mode
+	bool bidirectional_channels[4]; // Channels configured for CaptComp
+	uint8_t timer_index;            // Timer index. Necessary to have memory for passing pointer to hrt callback
 } timer_config_t;
 
 static timer_config_t timer_configs[MAX_IO_TIMERS] = {};
@@ -118,12 +118,13 @@ static bool     _bidirectional = false;
 static uint8_t  _bidi_timer_index = 0; // TODO: BDSHOT_TIM param to select timer index?
 static uint32_t _dshot_frequency = 0;
 
-// eRPM data from a single timer
+// eRPM data for channels on the singular timer
 static int32_t _erpms[MAX_NUM_CHANNELS_PER_TIMER] = {};
 
+// hrt callback handle for captcomp post dma processing
 static struct hrt_call _cc_call;
 
-// decoding status
+// decoding status for each channel
 static uint32_t read_ok[MAX_NUM_CHANNELS_PER_TIMER] = {};
 static uint32_t read_fail_nibble[MAX_NUM_CHANNELS_PER_TIMER] = {};
 static uint32_t read_fail_crc[MAX_NUM_CHANNELS_PER_TIMER] = {};
@@ -371,18 +372,12 @@ void up_dshot_trigger()
 
 			// Enable DMA update request
 			io_timer_update_dma_req(timer_index, true);
-
-			// DEBUGGING
-			// px4_arch_gpiowrite(GPIO_FMU_CH8, true);
 		}
 	}
 }
 
 void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 {
-	// DEBUGGING
-	// px4_arch_gpiowrite(GPIO_FMU_CH8, false);
-
 	uint8_t timer_index = *((uint8_t *)arg);
 
 	// Clean DMA UP configuration
@@ -478,17 +473,11 @@ void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 	hrt_abstime frame_us = (16 * 1000000) / _dshot_frequency; // 16 bits * us_per_s / bits_per_s
 	hrt_abstime delay = 30 + frame_us + 10;
 	hrt_call_after(&_cc_call, delay, capture_complete_callback, arg);
-
-	// DEBUGGING
-	// px4_arch_gpiowrite(GPIO_FMU_CH8, true);
 }
 
 static void capture_complete_callback(void *arg)
 {
 	uint8_t timer_index = *((uint8_t *)arg);
-
-	// DEBUGGING
-	// px4_arch_gpiowrite(GPIO_FMU_CH8, false);
 
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
@@ -732,15 +721,16 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 	// Loop through the capture buffer for the specified channel
 	for (unsigned i = 1; i < CHANNEL_CAPTURE_BUFF_SIZE; ++i) {
 
-		// Ignore the first data point, which is the pulse before it starts
+		// We can ignore the very first data point as it's the pulse before it starts.
 		if (i > 1) {
 
 			if (dshot_capture_buffer[channel_index][i] == 0) {
-				// Once we hit zeros, the data has ended
+				// Once we get zeros we're through
 				break;
 			}
 
-			// Quantization logic for DShot 150, 300, 600, 1200
+			// This seemss to work with dshot 150, 300, 600, 1200
+			// The values were found by trial and error to get the quantization just right.
 			const uint32_t bits = (dshot_capture_buffer[channel_index][i] - previous + 5) / 20;
 
 			// Shift the bits into the value
@@ -749,7 +739,7 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 				++shifted;
 			}
 
-			// Toggle the high/low state on the next edge
+			// The next edge toggles.
 			high = !high;
 		}
 
@@ -757,20 +747,21 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 	}
 
 	if (shifted == 0) {
-		// If no data was shifted, the read failed
+		// no data yet, or this time
 		++read_fail_zero[channel_index];
 		return 0;
 	}
 
-	// Ensure we've shifted 21 times; otherwise, we pad with zeros
+	// We need to make sure we shifted 21 times. We might have missed some low "pulses" at the very end.
 	value <<= (21 - shifted);
 
-	// Gray code (GCR) to eRPM conversion logic
+	// From GCR to eRPM according to:
+	// https://brushlesswhoop.com/dshot-and-bidirectional-dshot/#erpm-transmission
 	unsigned gcr = (value ^ (value >> 1));
 
 	uint32_t data = 0;
 
-	// Decode 4 nibbles (5-bit gray code -> 4-bit nibbles)
+	// 20bits -> 5 mapped -> 4 nibbles
 	for (unsigned i = 0; i < 4; ++i) {
 		uint32_t nibble = nibbles_from_mapped(gcr & 0x1F) << (4 * i);
 
