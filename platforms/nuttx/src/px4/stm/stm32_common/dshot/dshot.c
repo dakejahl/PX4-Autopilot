@@ -98,7 +98,7 @@ static void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void 
 static void capture_complete_callback(void *arg);
 
 static void process_capture_results(void);
-static unsigned calculate_period(uint8_t output_channel, uint8_t channel_index);
+static unsigned calculate_period(uint8_t output_channel);
 
 // Timer configuration struct
 typedef struct timer_config_t {
@@ -113,7 +113,6 @@ typedef struct timer_config_t {
 	uint8_t timer_index;                                     // Timer index. Necessary to have memory for passing pointer to hrt callback
 	uint8_t num_dma_available;
 } timer_config_t;
-
 
 static timer_config_t timer_configs[MAX_IO_TIMERS] = {};
 
@@ -133,26 +132,24 @@ static uint32_t _dshot_frequency = 0;
 static int32_t _erpms[MAX_TIMER_IO_CHANNELS] = {};
 static bool _erpms_ready[MAX_TIMER_IO_CHANNELS] = {};
 
-static uint32_t read_ok[MAX_TIMER_IO_CHANNELS] = {};
-static uint32_t read_fail_nibble[MAX_TIMER_IO_CHANNELS] = {};
-static uint32_t read_fail_crc[MAX_TIMER_IO_CHANNELS] = {};
-static uint32_t read_fail_zero[MAX_TIMER_IO_CHANNELS] = {};
-
 // hrt callback handle for captcomp post dma processing
 static struct hrt_call _cc_call;
 
 static unsigned counter = 0;
 
-
 // decoding status for each channel
+static uint32_t read_ok[MAX_TIMER_IO_CHANNELS] = {};
+static uint32_t read_fail_nibble[MAX_TIMER_IO_CHANNELS] = {};
+static uint32_t read_fail_crc[MAX_TIMER_IO_CHANNELS] = {};
+static uint32_t read_fail_zero[MAX_TIMER_IO_CHANNELS] = {};
 
 static void init_timer_config(uint32_t channel_mask)
 {
 	// Mark timers in use, channels in use, and timers for bidi dshot
 	for (unsigned output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 		if (channel_mask & (1 << output_channel)) {
-			uint8_t timer_index = timer_io_channels[output_channel].timer_index;
 
+			uint8_t timer_index = timer_io_channels[output_channel].timer_index;
 			uint8_t timer_channel = timer_io_channels[output_channel].timer_channel;
 
 			if ((timer_channel <= 0) || (timer_channel >= 5)) {
@@ -430,9 +427,6 @@ void up_dshot_trigger()
 	io_timer_set_enable(true, _bidirectional ? IOTimerChanMode_DshotInverted : IOTimerChanMode_Dshot,
 			    IO_TIMER_ALL_MODES_CHANNELS);
 
-	//static unsigned counter = 0;
-	//bool print = (counter++ % 499 == 0);
-
 	// For each timer, begin DMA transmit
 	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
 		if (timer_configs[timer_index].enabled && timer_configs[timer_index].initialized) {
@@ -467,9 +461,6 @@ void up_dshot_trigger()
 
 			// Trigger DMA (DShot Outputs)
 			if (timer_configs[timer_index].bidirectional) {
-				//if (print) {
-				//	printf("handle: 0x%lx\n", (long unsigned)timer_configs[timer_index].dma_up_handle);
-				//}
 				stm32_dmastart(timer_configs[timer_index].dma_up_handle, dma_burst_finished_callback,
 					       &timer_configs[timer_index].timer_index,
 					       false);
@@ -598,6 +589,8 @@ void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void *arg)
 			//if (print) printf("before 0x%lx\n", (long unsigned)timer_configs[timer_index].dma_ch_handle[timer_channel_index]);
 			// Re-initialize output for CaptureDMA
 			io_timer_unallocate_channel(output_channel);
+
+			// NOTE: this uses a critical section
 			io_timer_channel_init(output_channel, IOTimerChanMode_CaptureDMA, NULL, NULL);
 
 
@@ -732,29 +725,31 @@ void process_capture_results()
 		}
 
 		// Calculate the period for each channel
-		unsigned period = calculate_period(output_channel, timer_channel_index);
+		unsigned period = calculate_period(output_channel);
 		//period = 0;
 		bool print = counter % 499 == 0;
 		if (print) printf("#%d -> t: %d, c: %d -> period: %d\n", output_channel, timer_index, timer_channel_index, period);
 
-		continue;
+		// continue;
 		if (period == 0) {
 			// If the parsing failed, set the eRPM to 0
-			//_erpms[channel_index] = 0;
+			_erpms[output_channel] = 0;
 
 		} else if (period == 65408) {
 			// Special case for zero motion (e.g., stationary motor)
-			//_erpms[channel_index] = 0;
+			_erpms[output_channel] = 0;
 
 		} else {
 			// Convert the period to eRPM
-			//_erpms[channel_index] = (1000000 * 60) / period;
+			_erpms[output_channel] = (1000000 * 60) / period;
 		}
 
+		_erpms_ready[output_channel] = true;
+
 		// We set it ready anyway, not to hold up other channels when used in round robin.
-		if (timer_index == 1) {
-			//_erpms_ready[channel_index] = true;
-		}
+		// if (timer_index == 1) {
+		// 	_erpms_ready[output_channel] = true;
+		// }
 	}
 }
 
@@ -877,7 +872,7 @@ void up_bdshot_status(void)
 
 	for (uint8_t output_channel = 0; output_channel < MAX_TIMER_IO_CHANNELS; output_channel++) {
 
-		PX4_INFO("output channel %d, timer index %d, timer channel %d (read %lu, failed nibble %lu, failed CRC %lu, zero %lu\n",
+		PX4_INFO("output channel %d, timer index %d, timer channel %d (read %lu, failed nibble %lu, failed CRC %lu, zero %lu",
 			 output_channel,
 			 timer_io_channels[output_channel].timer_index,
 			 timer_io_channels[output_channel].timer_channel,
@@ -889,24 +884,24 @@ void up_bdshot_status(void)
 
 	printf("\n");
 
-	for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
-		printf("timer_index %d\n", timer_index);
-		printf("dma_up_handle: 0x%lx\n", (unsigned long)timer_configs[timer_index].dma_up_handle);
-		printf("enabled: %s\n", timer_configs[timer_index].enabled ? "yes" : "no");
-		printf("initialized: %s\n", timer_configs[timer_index].initialized ? "yes" : "no");
-		printf("bidirectional: %s\n", timer_configs[timer_index].bidirectional ? "yes" : "no");
-		printf("timer index: %d\n", timer_configs[timer_index].timer_index);
-		printf("num_dma_available: %d\n", timer_configs[timer_index].num_dma_available);
+	// for (uint8_t timer_index = 0; timer_index < MAX_IO_TIMERS; timer_index++) {
+	// 	printf("timer_index %d\n", timer_index);
+	// 	printf("dma_up_handle: 0x%lx\n", (unsigned long)timer_configs[timer_index].dma_up_handle);
+	// 	printf("enabled: %s\n", timer_configs[timer_index].enabled ? "yes" : "no");
+	// 	printf("initialized: %s\n", timer_configs[timer_index].initialized ? "yes" : "no");
+	// 	printf("bidirectional: %s\n", timer_configs[timer_index].bidirectional ? "yes" : "no");
+	// 	printf("timer index: %d\n", timer_configs[timer_index].timer_index);
+	// 	printf("num_dma_available: %d\n", timer_configs[timer_index].num_dma_available);
 
-		for (uint8_t channel = 0; channel < MAX_NUM_CHANNELS_PER_TIMER; ++channel) {
-			printf("channel: %d\n", channel);
-			printf("  dma_ch_handle: 0x%lx\n", (long unsigned)timer_configs[timer_index].dma_ch_handle[channel]);
-			printf("  enabled: %s\n", timer_configs[timer_index].enabled_channels[channel] ? "true" : "false");
-			printf("  initialized: %s\n", timer_configs[timer_index].initialized_channels[channel] ? "true" : "false");
-			printf("  captcomp: %s\n", timer_configs[timer_index].captcomp_channels[channel] ? "true" : "false");
-		}
-		printf("----\n");
-	}	
+	// 	for (uint8_t channel = 0; channel < MAX_NUM_CHANNELS_PER_TIMER; ++channel) {
+	// 		printf("channel: %d\n", channel);
+	// 		printf("  dma_ch_handle: 0x%lx\n", (long unsigned)timer_configs[timer_index].dma_ch_handle[channel]);
+	// 		printf("  enabled: %s\n", timer_configs[timer_index].enabled_channels[channel] ? "true" : "false");
+	// 		printf("  initialized: %s\n", timer_configs[timer_index].initialized_channels[channel] ? "true" : "false");
+	// 		printf("  captcomp: %s\n", timer_configs[timer_index].captcomp_channels[channel] ? "true" : "false");
+	// 	}
+	// 	printf("----\n");
+	// }
 }
 
 uint8_t nibbles_from_mapped(uint8_t mapped)
@@ -966,7 +961,7 @@ uint8_t nibbles_from_mapped(uint8_t mapped)
 	}
 }
 
-unsigned calculate_period(uint8_t output_channel, uint8_t channel_index)
+unsigned calculate_period(uint8_t output_channel)
 {
 	uint32_t value = 0;
 	uint32_t high = 1; // We start off with high
@@ -1002,7 +997,7 @@ unsigned calculate_period(uint8_t output_channel, uint8_t channel_index)
 
 	if (shifted == 0) {
 		// no data yet, or this time
-		//++timer_configs[timer_index].read_fail_zero[channel_index];
+		read_fail_zero[output_channel]++;
 		return 0;
 	}
 
@@ -1023,7 +1018,7 @@ unsigned calculate_period(uint8_t output_channel, uint8_t channel_index)
 		//nibble = 0xFF;
 
 		if (nibble == 0xFF) {
-			//++timer_configs[timer_index].read_fail_nibble[channel_index];;
+			read_fail_nibble[output_channel]++;
 			return 0;
 		}
 
@@ -1039,11 +1034,11 @@ unsigned calculate_period(uint8_t output_channel, uint8_t channel_index)
 	unsigned calculated_crc = (~(payload ^ (payload >> 4) ^ (payload >> 8))) & 0x0F;
 
 	if (crc != calculated_crc) {
-		//++timer_configs[timer_index].read_fail_crc[channel_index];;
+		read_fail_crc[output_channel]++;
 		return 0;
 	}
 
-	//++read_ok[output_channel];;
+	++read_ok[output_channel];
 
 	//(void)period;
 	//return 200;
