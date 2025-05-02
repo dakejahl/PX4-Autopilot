@@ -74,11 +74,12 @@ int GZBridge::init()
 	// TODO: figure out wtf is going on here -- why does a 0 timestamp break vehicle_imu?
 	// Spin and wait for first clock message
 	while (1) {
+		px4_usleep(50000);
+
 		if (_clock_received) {
 			PX4_INFO("clock received");
 			break;
 		}
-		px4_usleep(100000);
 	}
 
 	// pose: /world/$WORLD/pose/info
