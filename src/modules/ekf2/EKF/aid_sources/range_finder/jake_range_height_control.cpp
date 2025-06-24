@@ -54,9 +54,9 @@ void Ekf::controlRangeHaglFusion(const imuSample &imu_sample)
 		if (_range_sensor.timedOut(imu_sample.time_us)) {
 			// Disable fusion if it's currently enabled
 			if (_control_status.flags.rng_hgt || _control_status.flags.rng_terrain) {
-				PX4_INFO("stopping RNG fusion, sensor timed out");
 				stopRangeAltitudeFusion();
 				stopRangeTerrainFusion();
+				PX4_INFO("sensor timed out");
 			}
 			// PX4_INFO("timed out1");
 		}
@@ -93,9 +93,9 @@ void Ekf::controlRangeHaglFusion(const imuSample &imu_sample)
 		if (_range_sensor.timedOut(imu_sample.time_us)) {
 			// Disable fusion if it's currently enabled
 			if (_control_status.flags.rng_hgt || _control_status.flags.rng_terrain) {
-				PX4_INFO("stopping RNG fusion, sensor data invalid");
 				stopRangeAltitudeFusion();
 				stopRangeTerrainFusion();
+				PX4_INFO("sensor data invalid");
 			}
 			PX4_INFO("timed out2");
 		}
@@ -185,16 +185,16 @@ void Ekf::fuseRangeAsHeightAiding()
 		// Start fusion
 		if (!_control_status.flags.rng_hgt) {
 			// Fusion init logic
-			PX4_INFO("starting RNG Altitude fusion");
+			PX4_INFO("START RNG Altitude fusion");
 			_control_status.flags.rng_hgt = true;
 
 			// TODO: do we really need to stop terrain fusion here?
-			stopRangeTerrainFusion();
+			// stopRangeTerrainFusion();
 
 			// TODO: review for correctness
 			if (innovation_rejected && kinematically_consistent) {
 				// Reset aid source
-				PX4_INFO("range alt fusion, resetting aid source");
+				PX4_INFO("resetting aid source");
 				resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
 			}
 		}
@@ -206,12 +206,12 @@ void Ekf::fuseRangeAsHeightAiding()
 		// Stop fusion
 		stopRangeAltitudeFusion();
 
-		// if (!range_aid_conditions_passed) {
-		// 	PX4_INFO("range aid conditions failed");
-		// }
-		// if (!kinematically_consistent) {
-		// 	PX4_INFO("kinematically inconsistent");
-		// }
+		if (!range_aid_conditions_passed) {
+			PX4_INFO("range aid conditions failed");
+		}
+		if (!kinematically_consistent) {
+			PX4_INFO("kinematically inconsistent");
+		}
 	}
 
 	// Fuse Range into Terrain if:
@@ -221,7 +221,7 @@ void Ekf::fuseRangeAsHeightAiding()
 		// Start fusion
 		if (!_control_status.flags.rng_terrain) {
 			// Fusion init logic
-			PX4_INFO("starting RNG Terrain fusion");
+			PX4_INFO("START RNG Terrain fusion");
 			_control_status.flags.rng_terrain = true;
 
 			// Reset terrain when we first init
@@ -252,6 +252,7 @@ void Ekf::fuseRangeAsHeightAiding()
 	} else {
 		// Stop fusion
 		stopRangeTerrainFusion();
+		PX4_INFO("not kinematically consistent");
 	}
 
 	if (fuse_measurement) {
@@ -287,6 +288,7 @@ void Ekf::fuseRangeAsHeightSource()
 
 		// Cannot have terrain estimate fusion while RANGE is primary
 		stopRangeTerrainFusion();
+		PX4_INFO("initializing range as primary");
 		_state.terrain = 0.f;
 
 		// TODO: needed? It's set above in --> resetAidSourceStatusZeroInnovation()
@@ -411,7 +413,7 @@ float Ekf::getRngVar() const
 void Ekf::stopRangeAltitudeFusion()
 {
 	if (_control_status.flags.rng_hgt) {
-		PX4_INFO("stopping RNG Altitude fusion");
+		PX4_INFO("STOP RNG Altitude fusion");
 		_control_status.flags.rng_hgt = false;
 		if (_height_sensor_ref == HeightSensor::RANGE) {
 			_height_sensor_ref = HeightSensor::UNKNOWN;
@@ -422,7 +424,7 @@ void Ekf::stopRangeAltitudeFusion()
 void Ekf::stopRangeTerrainFusion()
 {
 	if (_control_status.flags.rng_terrain) {
-		PX4_INFO("stopping RNG Terrain fusion");
+		PX4_INFO("STOP RNG Terrain fusion");
 		_control_status.flags.rng_terrain = false;
 	}
 }
