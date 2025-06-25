@@ -1598,16 +1598,10 @@ void EKF2::PublishLocalPosition(const hrt_abstime &timestamp)
 	lpos.tilt_var = _ekf.getTiltVariance();
 
 #if defined(CONFIG_EKF2_TERRAIN)
-	// Distance to bottom surface (ground) in meters, must be positive
-	lpos.dist_bottom_valid = _ekf.isTerrainEstimateValid();
 
-	// TODO: this makes dist_bottom a function of the Terrain State estimate, which is not
-	// exactly correct. Terrain State can diverge from the distance_sensor.current_distance
-	// when fusion is disabled. This causes Terrain Hold to drift due to dist_bottom diverging.
-	// Ultimately the logic for rangefinder fusion needs to be improved, and when distance_sensor
-	// is not fused into the Terrain State estimate we should not use dist_bottom for Altitude Lock.
+	// TODO:
+	lpos.dist_bottom_valid = _ekf.isTerrainEstimateValid();
 	lpos.dist_bottom = math::max(_ekf.getHagl(), 0.f);
-	// TODO: review, we should use sensor variance not terrain
 	lpos.dist_bottom_var = _ekf.getTerrainVariance();
 
 	_ekf.get_hagl_reset(&lpos.delta_dist_bottom, &lpos.dist_bottom_reset_counter);

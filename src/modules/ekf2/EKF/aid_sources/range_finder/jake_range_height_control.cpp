@@ -160,6 +160,9 @@ void Ekf::controlRangeHaglFusion(const imuSample &imu_sample)
 
 void Ekf::fuseRangeAsHeightAiding()
 {
+	const char* kNotKinematicallyConsistentText = "not kinematically consistent";
+	const char* kConditionsFailingText = "conditions failing";
+
 	bool range_aid_conditional = _params.rng_ctrl == RngCtrl::CONDITIONAL;
 	bool range_aid_enabled = _params.rng_ctrl == RngCtrl::ENABLED;
 
@@ -199,7 +202,12 @@ void Ekf::fuseRangeAsHeightAiding()
 
 	} else {
 		// Stop fusion
-		stopRangeAltitudeFusion("conditions failing");
+		const char* reason = kNotKinematicallyConsistentText;
+		if (kinematically_consistent) {
+			reason = kConditionsFailingText;
+		}
+
+		stopRangeAltitudeFusion(reason);
 	}
 
 	// Fuse Range into Terrain if:
@@ -225,9 +233,6 @@ void Ekf::fuseRangeAsHeightAiding()
 			}
 		}
 
-		// TODO: Innovation is being rejected -- do we want to reset it right away??
-
-
 		// Reset terrain to range if innovation is rejected
 		if (_control_status.flags.rng_terrain && !optical_flow_for_terrain && innovation_rejected) {
 			ECL_INFO("range terrain fusion, resetting terrain to range");
@@ -240,7 +245,7 @@ void Ekf::fuseRangeAsHeightAiding()
 
 	} else {
 		// Stop fusion
-		stopRangeTerrainFusion("not kinematically consistent");
+		stopRangeTerrainFusion(kNotKinematicallyConsistentText);
 
 		// TODO: this is when our altitude tanks down
 	}
@@ -308,17 +313,14 @@ void Ekf::fuseRangeAsHeightSource()
 bool Ekf::rangeAidConditionsPassed()
 {
 	bool is_in_range = getHagl() < _params.ekf2_rng_a_hmax;
-	bool is_below_max_speed = false;
-	bool is_hagl_stable = _aid_src_rng_hgt.test_ratio < 1.f;
-
-	if (isHorizontalAidingActive()) {
-		is_below_max_speed = !_state.vel.xy().longerThan(_params.ekf2_rng_a_vmax);
-	}
-
+	// bool is_hagl_stable = _aid_src_rng_hgt.test_ratio < 1.f;
+	bool is_horizontal_aiding_active = isHorizontalAidingActive();
+	bool is_below_max_speed = is_horizontal_aiding_active && !_state.vel.xy().longerThan(_params.ekf2_rng_a_vmax);
 
 	// Require conditions passing for 1_s (same as kinematic consistency check)
 	bool conditions_passing = false;
-	bool conditions_met = is_in_range && is_below_max_speed && is_hagl_stable;
+	// bool conditions_met = is_in_range && is_hagl_stable && is_below_max_speed;
+	bool conditions_met = is_in_range && is_below_max_speed;
 
 	if (conditions_met) {
 		if (!_rng_aid_conditions_valid) {
@@ -333,16 +335,19 @@ bool Ekf::rangeAidConditionsPassed()
 			conditions_passing = true;
 		}
 	} else {
-		_rng_aid_conditions_valid = false;
 
-		if (!is_hagl_stable) {
-			PX4_INFO("!is_hagl_stable");
-		}
-		if (!is_below_max_speed) {
-			PX4_INFO("!is_below_max_speed");
-		}
-		if (!is_in_range) {
-			PX4_INFO("!is_in_range");
+		if (_rng_aid_conditions_valid) {
+			_rng_aid_conditions_valid = false;
+
+			// if (!is_hagl_stable) {
+			// 	ECL_INFO("!is_hagl_stable");
+			// }
+			if (is_horizontal_aiding_active && !is_below_max_speed) {
+				ECL_INFO("!is_below_max_speed");
+			}
+			if (!is_in_range) {
+				ECL_INFO("!is_in_range");
+			}
 		}
 	}
 

@@ -54,7 +54,9 @@ public:
 		UNKNOWN = 2
 	};
 
-	float getTestRatioLpf() const { return _initialized ? _test_ratio_lpf.getState() : 0.f; }
+	// float getTestRatioLpf() const { return _initialized ? _test_ratio_lpf.getState() : 0.f; }
+	float getTestRatioLpf() const { return _test_ratio; }
+
 	float getInnov() const { return _initialized ? _innov : 0.f; }
 	float getInnovVar() const { return _initialized ? _innov_var : 0.f; }
 	bool isKinematicallyConsistent() const { return _state == KinematicState::CONSISTENT && _t_since_first_sample > _t_to_init; }
@@ -88,7 +90,10 @@ private:
 	float _innov_var{0.f};
 	uint64_t _time_last_update_us{0};
 	static constexpr float time_constant{1.f};
-	AlphaFilter<float> _test_ratio_lpf{time_constant};
+	// AlphaFilter<float> _test_ratio_lpf{time_constant};
+
+	float _test_ratio{0.f};
+
 	float _gate{1.0f};
 	KinematicState _state{KinematicState::UNKNOWN};
 	float _t_since_first_sample{0.f};

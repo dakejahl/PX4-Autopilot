@@ -52,7 +52,8 @@ void RangeFinderConsistencyCheck::init(const float z, const float z_var, const f
 	_x(RangeFilter::z.idx) = z;
 	_x(RangeFilter::terrain.idx) = z - dist_bottom;
 	_initialized = true;
-	_test_ratio_lpf.reset(0.f);
+	// _test_ratio_lpf.reset(0.f);
+	_test_ratio = 0.f;
 	_t_since_first_sample = 0.f;
 }
 
@@ -109,8 +110,9 @@ void RangeFinderConsistencyCheck::update(const float z, const float z_var, const
 		} else if (measurement_idx == 1) {
 			_innov = y;
 			const float test_ratio = fminf(sq(y) / (sq(_gate) * S), 4.f); // limit to 4 to limit sensitivity to outliers
-			_test_ratio_lpf.setParameters(dt, _t_to_init);
-			_test_ratio_lpf.update(sign(_innov) * test_ratio);
+			// _test_ratio_lpf.setParameters(dt, _t_to_init);
+			// _test_ratio_lpf.update(sign(_innov) * test_ratio);
+			_test_ratio = sign(_innov) * test_ratio;
 		}
 
 		// update step
@@ -137,8 +139,9 @@ void RangeFinderConsistencyCheck::evaluateState(const float dt, const float vz, 
 	}
 
 	// TODO: magic test ratio
-	if (fabsf(_test_ratio_lpf.getState()) > 1.f) {
-		printf("_test_ratio_lpf failed (>1)\n");
+	// if (fabsf(_test_ratio_lpf.getState()) > 1.f) {
+	if (fabsf(_test_ratio) > 1.f) {
+		printf("KinematicState::INCONSISTENT\n");
 		_t_since_first_sample = 0.f;
 		_state = KinematicState::INCONSISTENT;
 		return;

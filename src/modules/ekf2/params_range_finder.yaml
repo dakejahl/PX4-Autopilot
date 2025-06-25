@@ -68,9 +68,9 @@ parameters:
           will not fuse range measurements to estimate its height. This only applies
           when conditional range aid mode is activated (EKF2_RNG_CTRL = 1).
       type: float
-      default: 1.0
+      default: 3.0
       min: 0.1
-      max: 2
+      max: 5
       unit: m/s
     EKF2_RNG_A_HMAX:
       description:
