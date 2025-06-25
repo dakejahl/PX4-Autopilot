@@ -116,6 +116,11 @@ void Ekf::updateTerrainValidity()
 
 	const bool positive_hagl = getHagl() >= 0.f;
 
+	// TODO: review terrain validity requirements
+	// - hagl_rate > test_ratio_threshold
+	// -
+	// dist_bottom_valid == __terrain_valid
+
 	if (!_terrain_valid) {
 		// require valid RNG or optical flow (+valid variance) to initially consider terrain valid
 		if (positive_hagl

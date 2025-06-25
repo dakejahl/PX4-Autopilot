@@ -9,3 +9,4 @@ float32 speed_down # in meters/sec
 bool want_takeoff # tell the controller to initiate takeoff when idling (ignored during flight)
 
 bool lock_dist_bottom # altitude is locked to the current distance to ground
+float32 lock_distance

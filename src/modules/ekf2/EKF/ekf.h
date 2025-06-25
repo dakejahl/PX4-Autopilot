@@ -771,8 +771,8 @@ private:
 	bool rangeAidConditionsPassed();
 
 
-	void stopRangeAltitudeFusion();
-	void stopRangeTerrainFusion();
+	void stopRangeAltitudeFusion(const char* reason);
+	void stopRangeTerrainFusion(const char* reason);
 
 #endif // CONFIG_EKF2_RANGE_FINDER
 

@@ -136,6 +136,7 @@ void RangeFinderConsistencyCheck::evaluateState(const float dt, const float vz, 
 		return;
 	}
 
+	// TODO: magic test ratio
 	if (fabsf(_test_ratio_lpf.getState()) > 1.f) {
 		printf("_test_ratio_lpf failed (>1)\n");
 		_t_since_first_sample = 0.f;

@@ -149,7 +149,7 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 #endif // CONFIG_EKF2_TERRAIN || CONFIG_EKF2_OPTICAL_FLOW || CONFIG_EKF2_RANGE_FINDER
 #if defined(CONFIG_EKF2_TERRAIN)
 	_param_ekf2_terr_noise(_params->terrain_p_noise),
-	_param_ekf2_terr_grad(_params->terrain_gradient),
+	_param_ekf2_terr_grad(_params->ekf2_terr_grad),
 #endif // CONFIG_EKF2_TERRAIN
 #if defined(CONFIG_EKF2_RANGE_FINDER)
 	_param_ekf2_rng_ctrl(_params->rng_ctrl),
@@ -158,8 +158,8 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_rng_sfe(_params->ekf2_rng_sfe),
 	_param_ekf2_rng_gate(_params->range_innov_gate),
 	_param_ekf2_rng_pitch(_params->ekf2_rng_pitch),
-	_param_ekf2_rng_a_vmax(_params->max_vel_for_range_aid),
-	_param_ekf2_rng_a_hmax(_params->max_hagl_for_range_aid),
+	_param_ekf2_rng_a_vmax(_params->ekf2_rng_a_vmax),
+	_param_ekf2_rng_a_hmax(_params->ekf2_rng_a_hmax),
 	_param_ekf2_rng_a_igate(_params->range_aid_innov_gate),
 	_param_ekf2_rng_k_gate(_params->range_kin_consistency_gate),
 	_param_ekf2_rng_fog(_params->rng_fog),

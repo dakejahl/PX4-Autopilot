@@ -400,7 +400,7 @@ struct parameters {
 
 #if defined(CONFIG_EKF2_TERRAIN)
 	float terrain_p_noise {5.0f};           ///< process noise for terrain offset (m/sec)
-	float terrain_gradient{0.5f};           ///< gradient of terrain used to estimate process noise due to changing position (m/m)
+	float ekf2_terr_grad{0.5f};           ///< gradient of terrain used to estimate process noise due to changing position (m/m)
 	const float terrain_timeout{10.f};      ///< maximum time for invalid bottom distance measurements before resetting terrain estimate (s)
 #endif // CONFIG_EKF2_TERRAIN
 
@@ -417,8 +417,8 @@ struct parameters {
 	float range_innov_gate{5.0f};           ///< range finder fusion innovation consistency gate size (STD)
 	float ekf2_rng_pitch{0.0f};             ///< Pitch offset of the range sensor (rad). Sensor points out along Z axis when offset is zero. Positive rotation is RH about Y axis.
 	float ekf2_rng_sfe{0.0f};         ///< scaling from range measurement to noise (m/m)
-	float max_hagl_for_range_aid{5.0f};     ///< maximum height above ground for which we allow to use the range finder as height source (if rng_control == 1)
-	float max_vel_for_range_aid{1.0f};      ///< maximum ground velocity for which we allow to use the range finder as height source (if rng_control == 1)
+	float ekf2_rng_a_hmax{5.0f};     ///< maximum height above ground for which we allow to use the range finder as height source (if rng_control == 1)
+	float ekf2_rng_a_vmax{1.0f};      ///< maximum ground velocity for which we allow to use the range finder as height source (if rng_control == 1)
 	float range_aid_innov_gate{1.0f};       ///< gate size used for innovation consistency checks for range aid fusion
 	float range_cos_max_tilt{0.7071f};      ///< cosine of the maximum tilt angle from the vertical that permits use of range finder and flow data
 	float range_kin_consistency_gate{0.5f}; ///< gate size used by the range finder kinematic consistency check

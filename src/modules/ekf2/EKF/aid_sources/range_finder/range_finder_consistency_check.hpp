@@ -58,7 +58,6 @@ public:
 	float getInnov() const { return _initialized ? _innov : 0.f; }
 	float getInnovVar() const { return _initialized ? _innov_var : 0.f; }
 	bool isKinematicallyConsistent() const { return _state == KinematicState::CONSISTENT && _t_since_first_sample > _t_to_init; }
-	bool isNotKinematicallyInconsistent() const { return _state != KinematicState::INCONSISTENT && _t_since_first_sample > _t_to_init; }
 	void setGate(const float gate) { _gate = gate; }
 	void run(float z, float z_var, float vz, float vz_var,
 		 float dist_bottom, float dist_bottom_var, uint64_t time_us);
