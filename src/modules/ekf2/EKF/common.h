@@ -405,7 +405,7 @@ struct parameters {
 #endif // CONFIG_EKF2_TERRAIN
 
 #if defined(CONFIG_EKF2_TERRAIN) || defined(CONFIG_EKF2_OPTICAL_FLOW) || defined(CONFIG_EKF2_RANGE_FINDER)
-	float rng_gnd_clearance {0.1f};         ///< minimum valid value for range when on ground (m)
+	float ekf2_min_rng {0.1f};         ///< minimum valid value for range when on ground (m)
 #endif // CONFIG_EKF2_TERRAIN || CONFIG_EKF2_OPTICAL_FLOW || CONFIG_EKF2_RANGE_FINDER
 
 #if defined(CONFIG_EKF2_RANGE_FINDER)

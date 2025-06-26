@@ -74,7 +74,7 @@ void Ekf::reset()
 	//
 #if defined(CONFIG_EKF2_TERRAIN)
 	// assume a ground clearance
-	_state.terrain = -_gpos.altitude() + _params.rng_gnd_clearance;
+	_state.terrain = -_gpos.altitude() + _params.ekf2_min_rng;
 #endif // CONFIG_EKF2_TERRAIN
 
 	_control_status.value = 0;

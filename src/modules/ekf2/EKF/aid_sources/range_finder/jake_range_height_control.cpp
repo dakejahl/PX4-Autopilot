@@ -375,7 +375,7 @@ void Ekf::resetTerrainToRng(estimator_aid_source1d_s &aid_src)
 
 void Ekf::updateRangeHagl(estimator_aid_source1d_s &aid_src)
 {
-	const float measurement = math::max(_range_sensor.getDistBottom(), _params.rng_gnd_clearance);
+	const float measurement = math::max(_range_sensor.getDistBottom(), _params.ekf2_min_rng);
 	const float measurement_variance = getRngVar();
 
 	float innovation_variance;
