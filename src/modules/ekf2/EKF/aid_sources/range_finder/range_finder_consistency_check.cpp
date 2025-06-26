@@ -150,10 +150,20 @@ void RangeFinderConsistencyCheck::evaluateState(const float dt, const float vz, 
 	_state = KinematicState::CONSISTENT;
 }
 
+void RangeFinderConsistencyCheck::reset()
+{
+	if (_initialized && _state == KinematicState::CONSISTENT) {
+		_state = KinematicState::UNKNOWN;
+	}
+
+	_initialized = false;
+}
+
 void RangeFinderConsistencyCheck::run(const float z, const float z_var, const float vz, const float vz_var,
 				      const float dist_bottom, const float dist_bottom_var, const uint64_t time_us)
 {
 	if (!_initialized || current_posD_reset_count != _last_posD_reset_count) {
+		printf("kcc run, resetting\n");
 		_last_posD_reset_count = current_posD_reset_count;
 		_initialized = false;
 	}

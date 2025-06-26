@@ -64,14 +64,7 @@ public:
 	void run(float z, float z_var, float vz, float vz_var,
 		 float dist_bottom, float dist_bottom_var, uint64_t time_us);
 	void set_terrain_process_noise(float terrain_process_noise) { _terrain_process_noise = terrain_process_noise; }
-	void reset()
-	{
-		if (_initialized && _state == KinematicState::CONSISTENT) {
-			_state = KinematicState::UNKNOWN;
-		}
-
-		_initialized = false;
-	}
+	void reset();
 
 	uint8_t current_posD_reset_count{0};
 

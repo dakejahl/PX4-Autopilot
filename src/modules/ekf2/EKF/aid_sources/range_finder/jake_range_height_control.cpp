@@ -224,9 +224,14 @@ void Ekf::fuseRangeAsHeightAiding()
 				ECL_INFO("height reset required");
 			}
 
+			ECL_INFO("resetting terrain to range");
+			resetTerrainToRng(_aid_src_rng_hgt);
+			resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
+
 			// // Reset terrain when we first init
 			// static bool first_init = true;
-			// if (!optical_flow_for_terrain && first_init) {
+			// // if (!optical_flow_for_terrain && first_init) {
+			// if (first_init) {
 			// 	first_init = false;
 			// 	// Reset aid source and then reset terrain estimate
 			// 	ECL_INFO("FIRST range terrain fusion, resetting terrain to range");
