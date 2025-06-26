@@ -117,7 +117,6 @@ void FlightTaskManualAltitude::_updateAltitudeLock()
 	switch ((AltitudeMode)_param_mpc_alt_mode.get()) {
 	case AltitudeMode::AltitudeFollow: {
 			// Altitude following - relative earth frame origin which may drift due to sensors
-			// - No user throttle
 			_altitude_follow_mode();
 			break;
 		}
@@ -125,16 +124,7 @@ void FlightTaskManualAltitude::_updateAltitudeLock()
 	case AltitudeMode::TerrainFollow: {
 			// Terrain following - relative to ground which changes with terrain variation
 			// - distance sensor valid
-			// - No user throttle
-
-			// Cannot perform terrain follow without distance sensor
-			if (PX4_ISFINITE(_dist_to_bottom)) {
-				_terrain_follow_mode();
-
-			} else {
-				_altitude_follow_mode();
-				break;
-			}
+			_terrain_follow_mode();
 			break;
 		}
 
@@ -144,15 +134,7 @@ void FlightTaskManualAltitude::_updateAltitudeLock()
 			// - No user throttle
 			// - XY vel low
 			// - Z vel stopped
-
-			// Cannot perform terrain hold without distance sensor
-			if (PX4_ISFINITE(_dist_to_bottom)) {
-				_terrain_hold_mode();
-
-			} else {
-				_altitude_follow_mode();
-				break;
-			}
+			_terrain_hold_mode();
 		}
 
 	case AltitudeMode::None: {
@@ -165,12 +147,13 @@ void FlightTaskManualAltitude::_updateAltitudeLock()
 void FlightTaskManualAltitude::_terrain_hold_mode()
 {
 	// Check if XY velocity is within limit to activate Terrain Hold
-	// bool xy_vel_okay = Vector2f(_velocity).length() < _param_mpc_hold_max_xy.get();
+	bool dist_bottom_valid = PX4_ISFINITE(_dist_to_bottom);
+	bool xy_vel_okay = Vector2f(_velocity).length() < _param_mpc_hold_max_xy.get();
 
-
-	// TESTING:
-	bool xy_vel_okay = false;
-
+	// If dist_bottom ever becomes invalid, reset the dist_bottom_lock
+	if (!dist_bottom_valid) {
+		_dist_to_bottom_lock = NAN;
+	}
 
 	if (!xy_vel_okay) {
 		// XY_vel is above threshold, just follow altitude setpoint
@@ -187,6 +170,7 @@ void FlightTaskManualAltitude::_terrain_hold_mode()
 		return;
 	}
 
+	// Wait for Z to come to a stop before locking in the distance
 	if (_current_mode != AltitudeMode::TerrainHold) {
 		// Set velocity setpoint to 0, switch into TerrainHold
 		_current_mode = AltitudeMode::TerrainHold;
@@ -195,32 +179,34 @@ void FlightTaskManualAltitude::_terrain_hold_mode()
 		return;
 	}
 
-	if (!PX4_ISFINITE(_dist_to_bottom_lock)) {
-		// Wait for Z to come to a stop before locking in the distance
-		if (fabsf(_velocity(2)) < 0.1f) {
+	bool bottom_lock_set = PX4_ISFINITE(_dist_to_bottom_lock);
 
-			// It's grabbing the lock distance before dist_bottom has settled
+	if (!bottom_lock_set) {
+		bool stopped = fabsf(_velocity(2)) < 0.1f;
+
+		if (stopped && dist_bottom_valid) {
 			_dist_to_bottom_lock = _dist_to_bottom;
 			_position_setpoint(2) = _position(2);
 			_constraints.lock_dist_bottom = true;
 			_constraints.lock_distance = _dist_to_bottom_lock;
 			PX4_INFO("Locking distance to %f", (double)_dist_to_bottom_lock);
 		}
-
-		return;
 	}
 
-	// TODO:
-	// - use dist_bottom_var as heuristic for distance lock
+	if (bottom_lock_set && dist_bottom_valid) {
 
-	// All criteria met
-	// - distance sensor valid
-	// - No user throttle
-	// - XY vel low
-	// - Z vel stopped
-	// Update position setpoint to keep fixed distance from terrain
-	float delta_distance = _dist_to_bottom - _dist_to_bottom_lock;
-	_position_setpoint(2) = _position(2) + delta_distance;
+		// TODO:
+		// - use dist_bottom_var as heuristic for distance lock
+
+		// All criteria met
+		// - distance sensor valid
+		// - No user throttle
+		// - XY vel low
+		// - Z vel stopped
+		// Update position setpoint to keep fixed distance from terrain
+		float delta_distance = _dist_to_bottom - _dist_to_bottom_lock;
+		_position_setpoint(2) = _position(2) + delta_distance;
+	}
 }
 
 void FlightTaskManualAltitude::_terrain_follow_mode()
@@ -230,7 +216,14 @@ void FlightTaskManualAltitude::_terrain_follow_mode()
 
 void FlightTaskManualAltitude::_altitude_follow_mode()
 {
+	if (_current_mode != AltitudeMode::AltitudeFollow) {
+		_current_mode = AltitudeMode::AltitudeFollow;
 
+		PX4_INFO("jake Locking to Z estimate");
+		_position_setpoint(2) = _position(2);
+		_dist_to_bottom_lock = NAN;
+		_constraints.lock_dist_bottom = false;
+	}
 }
 
 void FlightTaskManualAltitude::_respectMinAltitude()

@@ -177,7 +177,7 @@ void Ekf::fuseRangeAsHeightAiding()
 
 	// Variables to use below
 	bool innovation_rejected = _aid_src_rng_hgt.innovation_rejected;
-	bool optical_flow_for_terrain = _control_status.flags.opt_flow_terrain;
+	// bool optical_flow_for_terrain = _control_status.flags.opt_flow_terrain;
 
 	// Fuse Range into Altitude if:
 	// - passes range_aid_conditionalchecks
@@ -220,25 +220,28 @@ void Ekf::fuseRangeAsHeightAiding()
 			ECL_INFO("START RNG Terrain fusion");
 			_control_status.flags.rng_terrain = true;
 
-			// Reset terrain when we first init
-			static bool first_init = true;
-			if (!optical_flow_for_terrain && first_init) {
-				first_init = false;
-				// Reset aid source and then reset terrain estimate
-				ECL_INFO("FIRST range terrain fusion, resetting terrain to range");
-
-				resetTerrainToRng(_aid_src_rng_hgt);
-				resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
-				resetAltitudeTo(_aid_src_rng_hgt.observation - _state.terrain);
+			if (isHeightResetRequired()) {
+				ECL_INFO("height reset required");
 			}
+
+			// // Reset terrain when we first init
+			// static bool first_init = true;
+			// if (!optical_flow_for_terrain && first_init) {
+			// 	first_init = false;
+			// 	// Reset aid source and then reset terrain estimate
+			// 	ECL_INFO("FIRST range terrain fusion, resetting terrain to range");
+			// 	resetTerrainToRng(_aid_src_rng_hgt);
+			// 	resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
+			// 	resetAltitudeTo(_aid_src_rng_hgt.observation - _state.terrain);
+			// }
 		}
 
-		// Reset terrain to range if innovation is rejected
-		if (_control_status.flags.rng_terrain && !optical_flow_for_terrain && innovation_rejected) {
-			ECL_INFO("range terrain fusion, resetting terrain to range");
-			resetTerrainToRng(_aid_src_rng_hgt);
-			resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
-		}
+		// // Reset terrain to range if innovation is rejected
+		// if (_control_status.flags.rng_terrain && !optical_flow_for_terrain && innovation_rejected) {
+		// 	ECL_INFO("range terrain fusion, resetting terrain to range");
+		// 	resetTerrainToRng(_aid_src_rng_hgt);
+		// 	resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
+		// }
 
 		// Fuse
 		fuse_measurement = true;
