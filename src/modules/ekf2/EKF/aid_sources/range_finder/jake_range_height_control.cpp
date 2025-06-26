@@ -211,7 +211,8 @@ void Ekf::fuseRangeAsHeightAiding()
 	}
 
 	// Fuse Range into Terrain if:
-	// - kinematically consistent
+	// - kinematically consistent (hagl_rate < 1)
+	// -
 	if (kinematically_consistent) {
 
 		// Start fusion
@@ -240,7 +241,6 @@ void Ekf::fuseRangeAsHeightAiding()
 
 	} else {
 		stopRangeTerrainFusion(kNotKinematicallyConsistentText);
-		resetTerrainToRng(_aid_src_rng_hgt);
 	}
 
 	if (fuse_measurement) {
