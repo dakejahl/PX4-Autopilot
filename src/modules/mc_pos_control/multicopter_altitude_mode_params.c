@@ -88,7 +88,7 @@ PARAM_DEFINE_FLOAT(MPC_MAN_Y_TAU, 0.08f);
  * @value 2 Terrain hold
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_INT32(MPC_ALT_MODE, 2);
+PARAM_DEFINE_INT32(MPC_ALT_MODE, 0);
 
 /**
  * Maximum horizontal velocity for which position hold is enabled (use 0 to disable check)
