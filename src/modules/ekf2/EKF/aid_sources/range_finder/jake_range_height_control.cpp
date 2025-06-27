@@ -160,92 +160,75 @@ void Ekf::fuseRangeAsHeightAiding()
 	// - optical flow terrain fucks everything up, I've hardcoded disabled it
 	// - when rng fusion starts again, EKF Z state is corrupted (oscillation)
 	// -
+
 	const char* kNotKinematicallyConsistentText = "not kinematically consistent";
 	const char* kConditionsFailingText = "conditions failing";
+
+	// Stop fusion if rangefinder kinematic consistency fails
+	if (!_control_status.flags.rng_kin_consistent) {
+		stopRangeTerrainFusion(kNotKinematicallyConsistentText);
+		stopRangeAltitudeFusion(kNotKinematicallyConsistentText);
+		return;
+	}
+
+
+	//// TERRAIN FUSION ////
+
+	// Fuse Range into Terrain if:
+	// - kinematically consistent (hagl_rate < 1)
+
+	// Start fusion
+	if (!_control_status.flags.rng_terrain) {
+		ECL_INFO("START RNG Terrain fusion");
+		_control_status.flags.rng_terrain = true;
+
+		// We must reset terrain to range before we start fusing again, otherwise there
+		// can be a delta between RNG terrain estimate and previous, which will cause a
+		// discontinuity in the lpos.z state
+		ECL_INFO("resetting terrain to range");
+		resetTerrainToRng(_aid_src_rng_hgt);
+		resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
+	}
+
+
+	//// ALTITUDE FUSION ////
 
 	bool range_aid_conditional = _params.rng_ctrl == RngCtrl::CONDITIONAL;
 	bool range_aid_enabled = _params.rng_ctrl == RngCtrl::ENABLED;
 
 	bool range_aid_conditions_passed = rangeAidConditionsPassed();
-	bool kinematically_consistent = _control_status.flags.rng_kin_consistent;
 
-	bool do_range_aid = kinematically_consistent &&
-						(range_aid_enabled || (range_aid_conditional && range_aid_conditions_passed));
-
-	bool fuse_measurement = false;
-
-
-	// Variables to use below
-	bool innovation_rejected = _aid_src_rng_hgt.innovation_rejected;
-	bool optical_flow_for_terrain = _control_status.flags.opt_flow_terrain;
+	bool do_range_aid = range_aid_enabled || (range_aid_conditional && range_aid_conditions_passed);
 
 	// Fuse Range into Altitude if:
 	// - passes range_aid_conditionalchecks
 	// - kinematically consistent
 	if (do_range_aid) {
-		// Start fusion
+
 		if (!_control_status.flags.rng_hgt) {
-			// Fusion init logic
 			ECL_INFO("START RNG Altitude fusion");
 			_control_status.flags.rng_hgt = true;
 
+			// Reset altitude to rangefinder if on ground
+			if (!_control_status.flags.in_air) {
+				ECL_INFO("JAKE GND resetting altitude to range");
+				resetAltitudeTo(_aid_src_rng_hgt.observation - _state.terrain);
+			}
+
 			// TODO: review for correctness
-			if (innovation_rejected) {
+			if (_aid_src_rng_hgt.innovation_rejected) {
 				// Reset aid source
 				ECL_INFO("resetting aid source");
 				resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
 			}
 		}
 
-		// Fuse
-		fuse_measurement = true;
-
 	} else {
-		// Stop fusion
-		const char* reason = kNotKinematicallyConsistentText;
-		if (kinematically_consistent) {
-			reason = kConditionsFailingText;
-		}
-
-		stopRangeAltitudeFusion(reason);
+		stopRangeAltitudeFusion(kConditionsFailingText);
 	}
 
-	// Fuse Range into Terrain if:
-	// - kinematically consistent (hagl_rate < 1)
-	// -
-	if (kinematically_consistent) {
-
-		// Start fusion
-		if (!_control_status.flags.rng_terrain) {
-			// Fusion init logic
-			ECL_INFO("START RNG Terrain fusion");
-			_control_status.flags.rng_terrain = true;
-
-			ECL_INFO("resetting terrain to range");
-			resetTerrainToRng(_aid_src_rng_hgt);
-			if (innovation_rejected) {
-				resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
-			}
-		}
-
-		// // Reset terrain to range if innovation is rejected
-		if (_control_status.flags.rng_terrain && !optical_flow_for_terrain && innovation_rejected) {
-			ECL_INFO("JAKE DEBUG DOES THIS HAPPEN");
-			// ECL_INFO("range terrain fusion, resetting terrain to range");
-			// resetTerrainToRng(_aid_src_rng_hgt);
-			// resetAidSourceStatusZeroInnovation(_aid_src_rng_hgt);
-		}
-
-		// Fuse
-		fuse_measurement = true;
-
-	} else {
-		stopRangeTerrainFusion(kNotKinematicallyConsistentText);
-	}
-
-	if (fuse_measurement) {
-		fuseHaglRng(_aid_src_rng_hgt, _control_status.flags.rng_hgt, _control_status.flags.rng_terrain);
-	}
+	// If we make it here, fuse
+	fuseHaglRng(_aid_src_rng_hgt, _control_status.flags.rng_hgt, _control_status.flags.rng_terrain);
 }
 
 void Ekf::fuseRangeAsHeightSource()
