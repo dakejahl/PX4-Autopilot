@@ -7,6 +7,8 @@ param set-default IMU_INTEG_RATE 250
 # For simulation, allow registering modes while armed for developer convenience
 param set-default COM_MODE_ARM_CHK 1
 
+echo "SIMULATOR is ${PX4_SIMULATOR} with model ${PX4_SIM_MODEL}"
+
 if [ "$PX4_SIMULATOR" = "sihsim" ] || [ "$(param show -q SYS_AUTOSTART)" -eq "0" ]; then
     # Run SIH
     . px4-rc.sihsim
@@ -14,6 +16,10 @@ if [ "$PX4_SIMULATOR" = "sihsim" ] || [ "$(param show -q SYS_AUTOSTART)" -eq "0"
 elif [ "$PX4_SIMULATOR" = "gz" ] || [ "$(param show -q SIM_GZ_EN)" = "1" ]; then
     # Run Gazebo (gz)
     . px4-rc.gzsim
+
+elif [ "$PX4_SIMULATOR" = "mujoco" ] || [ "$(param show -q SIM_MJ_EN)" = "1" ]; then
+    # Run MuJoCo
+    . px4-rc.mujoco
 
 elif [ "$PX4_SIM_MODEL" = "jmavsim_iris" ] || [ "$(param show -q SYS_AUTOSTART)" -eq "10017" ]; then
     # Run jMAVSim

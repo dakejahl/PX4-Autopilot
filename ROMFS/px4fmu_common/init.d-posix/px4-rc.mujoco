@@ -1,0 +1,29 @@
+#!/bin/sh
+# shellcheck disable=SC2154
+
+if [ -f ./mujoco_env.sh ]; then
+  . ./mujoco_env.sh
+
+elif [ -f ../mujoco_env.sh ]; then
+  . ../mujoco_env.sh
+fi
+
+# Start MuJoCo simulator
+
+# Extract the MuJoCo model name from PX4_SIM_MODEL
+# e.g., from '1101_mujoco_skydio_x2' extract 'skydio_x2'
+#MUJOCO_MODEL_NAME=$(echo "${PX4_SIM_MODEL}" | sed 's/^[0-9]*_mujoco_//')
+
+# Construct the full path to the MuJoCo XML file
+MUJOCO_XML_PATH="${PX4_MUJOCO_MODELS}/${MUJOCO_MODEL}/scene.xml"
+
+echo "INFO  [init] Starting MuJoCo with model: ${MUJOCO_XML_PATH}"
+
+if [ -f "${MUJOCO_XML_PATH}" ]; then
+  echo "File exists and is a regular file."
+else
+  echo "File does not exist or is not a regular file."
+fi
+
+# Start the mujoco_simulator module with the specified XML path
+mujoco_simulator start "${MUJOCO_XML_PATH}"

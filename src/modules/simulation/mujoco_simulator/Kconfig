@@ -1,0 +1,6 @@
+menuconfig MODULES_SIMULATION_MUJOCO_SIMULATOR
+    bool "MuJoCo Simulator"
+    default n
+    depends on PLATFORM_POSIX
+    ---help---
+        MuJoCo simulator module.

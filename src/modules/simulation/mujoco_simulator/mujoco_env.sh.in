@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export PX4_MUJOCO_MODELS=@PX4_SOURCE_DIR@/Tools/simulation/mujoco/models
+#export MUJOCO_SIM_RESOURCE_PATH=$PX4_MUJOCO_MODELS

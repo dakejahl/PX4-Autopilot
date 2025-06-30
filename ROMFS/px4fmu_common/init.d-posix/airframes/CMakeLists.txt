@@ -66,6 +66,7 @@ px4_add_romfs_files(
 	1061_gazebo-classic_r1_rover
 	1062_flightgear_tf-r1
 	1070_gazebo-classic_boat
+	1101_mujoco_skydio_x2
 
 	2507_gazebo-classic_cloudship
 
