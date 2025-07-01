@@ -282,8 +282,9 @@ bool Ekf::rangeAidConditionsPassed()
 {
 	bool is_in_range = getHagl() < _params.ekf2_rng_a_hmax;
 	// bool is_hagl_stable = _aid_src_rng_hgt.test_ratio < 1.f;
-	bool is_horizontal_aiding_active = isHorizontalAidingActive();
-	bool is_below_max_speed = is_horizontal_aiding_active && !_state.vel.xy().longerThan(_params.ekf2_rng_a_vmax);
+	// bool is_horizontal_aiding_active = isHorizontalAidingActive();
+	// bool is_below_max_speed = is_horizontal_aiding_active && !_state.vel.xy().longerThan(_params.ekf2_rng_a_vmax);
+	bool is_below_max_speed = !_state.vel.xy().longerThan(_params.ekf2_rng_a_vmax);
 
 	// Require conditions passing for 1_s (same as kinematic consistency check)
 	bool conditions_passing = false;
@@ -310,7 +311,8 @@ bool Ekf::rangeAidConditionsPassed()
 			// if (!is_hagl_stable) {
 			// 	ECL_INFO("!is_hagl_stable");
 			// }
-			if (is_horizontal_aiding_active && !is_below_max_speed) {
+			// if (is_horizontal_aiding_active && !is_below_max_speed) {
+			if (!is_below_max_speed) {
 				ECL_INFO("!is_below_max_speed");
 			}
 			if (!is_in_range) {
