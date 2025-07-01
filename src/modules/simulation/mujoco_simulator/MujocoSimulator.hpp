@@ -9,10 +9,12 @@
 
 #include <lib/drivers/device/Device.hpp>
 
+#include <drivers/drv_hrt.h>
+
 #include <uORB/PublicationMulti.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionInterval.hpp>
-#include <uORB/Publication.hpp>
+#include <uORB/topics/parameter_update.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_gyro.h>
@@ -23,12 +25,12 @@
 #include <uORB/topics/vehicle_global_position.h>
 
 // MuJoCo headers
+// We still need the types, so we include the header, but we won't link against the library.
 #include <mujoco/mujoco.h>
 
 using namespace time_literals;
 
 class MujocoSimulator : public ModuleBase<MujocoSimulator>, public ModuleParams, public px4::ScheduledWorkItem
-
 {
 public:
 	MujocoSimulator(const char *mujoco_model_path);
@@ -48,11 +50,36 @@ public:
 	bool init();
 
 private:
-	// MuJoCo model and data
-	mjModel* _model{nullptr};
-	mjData*  _data{nullptr};
+	// --- MuJoCo Dynamic Loading ---
+	// Handle for the dynamically loaded MuJoCo library
+	void *_mujoco_handle{nullptr};
 
-	// UORB publications
+	// Function pointers for the MuJoCo API
+	mjModel *(*_mj_loadXML)(const char *, const mjVFS *, char *, int);
+	mjData *(*_mj_makeData)(const mjModel *);
+	void (*_mj_deleteModel)(mjModel *);
+	void (*_mj_deleteData)(mjData *);
+	void (*_mj_step)(const mjModel *, mjData *);
+	int (*_mj_name2id)(const mjModel *, int, const char *);
+
+	/**
+	 * @brief Loads the MuJoCo shared library and resolves function pointers.
+	 * @return true on success, false on failure.
+	 */
+	bool load_mujoco_library();
+
+	/**
+	 * @brief Closes the MuJoCo shared library handle.
+	 */
+	void close_mujoco_library();
+
+	// --- MuJoCo model and data ---
+	mjModel *_model{nullptr};
+	mjData  *_data{nullptr};
+
+	uORB::SubscriptionInterval                    _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+
+	// --- UORB publications ---
 	uORB::Publication<sensor_accel_s> _sensor_accel_pub{ORB_ID(sensor_accel)};
 	uORB::Publication<sensor_gyro_s>  _sensor_gyro_pub{ORB_ID(sensor_gyro)};
 	uORB::Publication<sensor_mag_s>   _sensor_mag_pub{ORB_ID(sensor_mag)};
@@ -65,9 +92,8 @@ private:
 
 	// Subscriptions
 	uORB::Subscription _actuator_outputs_sub{ORB_ID(actuator_outputs)};
-	//uORB::Publication<esc_status_s> _esc_status_pub{ORB_ID(esc_status)};
 
-	// Private methods
+	// --- Private methods ---
 	void publish_sensors();
 	void publish_time();
 	void update_actuators();
@@ -79,3 +105,4 @@ private:
 	// Prevent running logic until initialized
 	bool _initialized{false};
 };
+

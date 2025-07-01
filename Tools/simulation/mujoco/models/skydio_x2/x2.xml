@@ -30,8 +30,8 @@
   </asset>
 
   <worldbody>
-    <light name="spotlight" mode="targetbodycom" target="x2" pos="0 -1 2"/>
-    <body name="x2" pos="0 0 0.1" childclass="x2">
+    <light name="spotlight" mode="targetbodycom" target="drone_body" pos="0 -1 2"/>
+    <body name="drone_body" pos="0 0 0.1" childclass="x2">
       <freejoint/>
       <camera name="track" pos="-1 0 .5" xyaxes="0 -1 0 1 0 2" mode="trackcom"/>
       <site name="imu" pos="0 0 .02"/>
@@ -60,9 +60,9 @@
   </actuator>
 
   <sensor>
-    <gyro name="body_gyro" site="imu"/>
-    <accelerometer name="body_linacc" site="imu"/>
-    <magnetometer name="compass" site="imu"/>
+    <gyro name="gyro" site="imu"/>
+    <accelerometer name="accelerometer" site="imu"/>
+    <magnetometer name="magnetometer" site="imu"/>
     <framequat name="body_quat" objtype="site" objname="imu"/> <!-- 9 - 12 -->
     <framelinvel name="body_linvel" objtype="site" objname="imu"/> <!-- 13 - 15 -->
     <framelinacc name="body_frameacc" objtype="site" objname="imu"/> <!-- 16 - 18 -->
