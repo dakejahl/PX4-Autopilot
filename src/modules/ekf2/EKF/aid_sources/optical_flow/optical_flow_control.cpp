@@ -248,6 +248,7 @@ void Ekf::resetTerrainToFlow()
 {
 	ECL_INFO("reset hagl to flow");
 
+	// JAKE: review
 	// TODO: use the flow data
 	const float new_terrain = -_gpos.altitude() + _params.ekf2_min_rng;
 	const float delta_terrain = new_terrain - _state.terrain;

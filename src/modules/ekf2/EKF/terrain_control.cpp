@@ -42,6 +42,7 @@
 
 void Ekf::initTerrain()
 {
+	// JAKE: review
 	// assume a ground clearance
 	_state.terrain = -_gpos.altitude() + _params.ekf2_min_rng;
 
