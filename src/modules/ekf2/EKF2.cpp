@@ -145,28 +145,27 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_hgt_ref(_params->height_sensor_ref),
 	_param_ekf2_noaid_tout(_params->ekf2_noaid_tout),
 #if defined(CONFIG_EKF2_TERRAIN) || defined(CONFIG_EKF2_OPTICAL_FLOW) || defined(CONFIG_EKF2_RANGE_FINDER)
-	_param_ekf2_min_rng(_params->rng_gnd_clearance),
+	_param_ekf2_min_rng(_params->ekf2_min_rng),
 #endif // CONFIG_EKF2_TERRAIN || CONFIG_EKF2_OPTICAL_FLOW || CONFIG_EKF2_RANGE_FINDER
 #if defined(CONFIG_EKF2_TERRAIN)
 	_param_ekf2_terr_noise(_params->terrain_p_noise),
-	_param_ekf2_terr_grad(_params->terrain_gradient),
+	_param_ekf2_terr_grad(_params->ekf2_terr_grad),
 #endif // CONFIG_EKF2_TERRAIN
 #if defined(CONFIG_EKF2_RANGE_FINDER)
 	_param_ekf2_rng_ctrl(_params->rng_ctrl),
 	_param_ekf2_rng_delay(_params->range_delay_ms),
 	_param_ekf2_rng_noise(_params->range_noise),
-	_param_ekf2_rng_sfe(_params->range_noise_scaler),
+	_param_ekf2_rng_sfe(_params->ekf2_rng_sfe),
 	_param_ekf2_rng_gate(_params->range_innov_gate),
-	_param_ekf2_rng_pitch(_params->rng_sens_pitch),
-	_param_ekf2_rng_a_vmax(_params->max_vel_for_range_aid),
-	_param_ekf2_rng_a_hmax(_params->max_hagl_for_range_aid),
+	_param_ekf2_rng_pitch(_params->ekf2_rng_pitch),
+	_param_ekf2_rng_a_vmax(_params->ekf2_rng_a_vmax),
+	_param_ekf2_rng_a_hmax(_params->ekf2_rng_a_hmax),
 	_param_ekf2_rng_a_igate(_params->range_aid_innov_gate),
-	_param_ekf2_rng_qlty_t(_params->range_valid_quality_s),
 	_param_ekf2_rng_k_gate(_params->range_kin_consistency_gate),
 	_param_ekf2_rng_fog(_params->rng_fog),
-	_param_ekf2_rng_pos_x(_params->rng_pos_body(0)),
-	_param_ekf2_rng_pos_y(_params->rng_pos_body(1)),
-	_param_ekf2_rng_pos_z(_params->rng_pos_body(2)),
+	_param_ekf2_rng_pos_x(_params->ekf2_rng_pos_x),
+	_param_ekf2_rng_pos_y(_params->ekf2_rng_pos_y),
+	_param_ekf2_rng_pos_z(_params->ekf2_rng_pos_z),
 #endif // CONFIG_EKF2_RANGE_FINDER
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 	_param_ekf2_ev_delay(_params->ekf2_ev_delay),
@@ -1599,10 +1598,12 @@ void EKF2::PublishLocalPosition(const hrt_abstime &timestamp)
 	lpos.tilt_var = _ekf.getTiltVariance();
 
 #if defined(CONFIG_EKF2_TERRAIN)
-	// Distance to bottom surface (ground) in meters, must be positive
+
+	// TODO:
 	lpos.dist_bottom_valid = _ekf.isTerrainEstimateValid();
 	lpos.dist_bottom = math::max(_ekf.getHagl(), 0.f);
 	lpos.dist_bottom_var = _ekf.getTerrainVariance();
+
 	_ekf.get_hagl_reset(&lpos.delta_dist_bottom, &lpos.dist_bottom_reset_counter);
 
 	lpos.dist_bottom_sensor_bitfield = vehicle_local_position_s::DIST_BOTTOM_SENSOR_NONE;
@@ -1910,14 +1911,12 @@ void EKF2::PublishStatusFlags(const hrt_abstime &timestamp)
 		status_flags.cs_mag_fault             = _ekf.control_status_flags().mag_fault;
 		status_flags.cs_fuse_aspd             = _ekf.control_status_flags().fuse_aspd;
 		status_flags.cs_gnd_effect            = _ekf.control_status_flags().gnd_effect;
-		status_flags.cs_rng_stuck             = _ekf.control_status_flags().rng_stuck;
 		status_flags.cs_gnss_yaw               = _ekf.control_status_flags().gnss_yaw;
 		status_flags.cs_mag_aligned_in_flight = _ekf.control_status_flags().mag_aligned_in_flight;
 		status_flags.cs_ev_vel                = _ekf.control_status_flags().ev_vel;
 		status_flags.cs_synthetic_mag_z       = _ekf.control_status_flags().synthetic_mag_z;
 		status_flags.cs_vehicle_at_rest       = _ekf.control_status_flags().vehicle_at_rest;
 		status_flags.cs_gnss_yaw_fault         = _ekf.control_status_flags().gnss_yaw_fault;
-		status_flags.cs_rng_fault             = _ekf.control_status_flags().rng_fault;
 		status_flags.cs_inertial_dead_reckoning = _ekf.control_status_flags().inertial_dead_reckoning;
 		status_flags.cs_wind_dead_reckoning     = _ekf.control_status_flags().wind_dead_reckoning;
 		status_flags.cs_rng_kin_consistent      = _ekf.control_status_flags().rng_kin_consistent;
