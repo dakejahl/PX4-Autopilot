@@ -77,6 +77,11 @@ public:
 
 	void handle_message(const mavlink_message_t *msg);
 
+	bool send_active() const
+	{
+		return hrt_absolute_time() < _last_param_sent + 2_s;
+	}
+
 private:
 	int		_send_all_index{-1};
 
@@ -161,5 +166,6 @@ protected:
 
 	Mavlink *_mavlink;
 
+	hrt_abstime _last_param_sent{0};
 	bool _first_send{false};
 };

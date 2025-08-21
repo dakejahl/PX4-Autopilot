@@ -519,6 +519,8 @@ public:
 	static hrt_abstime &get_first_start_time() { return _first_start_time; }
 
 	bool radio_status_critical() const { return _radio_status_critical; }
+	bool			sending_parameters() const { return _sending_parameters.load(); }
+	void			set_sending_parameters(bool sending) { _sending_parameters.store(sending); }
 
 private:
 	MavlinkReceiver 	_receiver;
@@ -571,6 +573,7 @@ private:
 	static events::EventBuffer	*_event_buffer;
 	events::SendProtocol		_events{*_event_buffer, *this};
 
+	px4::atomic_bool	_sending_parameters{false};
 	MAVLINK_MODE 		_mode{MAVLINK_MODE_NORMAL};
 
 	mavlink_channel_t	_channel{MAVLINK_COMM_0};
