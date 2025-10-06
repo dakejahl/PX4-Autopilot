@@ -1006,6 +1006,10 @@ void UavcanNode::publish_can_interface_statuses()
 				.io_errors = iface_perf_cnt.errors,
 				.frames_tx = iface_perf_cnt.frames_tx,
 				.frames_rx = iface_perf_cnt.frames_rx,
+				.tx_rate_avg_hz = iface_perf_cnt.tx_rate_avg,
+				.rx_rate_avg_hz = iface_perf_cnt.rx_rate_avg,
+				.tx_rate_inst_hz = iface_perf_cnt.tx_rate_inst,
+				.rx_rate_inst_hz = iface_perf_cnt.rx_rate_inst,
 				.interface = static_cast<uint8_t>(i),
 			};
 
