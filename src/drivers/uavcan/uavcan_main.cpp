@@ -989,6 +989,10 @@ void UavcanNode::publish_can_interface_statuses()
 	if (hrt_absolute_time() - _last_can_status_pub >= status_pub_interval) {
 		_last_can_status_pub = hrt_absolute_time();
 
+		// Get the configured CAN bitrate for bus utilization calculation
+		int32_t bitrate = 1000000;
+		(void)param_get(param_find("UAVCAN_BITRATE"), &bitrate);
+
 		for (int i = 0; i < _node.getDispatcher().getCanIOManager().getCanDriver().getNumIfaces(); i++) {
 			if (i > UAVCAN_NUM_IFACES) {
 				break;
@@ -1001,6 +1005,14 @@ void UavcanNode::publish_can_interface_statuses()
 			}
 
 			auto iface_perf_cnt = _node.getDispatcher().getCanIOManager().getIfacePerfCounters(i);
+
+			// Calculate bus utilization percentage
+			// Assuming average CAN frame size of ~130 bits (including overhead and bit stuffing)
+			// Total frame rate = TX + RX (both use bus bandwidth)
+			constexpr float avg_bits_per_frame = 130.0f;
+			const float total_frame_rate = iface_perf_cnt.tx_rate_avg + iface_perf_cnt.rx_rate_avg;
+			const float bus_utilization_pct = (total_frame_rate * avg_bits_per_frame / static_cast<float>(bitrate)) * 100.0f;
+
 			can_interface_status_s status{
 				.timestamp = hrt_absolute_time(),
 				.io_errors = iface_perf_cnt.errors,
@@ -1010,6 +1022,7 @@ void UavcanNode::publish_can_interface_statuses()
 				.rx_rate_avg_hz = iface_perf_cnt.rx_rate_avg,
 				.tx_rate_inst_hz = iface_perf_cnt.tx_rate_inst,
 				.rx_rate_inst_hz = iface_perf_cnt.rx_rate_inst,
+				.bus_utilization_pct = bus_utilization_pct,
 				.interface = static_cast<uint8_t>(i),
 			};
 

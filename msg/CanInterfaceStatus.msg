@@ -9,3 +9,5 @@ float32 tx_rate_avg_hz		# average TX rate (frames/second)
 float32 rx_rate_avg_hz		# average RX rate (frames/second)
 float32 tx_rate_inst_hz		# instantaneous TX rate (frames/second)
 float32 rx_rate_inst_hz		# instantaneous RX rate (frames/second)
+
+float32 bus_utilization_pct	# bus utilization percentage (0-100)
