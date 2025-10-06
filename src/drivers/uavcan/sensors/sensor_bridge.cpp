@@ -81,6 +81,7 @@
 #if defined(CONFIG_UAVCAN_SENSOR_SAFETY_BUTTON)
 #include "safety_button.hpp"
 #endif
+#include "septentrio_sbf_tunnel.hpp"
 
 /*
  * IUavcanSensorBridge
@@ -242,6 +243,9 @@ void IUavcanSensorBridge::make_all(uavcan::INode &node, List<IUavcanSensorBridge
 	}
 
 #endif
+
+	// Septentrio SBF tunnel
+	list.add(new UavcanSeptentrioSbfTunnelBridge(node));
 }
 
 /*
