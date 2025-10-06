@@ -82,7 +82,4 @@ private:
 	perf_counter_t _dropped_bytes{perf_alloc(PC_COUNT, "sbf_tunnel: dropped_bytes")};
 
 	hrt_abstime _last_perf_log_time{0};
-
-	int _longest_length_measepoch = 0;
-	int _longest_length_satvis = 0;
 };

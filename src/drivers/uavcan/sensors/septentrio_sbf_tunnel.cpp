@@ -192,17 +192,9 @@ void UavcanSeptentrioSbfTunnelBridge::parse_sbf_stream()
 		// LOGGING
 		if (block_id == SBF_BLOCK_MEAS_EPOCH) {
 			perf_count(_meas_epoch_count);
-			if (length > _longest_length_measepoch) {
-				_longest_length_measepoch = length;
-				PX4_INFO("_longest_length_measepoch: %d, id: %u", _longest_length_measepoch, block_id);
-			}
 
 		} else if (block_id == SBF_BLOCK_SAT_VISIBILITY) {
 			perf_count(_sat_visibility_count);
-			if (length > _longest_length_satvis) {
-				_longest_length_satvis = length;
-				PX4_INFO("_longest_length_satvis: %d, id: %u", _longest_length_satvis, block_id);
-			}
 
 		} else if (block_id == SBF_BLOCK_GPS_NAV) {
 			perf_count(_gps_nav_count);
