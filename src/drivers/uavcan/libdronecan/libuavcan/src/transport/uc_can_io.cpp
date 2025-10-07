@@ -328,10 +328,48 @@ CanIfacePerfCounters CanIOManager::getIfacePerfCounters(uint8_t iface_index) con
         UAVCAN_ASSERT(0);
         return CanIfacePerfCounters();
     }
+
+    const MonotonicTime current_time = sysclock_.getMonotonic();
+    const uint64_t current_frames_tx = counters_[iface_index].frames_tx;
+    const uint64_t current_frames_rx = counters_[iface_index].frames_rx;
+
+    IfaceRateTracking& tracking = rate_tracking_[iface_index];
+
+    // Calculate rates if we have a previous measurement
+    if (!tracking.last_update_time.isZero())
+    {
+        const MonotonicDuration dt = current_time - tracking.last_update_time;
+        const float dt_sec = float(dt.toUSec()) / 1000000.0f;
+
+        if (dt_sec > 0.0f)
+        {
+            const uint64_t delta_tx = current_frames_tx - tracking.last_frames_tx;
+            const uint64_t delta_rx = current_frames_rx - tracking.last_frames_rx;
+
+            // Instantaneous rate
+            tracking.tx_rate_inst = float(delta_tx) / dt_sec;
+            tracking.rx_rate_inst = float(delta_rx) / dt_sec;
+
+            // Exponential moving average with alpha = 0.2 (smoothing factor)
+            const float alpha = 0.2f;
+            tracking.tx_rate_avg = alpha * tracking.tx_rate_inst + (1.0f - alpha) * tracking.tx_rate_avg;
+            tracking.rx_rate_avg = alpha * tracking.rx_rate_inst + (1.0f - alpha) * tracking.rx_rate_avg;
+        }
+    }
+
+    // Update tracking state
+    tracking.last_update_time = current_time;
+    tracking.last_frames_tx = current_frames_tx;
+    tracking.last_frames_rx = current_frames_rx;
+
     CanIfacePerfCounters cnt;
     cnt.errors = iface->getErrorCount() + tx_queues_[iface_index]->getRejectedFrameCount();
-    cnt.frames_rx = counters_[iface_index].frames_rx;
-    cnt.frames_tx = counters_[iface_index].frames_tx;
+    cnt.frames_rx = current_frames_rx;
+    cnt.frames_tx = current_frames_tx;
+    cnt.tx_rate_avg = tracking.tx_rate_avg;
+    cnt.rx_rate_avg = tracking.rx_rate_avg;
+    cnt.tx_rate_inst = tracking.tx_rate_inst;
+    cnt.rx_rate_inst = tracking.rx_rate_inst;
     return cnt;
 }
 

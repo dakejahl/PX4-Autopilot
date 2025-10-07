@@ -122,11 +122,19 @@ struct UAVCAN_EXPORT CanIfacePerfCounters
     uint64_t frames_tx;
     uint64_t frames_rx;
     uint64_t errors;
+    float tx_rate_avg;
+    float rx_rate_avg;
+    float tx_rate_inst;
+    float rx_rate_inst;
 
     CanIfacePerfCounters()
         : frames_tx(0)
         , frames_rx(0)
         , errors(0)
+        , tx_rate_avg(0.0f)
+        , rx_rate_avg(0.0f)
+        , tx_rate_inst(0.0f)
+        , rx_rate_inst(0.0f)
     { }
 };
 
@@ -144,11 +152,33 @@ class UAVCAN_EXPORT CanIOManager : Noncopyable
         { }
     };
 
+    struct IfaceRateTracking
+    {
+        MonotonicTime last_update_time;
+        uint64_t last_frames_tx;
+        uint64_t last_frames_rx;
+        float tx_rate_avg;
+        float rx_rate_avg;
+        float tx_rate_inst;
+        float rx_rate_inst;
+
+        IfaceRateTracking()
+            : last_update_time(MonotonicTime::fromUSec(0))
+            , last_frames_tx(0)
+            , last_frames_rx(0)
+            , tx_rate_avg(0.0f)
+            , rx_rate_avg(0.0f)
+            , tx_rate_inst(0.0f)
+            , rx_rate_inst(0.0f)
+        { }
+    };
+
     ICanDriver& driver_;
     ISystemClock& sysclock_;
 
     LazyConstructor<CanTxQueue> tx_queues_[MaxCanIfaces];
     IfaceFrameCounters counters_[MaxCanIfaces];
+    mutable IfaceRateTracking rate_tracking_[MaxCanIfaces];
 
     const uint8_t num_ifaces_;
 
