@@ -64,6 +64,7 @@
 #include <uORB/SubscriptionMultiArray.hpp>
 #include <uORB/topics/gps_dump.h>
 #include <uORB/topics/gps_inject_data.h>
+#include <uORB/topics/ppk_rtcm_data.h>
 #include <uORB/topics/sensor_gps.h>
 #include <uORB/topics/sensor_gnss_relative.h>
 
@@ -102,8 +103,7 @@ enum class gps_driver_mode_t {
 
 enum class gps_dump_comm_mode_t : int32_t {
 	Disabled = 0,
-	Full, ///< dump full RX and TX data for all devices
-	RTCM ///< dump received RTCM from Main GPS
+	Full ///< dump full RX and TX data for all devices
 };
 
 /* struct for dynamic allocation of satellite info data */
@@ -211,9 +211,11 @@ private:
 	uORB::SubscriptionMultiArray<gps_inject_data_s, gps_inject_data_s::MAX_INSTANCES> _orb_inject_data_sub{ORB_ID::gps_inject_data};
 	uORB::Publication<gps_inject_data_s> _gps_inject_data_pub{ORB_ID(gps_inject_data)};
 	uORB::Publication<gps_dump_s>	     _dump_communication_pub{ORB_ID(gps_dump)};
+	uORB::Publication<ppk_rtcm_data_s>   _ppk_rtcm_data_pub{ORB_ID(ppk_rtcm_data)};
 	gps_dump_s			     *_dump_to_device{nullptr};
 	gps_dump_s			     *_dump_from_device{nullptr};
 	gps_dump_comm_mode_t                 _dump_communication_mode{gps_dump_comm_mode_t::Disabled};
+	bool                                 _ppk_mode{false};  ///< PPK mode enabled (GPS_UBX_PPK=1)
 
 	static px4::atomic_bool _is_gps_main_advertised; ///< for the second gps we want to make sure that it gets instance 1
 	/// and thus we wait until the first one publishes at least one message.
@@ -236,6 +238,11 @@ private:
 	 * Publish RTCM corrections
 	 */
 	void 				publishRTCMCorrections(uint8_t *data, size_t len);
+
+	/**
+	 * Publish PPK RTCM data for logging
+	 */
+	void 				publishPpkRtcmData(uint8_t *data, size_t len);
 
 	/**
 	 * Publish RTCM corrections
@@ -430,8 +437,15 @@ int GPS::callback(GPSCallbackType type, void *data1, int data2, void *user)
 		return gps->setBaudrate(data2);
 
 	case GPSCallbackType::gotRTCMMessage:
-		gps->publishRTCMCorrections((uint8_t *)data1, (size_t)data2);
-		gps->dumpGpsData((uint8_t *)data1, (size_t)data2, gps_dump_comm_mode_t::RTCM, false);
+		if (gps->_ppk_mode) {
+			// PPK mode: RTCM is raw observation data for logging
+			gps->publishPpkRtcmData((uint8_t *)data1, (size_t)data2);
+
+		} else {
+			// Moving Base / RTK Base: RTCM is corrections for other GPS units
+			gps->publishRTCMCorrections((uint8_t *)data1, (size_t)data2);
+		}
+
 		break;
 
 	case GPSCallbackType::gotRelativePositionMessage:
@@ -665,7 +679,7 @@ void GPS::initializeCommunicationDump()
 		return;
 	}
 
-	if (param_dump_comm < 1 || param_dump_comm > 2) {
+	if (param_dump_comm != 1) {
 		return; //dumping disabled
 	}
 
@@ -787,6 +801,18 @@ GPS::run()
 		default:
 			break;
 
+		}
+	}
+
+	// Check for PPK mode (can be combined with any rover mode)
+	handle = param_find("GPS_UBX_PPK");
+
+	if (handle != PARAM_INVALID) {
+		int32_t gps_ubx_ppk = 0;
+		param_get(handle, &gps_ubx_ppk);
+
+		if (gps_ubx_ppk && _instance == Instance::Main) {
+			_ppk_mode = true;
 		}
 	}
 
@@ -919,7 +945,7 @@ GPS::run()
 		GPSHelper::GPSConfig gpsConfig{};
 		gpsConfig.gnss_systems = static_cast<GPSHelper::GNSSSystemsMask>(gnssSystemsParam);
 
-		if (_instance == Instance::Main && _dump_communication_mode == gps_dump_comm_mode_t::RTCM) {
+		if (_ppk_mode) {
 			gpsConfig.output_mode = GPSHelper::OutputMode::GPSAndRTCM;
 
 		} else {
@@ -1320,6 +1346,38 @@ GPS::publishRelativePosition(sensor_gnss_relative_s &gnss_relative)
 	gnss_relative.device_id = get_device_id();
 	gnss_relative.timestamp = hrt_absolute_time();
 	_sensor_gnss_relative_pub.publish(gnss_relative);
+}
+
+void
+GPS::publishPpkRtcmData(uint8_t *data, size_t len)
+{
+	ppk_rtcm_data_s ppk_data{};
+	ppk_data.timestamp = hrt_absolute_time();
+
+	// Handle messages that fit in a single packet
+	if (len <= sizeof(ppk_data.data)) {
+		ppk_data.len = len;
+		memcpy(ppk_data.data, data, len);
+		_ppk_rtcm_data_pub.publish(ppk_data);
+
+	} else {
+		// Fragment larger messages into multiple packets
+		size_t written = 0;
+
+		while (written < len) {
+			size_t chunk_size = len - written;
+
+			if (chunk_size > sizeof(ppk_data.data)) {
+				chunk_size = sizeof(ppk_data.data);
+			}
+
+			ppk_data.len = chunk_size;
+			ppk_data.timestamp = hrt_absolute_time();
+			memcpy(ppk_data.data, &data[written], chunk_size);
+			_ppk_rtcm_data_pub.publish(ppk_data);
+			written += chunk_size;
+		}
+	}
 }
 
 int

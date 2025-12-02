@@ -166,6 +166,7 @@ set(msg_files
 	PositionSetpoint.msg
 	PositionSetpointTriplet.msg
 	PowerButtonState.msg
+	PpkRtcmData.msg
 	PowerMonitor.msg
 	PpsCapture.msg
 	PurePursuitStatus.msg

@@ -180,6 +180,7 @@ px4_add_module(
 		sensors/gyro.cpp
 		sensors/ice_status.cpp
 		sensors/hygrometer.cpp
+		sensors/ppk_stream.cpp
 		sensors/safety_button.cpp
 	MODULE_CONFIG
 		module.yaml

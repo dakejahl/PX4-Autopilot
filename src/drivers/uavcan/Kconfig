@@ -90,6 +90,10 @@ if DRIVERS_UAVCAN
         bool "Subscribe to Safety Button:               ardupilot::indication::Button"
         default y
 
+    config UAVCAN_SENSOR_PPK_STREAM
+        bool "Subscribe to PPK Stream:                  uavcan::equipment::gnss::PPKStream"
+        default n
+
 endif #DRIVERS_UAVCAN
 
 

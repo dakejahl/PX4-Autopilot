@@ -36,15 +36,14 @@
  *
  * If this is set to 1, all GPS communication data will be published via uORB,
  * and written to the log file as gps_dump message.
+ * This is useful for debugging GPS communication issues.
  *
- * If this is set to 2, the main GPS is configured to output RTCM data,
- * which is then logged as gps_dump and can be used for PPK.
+ * For PPK (Post-Processed Kinematics), use GPS_UBX_PPK instead.
  *
  * @min 0
- * @max 2
+ * @max 1
  * @value 0 Disable
  * @value 1 Full communication
- * @value 2 RTCM output (PPK)
  * @group GPS
  */
 PARAM_DEFINE_INT32(GPS_DUMP_COMM, 0);
@@ -84,33 +83,63 @@ PARAM_DEFINE_INT32(GPS_SAT_INFO, 0);
 /**
  * u-blox GPS Mode
  *
- * Select the u-blox configuration setup. Most setups will use the default, including RTK and
- * dual GPS without heading.
+ * Select the u-blox configuration. Most setups use Default, including RTK with
+ * corrections from a GCS and dual GPS without heading.
  *
- * If rover has RTCM corrections from a static base (or other static correction source) coming in on UART2, then select Mode 5.
- * The Heading mode requires 2 F9P devices to be attached. The main GPS will act as rover and output
- * heading information, whereas the secondary will act as moving base.
- * Modes 1 and 2 require each F9P UART1 to be connected to the Autopilot. In addition, UART2 on the
- * F9P units are connected to each other.
- * Modes 3 and 4 only require UART1 on each F9P connected to the Autopilot or Can Node. UART RX DMA is required.
- * RTK is still possible with this setup.
- * Mode 6 is intended for use with a ground control station (not necessarily an RTK correction base).
+ * DUAL GPS HEADING (requires 2 F9P units):
+ * Two F9P modules can provide GPS-based heading. One acts as Rover (computes heading),
+ * the other as Moving Base (sends RTCM corrections to Rover).
+ *
+ * Modes 1/2 - RTCM via UART2: The F9P UART2 ports are wired directly together.
+ *   - Serial GPS on autopilot: Set both to Mode 1, driver auto-assigns roles.
+ *   - DroneCAN GPS nodes: Set Rover to Mode 1, Moving Base to Mode 2.
+ *
+ * Modes 3/4 - RTCM via UART1: RTCM routed through autopilot/CAN bus (no UART2 wiring).
+ *   - Serial GPS on autopilot: Set both to Mode 3, driver auto-assigns roles.
+ *   - DroneCAN GPS nodes: Set Rover to Mode 3, Moving Base to Mode 4.
+ *     Also set CANNODE_SUB_MBD=1 on Rover, CANNODE_PUB_MBD=1 on Moving Base.
+ *
+ * Mode 5 - Static Base RTK: Rover receives RTCM on UART2 from a static base station
+ * or NTRIP source (not from a moving base on the vehicle).
+ *
+ * Mode 6 - GCS: For ground-based GPS units, outputs NMEA on UART2.
  *
  * @min 0
- * @max 1
+ * @max 6
  * @value 0 Default
- * @value 1 Heading (Rover With Moving Base UART1 Connected To Autopilot, UART2 Connected To Moving Base)
- * @value 2 Moving Base (UART1 Connected To Autopilot, UART2 Connected To Rover)
- * @value 3 Heading (Rover With Moving Base UART1 Connected to Autopilot Or Can Node At 921600)
- * @value 4 Moving Base (Moving Base UART1 Connected to Autopilot Or Can Node At 921600)
- * @value 5 Rover with Static Base on UART2 (similar to Default, except coming in on UART2)
- * @value 6 Ground Control Station (UART2 outputs NMEA)
+ * @value 1 Heading Rover (UART2 to Moving Base)
+ * @value 2 Heading Moving Base (UART2 to Rover)
+ * @value 3 Heading Rover (UART1 only)
+ * @value 4 Heading Moving Base (UART1 only)
+ * @value 5 RTK Rover (static base on UART2)
+ * @value 6 GCS (NMEA output on UART2)
  *
  * @reboot_required true
  * @group GPS
  */
 PARAM_DEFINE_INT32(GPS_UBX_MODE, 0);
 
+/**
+ * Enable PPK raw RTCM output
+ *
+ * When enabled, the GPS driver outputs raw RTCM observation messages
+ * (MSM7 type) for Post-Processed Kinematics (PPK). These are published
+ * to the ppk_rtcm_data topic and logged for post-processing with tools
+ * like RTKLIB or Emlid Studio.
+ *
+ * PPK post-processing requires both rover observations (logged by PX4)
+ * and base station data (from a CORS network or ground-based receiver).
+ *
+ * This parameter can be combined with GPS_UBX_MODE heading modes (1, 3)
+ * to get both real-time GPS heading AND centimeter-accurate post-processed
+ * positioning. When combined with heading modes, only the Rover GPS outputs
+ * PPK data.
+ *
+ * @boolean
+ * @reboot_required true
+ * @group GPS
+ */
+PARAM_DEFINE_INT32(GPS_UBX_PPK, 0);
 
 /**
  * u-blox F9P UART2 Baudrate

@@ -436,3 +436,15 @@ PARAM_DEFINE_INT32(UAVCAN_SUB_RNG, 0);
  * @group UAVCAN
  */
 PARAM_DEFINE_INT32(UAVCAN_SUB_BTN, 0);
+
+/**
+ * subscription PPK stream
+ *
+ * Enable UAVCAN PPK (Post-Processed Kinematics) RTCM stream subscription.
+ *  uavcan::equipment::gnss::PPKStream
+ *
+ * @boolean
+ * @reboot_required true
+ * @group UAVCAN
+ */
+PARAM_DEFINE_INT32(UAVCAN_SUB_PPK, 0);

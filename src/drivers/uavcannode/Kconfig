@@ -82,4 +82,8 @@ if DRIVERS_UAVCANNODE
         bool "Include static temperature"
         default n
 
+    config UAVCANNODE_PPK_STREAM
+        bool "Include PPK RTCM stream"
+        default n
+
 endif #DRIVERS_UAVCANNODE

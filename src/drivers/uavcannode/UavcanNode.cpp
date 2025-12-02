@@ -117,6 +117,10 @@
 #include "Subscribers/RTCMStream.hpp"
 #endif // CONFIG_UAVCANNODE_RTK_DATA
 
+#if defined(CONFIG_UAVCANNODE_PPK_STREAM)
+#include "Publishers/PPKStream.hpp"
+#endif // CONFIG_UAVCANNODE_PPK_STREAM
+
 #if defined(CONFIG_UAVCANNODE_SERVO_ARRAY_COMMAND)
 #include "Subscribers/ServoArrayCommand.hpp"
 #endif // CONFIG_UAVCANNODE_SERVO_ARRAY_COMMAND
@@ -428,6 +432,10 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 #if defined(CONFIG_UAVCANNODE_STATIC_TEMPERATURE)
 	_publisher_list.add(new StaticTemperature(this, _node));
 #endif // CONFIG_UAVCANNODE_STATIC_TEMPERATURE
+
+#if defined(CONFIG_UAVCANNODE_PPK_STREAM)
+	_publisher_list.add(new PPKStreamPub(this, _node));
+#endif // CONFIG_UAVCANNODE_PPK_STREAM
 
 #if defined(CONFIG_UAVCANNODE_ARMING_STATUS)
 	_subscriber_list.add(new ArmingStatus(_node));

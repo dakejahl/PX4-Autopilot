@@ -81,6 +81,9 @@
 #if defined(CONFIG_UAVCAN_SENSOR_SAFETY_BUTTON)
 #include "safety_button.hpp"
 #endif
+#if defined(CONFIG_UAVCAN_SENSOR_PPK_STREAM)
+#include "ppk_stream.hpp"
+#endif
 
 /*
  * IUavcanSensorBridge
@@ -239,6 +242,17 @@ void IUavcanSensorBridge::make_all(uavcan::INode &node, List<IUavcanSensorBridge
 
 	if (uavcan_sub_button != 0) {
 		list.add(new UavcanSafetyButtonBridge(node));
+	}
+
+#endif
+
+	// PPK stream
+#if defined(CONFIG_UAVCAN_SENSOR_PPK_STREAM)
+	int32_t uavcan_sub_ppk = 1;
+	param_get(param_find("UAVCAN_SUB_PPK"), &uavcan_sub_ppk);
+
+	if (uavcan_sub_ppk != 0) {
+		list.add(new UavcanPpkStreamBridge(node));
 	}
 
 #endif
