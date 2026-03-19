@@ -44,3 +44,123 @@
 * @group Sensors
 */
 PARAM_DEFINE_FLOAT(IMU_ACCEL_CUTOFF, 30.0f);
+
+/**
+* Notch filter frequency for accel
+*
+* The center frequency for the 2nd order notch filter on the primary accelerometer.
+* This filter can be enabled to avoid amplification of structural resonances at a specific frequency.
+* See "IMU_ACC_NF0_BW" to set the bandwidth of the filter.
+*
+* A value of 0 disables the filter.
+*
+* @min 0
+* @max 1000
+* @unit Hz
+* @increment 0.1
+* @decimal 1
+* @reboot_required false
+* @group Sensors
+*/
+PARAM_DEFINE_FLOAT(IMU_ACC_NF0_FRQ, 0.0f);
+
+/**
+* Notch filter bandwidth for accel
+*
+* The frequency width of the stop band for the 2nd order notch filter on the primary accelerometer.
+* See "IMU_ACC_NF0_FRQ" to activate the filter and to set the notch frequency.
+*
+* @min 0
+* @max 100
+* @unit Hz
+* @increment 0.1
+* @decimal 1
+* @reboot_required false
+* @group Sensors
+*/
+PARAM_DEFINE_FLOAT(IMU_ACC_NF0_BW, 20.0f);
+
+/**
+* Notch filter 2 frequency for accel
+*
+* The center frequency for the 2nd order notch filter on the primary accelerometer.
+* This filter can be enabled to avoid amplification of structural resonances at a specific frequency.
+* See "IMU_ACC_NF1_BW" to set the bandwidth of the filter.
+*
+* A value of 0 disables the filter.
+*
+* @min 0
+* @max 1000
+* @unit Hz
+* @increment 0.1
+* @decimal 1
+* @reboot_required false
+* @group Sensors
+*/
+PARAM_DEFINE_FLOAT(IMU_ACC_NF1_FRQ, 0.0f);
+
+/**
+* Notch filter 2 bandwidth for accel
+*
+* The frequency width of the stop band for the 2nd order notch filter on the primary accelerometer.
+* See "IMU_ACC_NF1_FRQ" to activate the filter and to set the notch frequency.
+*
+* @min 0
+* @max 100
+* @unit Hz
+* @increment 0.1
+* @decimal 1
+* @reboot_required false
+* @group Sensors
+*/
+PARAM_DEFINE_FLOAT(IMU_ACC_NF1_BW, 20.0f);
+
+/**
+* IMU accel dynamic notch filtering
+*
+* Enable bank of dynamically updating notch filters.
+* Requires ESC RPM feedback or onboard FFT (IMU_GYRO_FFT_EN).
+* @group Sensors
+* @min 0
+* @max 3
+* @bit 0 ESC RPM
+* @bit 1 FFT
+*/
+PARAM_DEFINE_INT32(IMU_ACC_DNF_EN, 0);
+
+/**
+* IMU accel ESC notch filter bandwidth
+*
+* Bandwidth per notch filter when using dynamic notch filtering with ESC RPM.
+*
+* @group Sensors
+* @unit Hz
+* @increment 0.1
+* @decimal 1
+* @min 5
+* @max 30
+*/
+PARAM_DEFINE_FLOAT(IMU_ACC_DNF_BW, 15.f);
+
+/**
+* IMU accel dynamic notch filter harmonics
+*
+* ESC RPM number of harmonics (multiples of RPM) for ESC RPM dynamic notch filtering.
+*
+* @group Sensors
+* @min 1
+* @max 7
+*/
+PARAM_DEFINE_INT32(IMU_ACC_DNF_HMC, 3);
+
+/**
+* IMU accel dynamic notch filter minimum frequency
+*
+* Minimum notch filter frequency in Hz.
+*
+* @group Sensors
+* @unit Hz
+* @increment 0.1
+* @decimal 1
+*/
+PARAM_DEFINE_FLOAT(IMU_ACC_DNF_MIN, 25.f);
