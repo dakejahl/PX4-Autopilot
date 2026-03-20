@@ -211,8 +211,7 @@ float Ekf::compensateBaroForDynamicPressure(const imuSample &imu_sample, const f
 	// Corrects for the pressure change at the baro sensor caused by rotor downwash,
 	// which is proportional to collective thrust magnitude.
 	if (!_control_status.flags.fixed_wing && (fabsf(_params.ekf2_pcoef_thr) > FLT_EPSILON)) {
-		const float thrust_magnitude = fabsf(_vehicle_thrust_z);
-		baro_alt += _params.ekf2_pcoef_thr * thrust_magnitude;
+		baro_alt += _params.ekf2_pcoef_thr * _thrust_magnitude;
 	}
 
 	// Airspeed-induced static pressure position error compensation

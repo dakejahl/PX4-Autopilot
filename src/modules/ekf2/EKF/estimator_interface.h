@@ -212,8 +212,8 @@ public:
 	void set_air_density(float air_density) { _air_density = air_density; }
 
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
-	// set collective thrust magnitude for propwash baro compensation
-	void set_vehicle_thrust_z(float thrust_z) { _vehicle_thrust_z = thrust_z; }
+	// set normalized collective thrust magnitude [0, 1] for propwash baro compensation
+	void set_thrust_magnitude(float thrust_magnitude) { _thrust_magnitude = thrust_magnitude; }
 #endif // CONFIG_EKF2_BARO_COMPENSATION
 
 	bool isOnlyActiveSourceOfHorizontalAiding(bool aiding_flag) const;
@@ -392,7 +392,7 @@ protected:
 	float _air_density{atmosphere::kAirDensitySeaLevelStandardAtmos};		// air density (kg/m**3)
 
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
-	float _vehicle_thrust_z {0.f};		// collective thrust setpoint magnitude for propwash baro compensation
+	float _thrust_magnitude {0.f};		// normalized collective thrust magnitude [0, 1] for propwash baro compensation
 #endif // CONFIG_EKF2_BARO_COMPENSATION
 
 	bool _imu_updated{false};      // true if the ekf should update (completed downsampling process)

@@ -2184,7 +2184,7 @@ void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 		vehicle_thrust_setpoint_s thrust_sp;
 
 		if (_vehicle_thrust_setpoint_sub.copy(&thrust_sp)) {
-			_ekf.set_vehicle_thrust_z(thrust_sp.xyz[2]);
+			_ekf.set_thrust_magnitude(fabsf(thrust_sp.xyz[2]));
 		}
 
 #endif // CONFIG_EKF2_BARO_COMPENSATION
