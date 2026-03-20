@@ -39,26 +39,28 @@ parameters:
       max: 15.0
       unit: m
       decimal: 2
-    EKF2_GND_EFF_DZ:
+    EKF2_BARO_GE_NI:
       description:
-        short: Baro deadzone range for height fusion
-        long: Sets the value of deadzone applied to negative baro innovations. Deadzone
-          is enabled when EKF2_GND_EFF_DZ > 0.
+        short: Baro ground effect noise inflation
+        long: Additional baro measurement noise (standard deviation) applied when
+          ground effect is active. Inflates the observation variance to reduce
+          baro authority near the ground. Set to 0 to disable.
       type: float
       default: 4.0
       min: 0.0
-      max: 10.0
+      max: 40.0
       unit: m
       decimal: 1
-    EKF2_GND_MAX_HGT:
+    EKF2_BARO_GE_HGT:
       description:
         short: Height above ground level for ground effect zone
-        long: Sets the maximum distance to the ground level where negative baro innovations
-          are expected.
+        long: Sets the maximum distance to the ground level where baro ground
+          effect compensation is active. Uses terrain estimate or raw range
+          sensor data when available.
       type: float
-      default: 0.5
+      default: 1.0
       min: 0.0
-      max: 5.0
+      max: 10.0
       unit: m
       decimal: 1
     EKF2_PCOEF_XP:

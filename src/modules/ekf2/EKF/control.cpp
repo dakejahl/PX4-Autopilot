@@ -61,7 +61,8 @@ void Ekf::controlFusionModes(const imuSample &imu_delayed)
 			set_in_transition(system_flags_delayed.in_transition);
 
 			if (system_flags_delayed.gnd_effect) {
-				set_gnd_effect();
+				_control_status.flags.gnd_effect = true;
+				_time_last_gnd_effect_on = _time_delayed_us;
 			}
 
 			set_constant_pos(system_flags_delayed.constant_pos);
