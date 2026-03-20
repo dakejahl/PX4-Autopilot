@@ -119,6 +119,20 @@ parameters:
       min: -0.5
       max: 0.5
       decimal: 2
+    EKF2_PCOEF_THR:
+      description:
+        short: Static pressure position error coefficient for rotor thrust
+        long: Baro altitude correction per unit of normalized collective thrust [0, 1].
+          Compensates for propwash-induced static pressure changes at the baro
+          sensor on multirotor vehicles. Positive values correct for baro reading
+          too high during thrust (pressure decrease at sensor). Set to 0 to disable.
+          Not applied in fixed-wing mode.
+      type: float
+      default: 0.0
+      min: -50.0
+      max: 50.0
+      unit: m
+      decimal: 1
     EKF2_ASPD_MAX:
       description:
         short: Maximum airspeed used for baro static pressure compensation
