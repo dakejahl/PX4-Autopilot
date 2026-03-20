@@ -425,7 +425,7 @@ void VehicleAcceleration::ParametersUpdate(bool force)
 
 		if (_param_imu_acc_dnf_en.get() & DynamicNotch::EscRpm) {
 
-			const int32_t esc_rpm_harmonics = math::constrain(_param_imu_acc_dnf_hmc.get(), (int32_t)1, (int32_t)10);
+			const int32_t esc_rpm_harmonics = math::constrain(_param_imu_acc_dnf_hmc.get(), (int32_t)1, (int32_t)7);
 
 			if (_dynamic_notch_filter_esc_rpm && (esc_rpm_harmonics != _esc_rpm_harmonics)) {
 				delete[] _dynamic_notch_filter_esc_rpm;
@@ -722,12 +722,12 @@ float VehicleAcceleration::FilterAcceleration(int axis, float data[], int N)
 
 #endif // !CONSTRAINED_FLASH
 
-	// Apply general notch filter 0 (IMU_ACCEL_NF0_FRQ)
+	// Apply general notch filter 0 (IMU_ACC_NF0_FRQ)
 	if (_notch_filter0[axis].getNotchFreq() > 0.f) {
 		_notch_filter0[axis].applyArray(data, N);
 	}
 
-	// Apply general notch filter 1 (IMU_ACCEL_NF1_FRQ)
+	// Apply general notch filter 1 (IMU_ACC_NF1_FRQ)
 	if (_notch_filter1[axis].getNotchFreq() > 0.f) {
 		_notch_filter1[axis].applyArray(data, N);
 	}

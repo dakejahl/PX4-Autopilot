@@ -162,5 +162,7 @@ PARAM_DEFINE_INT32(IMU_ACC_DNF_HMC, 3);
 * @unit Hz
 * @increment 0.1
 * @decimal 1
+* @min 0
+* @max 1000
 */
 PARAM_DEFINE_FLOAT(IMU_ACC_DNF_MIN, 25.f);
