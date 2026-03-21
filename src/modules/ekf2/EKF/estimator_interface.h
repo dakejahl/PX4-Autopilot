@@ -211,6 +211,11 @@ public:
 	// set air density used by the multi-rotor specific drag force fusion
 	void set_air_density(float air_density) { _air_density = air_density; }
 
+#if defined(CONFIG_EKF2_BARO_COMPENSATION)
+	// set normalized collective thrust magnitude [0, 1] for propwash baro compensation
+	void set_thrust_magnitude(float thrust_magnitude) { _thrust_magnitude = thrust_magnitude; }
+#endif // CONFIG_EKF2_BARO_COMPENSATION
+
 	bool isOnlyActiveSourceOfHorizontalAiding(bool aiding_flag) const;
 	bool isOnlyActiveSourceOfHorizontalPositionAiding(bool aiding_flag) const;
 	bool isOnlyActiveSourceOfHorizontalVelocityAiding(bool aiding_flag) const;
@@ -385,6 +390,10 @@ protected:
 #endif // CONFIG_EKF2_OPTICAL_FLOW
 
 	float _air_density{atmosphere::kAirDensitySeaLevelStandardAtmos};		// air density (kg/m**3)
+
+#if defined(CONFIG_EKF2_BARO_COMPENSATION)
+	float _thrust_magnitude {0.f};		// normalized collective thrust magnitude [0, 1] for propwash baro compensation
+#endif // CONFIG_EKF2_BARO_COMPENSATION
 
 	bool _imu_updated{false};      // true if the ekf should update (completed downsampling process)
 	bool _initialised{false};      // true if the ekf interface instance (data buffering) is initialized
