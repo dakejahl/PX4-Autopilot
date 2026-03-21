@@ -57,6 +57,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/sensor_gyro_fft.h>
 #include <uORB/topics/sensor_selection.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_imu.h>
@@ -93,6 +94,9 @@ private:
 #if !defined(CONSTRAINED_FLASH)
 	void UpdateDynamicNotchEscRpm(const hrt_abstime &time_now_us, bool force = false);
 	void DisableDynamicNotchEscRpm();
+
+	void UpdateDynamicNotchFFT(const hrt_abstime &time_now_us, bool force = false);
+	void DisableDynamicNotchFFT();
 #endif // !CONSTRAINED_FLASH
 
 	inline void UpdateAccelVibrationMetrics(const matrix::Vector3f &acceleration);
@@ -120,6 +124,7 @@ private:
 
 #if !defined(CONSTRAINED_FLASH)
 	uORB::Subscription _esc_status_sub{ORB_ID(esc_status)};
+	uORB::Subscription _sensor_gyro_fft_sub{ORB_ID(sensor_gyro_fft)};
 	uORB::Subscription _sensor_selection_sub{ORB_ID(sensor_selection)};
 #endif // !CONSTRAINED_FLASH
 
@@ -210,7 +215,15 @@ private:
 	hrt_abstime _in_flight_calibration_check_timestamp_last{0};
 
 #if !defined(CONSTRAINED_FLASH)
+
+	enum DynamicNotch {
+		EscRpm = 1,
+		FFT    = 2,
+	};
+
 	static constexpr hrt_abstime DYNAMIC_NOTCH_FILTER_TIMEOUT = 3_s;
+
+	// ESC RPM
 	static constexpr int MAX_NUM_ESCS = sizeof(esc_status_s::esc) / sizeof(esc_status_s::esc[0]);
 
 	using NotchFilterHarmonic = math::NotchFilter<float>[3][MAX_NUM_ESCS];
@@ -224,6 +237,17 @@ private:
 	perf_counter_t _dynamic_notch_filter_esc_rpm_init_perf{nullptr};
 	perf_counter_t _dynamic_notch_filter_esc_rpm_update_perf{nullptr};
 
+	// FFT
+	static constexpr int MAX_NUM_FFT_PEAKS = sizeof(sensor_gyro_fft_s::peak_frequencies_x)
+			/ sizeof(sensor_gyro_fft_s::peak_frequencies_x[0]);
+
+	math::NotchFilter<float> _dynamic_notch_filter_fft[3][MAX_NUM_FFT_PEAKS] {};
+
+	perf_counter_t _dynamic_notch_filter_fft_disable_perf{nullptr};
+	perf_counter_t _dynamic_notch_filter_fft_update_perf{nullptr};
+
+	bool _dynamic_notch_fft_available{false};
+
 	bool _is_primary_accel{false};
 #endif // !CONSTRAINED_FLASH
 
@@ -235,10 +259,10 @@ private:
 		(ParamBool<px4::params::SENS_IMU_AUTOCAL>) _param_sens_imu_autocal,
 		(ParamBool<px4::params::SENS_IMU_CLPNOTI>) _param_sens_imu_notify_clipping
 #if !defined(CONSTRAINED_FLASH)
-		, (ParamInt<px4::params::IMU_ACCL_DNF_EN>) _param_imu_accl_dnf_en,
-		(ParamInt<px4::params::IMU_ACCL_DNF_HMC>) _param_imu_accl_dnf_hmc,
-		(ParamFloat<px4::params::IMU_ACCL_DNF_BW>) _param_imu_accl_dnf_bw,
-		(ParamFloat<px4::params::IMU_ACCL_DNF_MIN>) _param_imu_accl_dnf_min
+		, (ParamInt<px4::params::IMU_ACC_DNF_EN>) _param_imu_acc_dnf_en,
+		(ParamInt<px4::params::IMU_ACC_DNF_HMC>) _param_imu_acc_dnf_hmc,
+		(ParamFloat<px4::params::IMU_ACC_DNF_BW>) _param_imu_acc_dnf_bw,
+		(ParamFloat<px4::params::IMU_ACC_DNF_MIN>) _param_imu_acc_dnf_min
 #endif // !CONSTRAINED_FLASH
 	)
 };
