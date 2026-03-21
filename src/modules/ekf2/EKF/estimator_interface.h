@@ -199,15 +199,6 @@ public:
 
 	void set_in_transition(bool in_transition) { _control_status.flags.in_transition = in_transition; }
 
-	// set flag if static pressure rise due to ground effect is expected
-	// use _params.ekf2_gnd_eff_dz to adjust for expected rise in static pressure
-	// flag will clear after GNDEFFECT_TIMEOUT uSec
-	void set_gnd_effect()
-	{
-		_control_status.flags.gnd_effect = true;
-		_time_last_gnd_effect_on = _time_delayed_us;
-	}
-
 	// set air density used by the multi-rotor specific drag force fusion
 	void set_air_density(float air_density) { _air_density = air_density; }
 

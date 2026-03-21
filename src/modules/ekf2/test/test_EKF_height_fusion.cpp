@@ -59,6 +59,7 @@ public:
 	void SetUp() override
 	{
 		_ekf->init(0);
+		_ekf->getParamHandle()->ekf2_baro_ge_ni = 0.f; // disable ground effect for height fusion tests
 		_ekf_wrapper.disableBaroHeightFusion();
 		_ekf_wrapper.disableRangeHeightFusion();
 		_sensor_simulator.runSeconds(0.1);

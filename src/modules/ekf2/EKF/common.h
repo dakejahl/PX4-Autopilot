@@ -312,8 +312,8 @@ struct parameters {
 	float baro_bias_nsd{0.13f};             ///< process noise for barometric height bias estimation (m/s/sqrt(Hz))
 	float ekf2_baro_gate{5.0f};             ///< barometric and GPS height innovation consistency gate size (STD)
 
-	float ekf2_gnd_eff_dz{5.0f};            ///< Size of deadzone applied to negative baro innovations when ground effect compensation is active (m)
-	float ekf2_gnd_max_hgt{0.5f};           ///< Height above ground at which baro ground effect becomes insignificant (m)
+	float ekf2_baro_ge_ni{4.0f};            ///< Baro noise inflation (std dev) when ground effect is active (m)
+	float ekf2_baro_ge_hgt{1.0f};           ///< Height above ground at which baro ground effect becomes insignificant (m)
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 	// static barometer pressure position error coefficient along body axes

@@ -945,21 +945,46 @@ float Ekf::getTiltVariance() const
 void Ekf::updateGroundEffect()
 {
 	if (_control_status.flags.in_air && !_control_status.flags.fixed_wing) {
+
+		bool height_above_ground_known = false;
+		bool below_gnd_effect_hgt = false;
+
 #if defined(CONFIG_EKF2_TERRAIN)
 
 		if (isTerrainEstimateValid()) {
-			// automatically set ground effect if terrain is valid
-			float height = getHagl();
-			_control_status.flags.gnd_effect = (height < _params.ekf2_gnd_max_hgt);
+			height_above_ground_known = true;
+			below_gnd_effect_hgt = (getHagl() < _params.ekf2_baro_ge_hgt);
+		}
 
-		} else
 #endif // CONFIG_EKF2_TERRAIN
-			if (_control_status.flags.gnd_effect) {
-				// Turn off ground effect compensation if it times out
-				if (isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT)) {
-					_control_status.flags.gnd_effect = false;
-				}
+
+#if defined(CONFIG_EKF2_RANGE_FINDER)
+
+		// Fall back to raw range sensor when terrain estimation is not active
+		// (e.g. EKF2_RNG_CTRL disabled). Range data is still buffered and
+		// quality-checked regardless of fusion state.
+		if (!height_above_ground_known
+		    && _range_sensor.isDataHealthy()
+		    && isRecent(_time_last_range_buffer_push, 1'000'000)) {
+			height_above_ground_known = true;
+			below_gnd_effect_hgt = (_range_sensor.getDistBottom() < _params.ekf2_baro_ge_hgt);
+		}
+
+#endif // CONFIG_EKF2_RANGE_FINDER
+
+		if (height_above_ground_known) {
+			_control_status.flags.gnd_effect = below_gnd_effect_hgt;
+
+			if (below_gnd_effect_hgt) {
+				_time_last_gnd_effect_on = _time_delayed_us;
 			}
+
+		} else if (_control_status.flags.gnd_effect) {
+			// No height source available — preserve land detector flag with timeout
+			if (isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT)) {
+				_control_status.flags.gnd_effect = false;
+			}
+		}
 
 	} else {
 		_control_status.flags.gnd_effect = false;
