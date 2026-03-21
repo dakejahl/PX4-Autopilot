@@ -34,3 +34,47 @@ parameters:
       category: System
       type: boolean
       default: 1
+    IMU_ACC_DNF_EN:
+      description:
+        short: IMU accel dynamic notch filtering
+        long: |-
+          Enable bank of dynamically updating notch filters.
+          Requires ESC RPM feedback or onboard FFT (IMU_GYRO_FFT_EN).
+          Only applied to the primary accelerometer used by the estimator.
+      type: bitmask
+      bit:
+        0: ESC RPM
+        1: FFT
+      default: 0
+      min: 0
+      max: 3
+    IMU_ACC_DNF_BW:
+      description:
+        short: IMU accel ESC notch filter bandwidth
+        long: Bandwidth per notch filter when using dynamic notch filtering with ESC
+          RPM.
+      type: float
+      default: 15.0
+      unit: Hz
+      increment: 0.1
+      decimal: 1
+      min: 5
+      max: 30
+    IMU_ACC_DNF_HMC:
+      description:
+        short: IMU accel dynamic notch filter harmonics
+        long: ESC RPM number of harmonics (multiples of RPM) for ESC RPM dynamic notch
+          filtering.
+      type: int32
+      default: 3
+      min: 1
+      max: 7
+    IMU_ACC_DNF_MIN:
+      description:
+        short: IMU accel dynamic notch filter minimum frequency
+        long: Minimum notch filter frequency in Hz.
+      type: float
+      default: 25.0
+      unit: Hz
+      increment: 0.1
+      decimal: 1
