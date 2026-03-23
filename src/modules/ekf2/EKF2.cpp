@@ -2180,21 +2180,20 @@ void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 
 		_ekf.set_air_density(airdata.rho);
 
+		float thrust_magnitude = 0.f;
+
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
 		vehicle_thrust_setpoint_s thrust_sp;
 
 		if (_vehicle_thrust_setpoint_sub.copy(&thrust_sp)) {
 			if (hrt_elapsed_time(&thrust_sp.timestamp) < 500_ms) {
-				_ekf.set_thrust_magnitude(math::constrain(-thrust_sp.xyz[2], 0.f, 1.f));
-
-			} else {
-				_ekf.set_thrust_magnitude(0.f);
+				thrust_magnitude = math::constrain(-thrust_sp.xyz[2], 0.f, 1.f);
 			}
 		}
 
 #endif // CONFIG_EKF2_BARO_COMPENSATION
 
-		_ekf.setBaroData(baroSample{airdata.timestamp_sample, airdata.baro_alt_meter, reset});
+		_ekf.setBaroData(baroSample{airdata.timestamp_sample, airdata.baro_alt_meter, reset, thrust_magnitude});
 
 		ekf2_timestamps.vehicle_air_data_timestamp_rel = (int16_t)((int64_t)airdata.timestamp / 100 -
 				(int64_t)ekf2_timestamps.timestamp / 100);

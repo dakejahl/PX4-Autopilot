@@ -54,8 +54,11 @@ public:
 	void setData(float baro);
 	float getData() const { return _baro_data; }
 
+	void setThrustMagnitude(float thrust) { _thrust_magnitude = thrust; }
+
 private:
 	float _baro_data{0.0f};
+	float _thrust_magnitude{0.0f};
 
 	void send(uint64_t time) override;
 

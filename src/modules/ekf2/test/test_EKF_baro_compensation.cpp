@@ -71,7 +71,7 @@ TEST_F(EkfBaroCompensationTest, testThrustCompensationDefault)
 	// With default parameter (0), thrust should have no effect on baro height
 	_ekf->set_in_air_status(true);
 	_ekf->set_vehicle_at_rest(false);
-	_ekf->set_thrust_magnitude(0.6f);
+	_sensor_simulator._baro.setThrustMagnitude(0.6f);
 
 	const float height_before = _ekf->getPosition()(2);
 
@@ -97,7 +97,7 @@ TEST_F(EkfBaroCompensationTest, testThrustCompensationPositive)
 
 	const float height_before = _ekf->getPosition()(2);
 
-	_ekf->set_thrust_magnitude(thrust_magnitude);
+	_sensor_simulator._baro.setThrustMagnitude(thrust_magnitude);
 	_sensor_simulator.runSeconds(20);
 
 	const float height_after = _ekf->getPosition()(2);
@@ -126,7 +126,7 @@ TEST_F(EkfBaroCompensationTest, testThrustCompensationDisabledInFixedWing)
 
 	const float height_before = _ekf->getPosition()(2);
 
-	_ekf->set_thrust_magnitude(0.6f);
+	_sensor_simulator._baro.setThrustMagnitude(0.6f);
 	_sensor_simulator.runSeconds(10);
 
 	const float height_after = _ekf->getPosition()(2);

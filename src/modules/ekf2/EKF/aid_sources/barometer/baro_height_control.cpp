@@ -52,7 +52,7 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 	if (_baro_buffer && _baro_buffer->pop_first_older_than(imu_sample.time_us, &baro_sample)) {
 
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
-		const float measurement = compensateBaroAltitude(imu_sample, baro_sample.hgt);
+		const float measurement = compensateBaroAltitude(imu_sample, baro_sample);
 #else
 		const float measurement = baro_sample.hgt;
 #endif
@@ -203,15 +203,16 @@ void Ekf::stopBaroHgtFusion()
 }
 
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
-float Ekf::compensateBaroAltitude(const imuSample &imu_sample, const float baro_alt_uncompensated) const
+float Ekf::compensateBaroAltitude(const imuSample &imu_sample, const baroSample &baro_sample) const
 {
-	float baro_alt = baro_alt_uncompensated;
+	float baro_alt = baro_sample.hgt;
 
 	// Propwash-induced static pressure compensation for multirotor vehicles.
 	// Corrects for the pressure change at the baro sensor caused by rotor downwash,
 	// which is proportional to collective thrust magnitude.
+	// Uses thrust captured at baro sample time to avoid phase delay from EKF ring buffer.
 	if (!_control_status.flags.fixed_wing && (fabsf(_params.ekf2_pcoef_thr) > FLT_EPSILON)) {
-		baro_alt += _params.ekf2_pcoef_thr * _thrust_magnitude;
+		baro_alt += _params.ekf2_pcoef_thr * baro_sample.thrust_magnitude;
 	}
 
 	// Airspeed-induced static pressure position error compensation

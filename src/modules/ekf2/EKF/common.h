@@ -213,9 +213,10 @@ struct magSample {
 };
 
 struct baroSample {
-	uint64_t    time_us{};  ///< timestamp of the measurement (uSec)
-	float       hgt{};      ///< pressure altitude above sea level (m)
+	uint64_t    time_us{};              ///< timestamp of the measurement (uSec)
+	float       hgt{};                  ///< pressure altitude above sea level (m)
 	bool        reset{false};
+	float       thrust_magnitude{0.f};  ///< normalized collective thrust [0, 1] captured at sample time for propwash compensation
 };
 
 struct airspeedSample {
