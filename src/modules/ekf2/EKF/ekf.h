@@ -612,6 +612,11 @@ private:
 
 	HeightBiasEstimator _baro_b_est{HeightSensor::BARO, _height_sensor_ref};
 
+# if defined(CONFIG_EKF2_BARO_COMPENSATION)
+	AlphaFilter<float> _baro_thrust_lpf{};   ///< first-order lag filter on thrust for propwash compensation
+	uint64_t _baro_thrust_lpf_last_us{0};    ///< timestamp of last thrust filter update (uSec)
+# endif // CONFIG_EKF2_BARO_COMPENSATION
+
 #endif // CONFIG_EKF2_BAROMETER
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
@@ -971,7 +976,7 @@ private:
 	void updateGroundEffect();
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
-	float compensateBaroAltitude(const imuSample &imu_sample, const baroSample &baro_sample) const;
+	float compensateBaroAltitude(const imuSample &imu_sample, const baroSample &baro_sample);
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 
 #endif // CONFIG_EKF2_BAROMETER

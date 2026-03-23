@@ -558,6 +558,7 @@ private:
 		(ParamExtFloat<px4::params::EKF2_PCOEF_YN>) _param_ekf2_pcoef_yn,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_Z>) _param_ekf2_pcoef_z,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_THR>) _param_ekf2_pcoef_thr,
+		(ParamExtFloat<px4::params::EKF2_PCOEF_TTAU>) _param_ekf2_pcoef_thr_tau,
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 

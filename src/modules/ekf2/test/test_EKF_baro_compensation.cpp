@@ -134,3 +134,89 @@ TEST_F(EkfBaroCompensationTest, testThrustCompensationDisabledInFixedWing)
 	// Height should not change significantly — fixed-wing guard disables correction
 	EXPECT_NEAR(height_after, height_before, 0.1f);
 }
+
+TEST_F(EkfBaroCompensationTest, testThrustFilterSteadyState)
+{
+	// With a lag filter enabled, steady-state compensation should converge
+	// to the same value as without filtering
+	const float ekf2_pcoef_thr = 2.0f;
+	const float thrust_magnitude = 0.6f;
+
+	parameters *params = _ekf->getParamHandle();
+	params->ekf2_pcoef_thr = ekf2_pcoef_thr;
+	params->ekf2_pcoef_thr_tau = 0.2f;  // 200ms time constant
+
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+
+	_sensor_simulator._baro.setThrustMagnitude(thrust_magnitude);
+
+	// Run long enough for both the lag filter and EKF to converge
+	_sensor_simulator.runSeconds(30);
+
+	const float height_filtered = _ekf->getPosition()(2);
+
+	// Compare against a fresh instance with tau=0 (no filtering)
+	auto ekf_nofilter = std::make_shared<Ekf>();
+	SensorSimulator sim_nofilter(ekf_nofilter);
+	ekf_nofilter->init(0);
+	sim_nofilter.runSeconds(0.1);
+	ekf_nofilter->set_in_air_status(false);
+	ekf_nofilter->set_vehicle_at_rest(true);
+	sim_nofilter.runSeconds(7);
+
+	parameters *params_nf = ekf_nofilter->getParamHandle();
+	params_nf->ekf2_pcoef_thr = ekf2_pcoef_thr;
+	params_nf->ekf2_pcoef_thr_tau = 0.0f;
+
+	ekf_nofilter->set_in_air_status(true);
+	ekf_nofilter->set_vehicle_at_rest(false);
+	sim_nofilter._baro.setThrustMagnitude(thrust_magnitude);
+	sim_nofilter.runSeconds(30);
+
+	const float height_nofilter = ekf_nofilter->getPosition()(2);
+
+	// Steady-state should match within tolerance (EKF bias estimation noise)
+	EXPECT_NEAR(height_filtered, height_nofilter, 0.3f);
+}
+
+TEST_F(EkfBaroCompensationTest, testThrustFilterTransientDamping)
+{
+	// Verify that the lag filter damps the immediate response to a thrust step.
+	// After a thrust step, the filtered compensation at 1 second should be less
+	// than the steady-state value, demonstrating that the filter is smoothing.
+	const float ekf2_pcoef_thr = 2.0f;
+	const float tau = 0.3f;  // 300ms time constant
+
+	parameters *params = _ekf->getParamHandle();
+	params->ekf2_pcoef_thr = ekf2_pcoef_thr;
+	params->ekf2_pcoef_thr_tau = tau;
+
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+
+	// Start with zero thrust and let the filter settle
+	_sensor_simulator._baro.setThrustMagnitude(0.0f);
+	_sensor_simulator.runSeconds(5);
+
+	const float height_before_step = _ekf->getPosition()(2);
+
+	// Apply thrust step
+	_sensor_simulator._baro.setThrustMagnitude(0.8f);
+
+	// After a short time (~2*tau), the filtered thrust should still be ramping up,
+	// so the height change should be less than steady-state
+	_sensor_simulator.runSeconds(0.6);
+	const float height_short = _ekf->getPosition()(2);
+
+	// After a long time (>>tau), the filter converges
+	_sensor_simulator.runSeconds(29.4);
+	const float height_converged = _ekf->getPosition()(2);
+
+	// The short-term height change should be smaller than the converged change
+	// (filter is damping the transient)
+	const float delta_short = fabsf(height_short - height_before_step);
+	const float delta_converged = fabsf(height_converged - height_before_step);
+
+	EXPECT_LT(delta_short, delta_converged * 0.9f);
+}

@@ -110,6 +110,7 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_pcoef_yn(_params->ekf2_pcoef_yn),
 	_param_ekf2_pcoef_z(_params->ekf2_pcoef_z),
 	_param_ekf2_pcoef_thr(_params->ekf2_pcoef_thr),
+	_param_ekf2_pcoef_thr_tau(_params->ekf2_pcoef_thr_tau),
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 #if defined(CONFIG_EKF2_AIRSPEED)

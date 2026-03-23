@@ -136,6 +136,22 @@ parameters:
       max: 10.0
       unit: m
       decimal: 1
+    EKF2_PCOEF_TTAU:
+      description:
+        short: Thrust compensation time constant
+        long: First-order low-pass filter time constant applied to the thrust
+          signal before baro compensation. Models the delay between a thrust
+          setpoint change and the resulting pressure change at the baro sensor
+          (motor spin-up, propwash development, sensor response). Set to 0 to
+          disable filtering (instantaneous compensation). Typical values for
+          multirotors are 0.1 to 0.5 seconds. Use the baro_pressurization.py
+          calibration script to identify the optimal value from flight logs.
+      type: float
+      default: 0.0
+      min: 0.0
+      max: 2.0
+      unit: s
+      decimal: 2
     EKF2_ASPD_MAX:
       description:
         short: Maximum airspeed used for baro static pressure compensation
