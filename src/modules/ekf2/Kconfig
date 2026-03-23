@@ -57,9 +57,9 @@ depends on MODULES_EKF2
         bool "barometer compensation support"
         default y
 	depends on EKF2_BAROMETER
-	depends on EKF2_WIND # TODO: thrust-based compensation doesn't require wind; consider separate Kconfig symbol
 	---help---
-		EKF2 pressure compensation support.
+		EKF2 barometer pressure compensation support (thrust and airspeed).
+		Airspeed-based compensation additionally requires EKF2_WIND.
 
 menuconfig EKF2_DRAG_FUSION
 depends on MODULES_EKF2

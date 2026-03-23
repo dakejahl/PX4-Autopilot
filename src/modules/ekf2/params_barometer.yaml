@@ -132,8 +132,8 @@ parameters:
           Not applied in fixed-wing mode.
       type: float
       default: 0.0
-      min: -10.0
-      max: 10.0
+      min: -30.0
+      max: 30.0
       unit: m
       decimal: 1
     EKF2_PCOEF_TTAU:
@@ -144,8 +144,9 @@ parameters:
           setpoint change and the resulting pressure change at the baro sensor
           (motor spin-up, propwash development, sensor response). Set to 0 to
           disable filtering (instantaneous compensation). Typical values for
-          multirotors are 0.1 to 0.5 seconds. Use the baro_pressurization.py
-          calibration script to identify the optimal value from flight logs.
+          multirotors are 0.1 to 0.5 seconds. Use the baro_thrust_calibration.py
+          script in Tools/baro_compensation to identify the optimal value from
+          flight logs.
       type: float
       default: 0.0
       min: 0.0

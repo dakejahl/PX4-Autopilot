@@ -103,14 +103,16 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_gnd_eff_dz(_params->ekf2_gnd_eff_dz),
 	_param_ekf2_gnd_max_hgt(_params->ekf2_gnd_max_hgt),
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
+	_param_ekf2_pcoef_thr(_params->ekf2_pcoef_thr),
+	_param_ekf2_pcoef_thr_tau(_params->ekf2_pcoef_thr_tau),
+#  if defined(CONFIG_EKF2_WIND)
 	_param_ekf2_aspd_max(_params->ekf2_aspd_max),
 	_param_ekf2_pcoef_xp(_params->ekf2_pcoef_xp),
 	_param_ekf2_pcoef_xn(_params->ekf2_pcoef_xn),
 	_param_ekf2_pcoef_yp(_params->ekf2_pcoef_yp),
 	_param_ekf2_pcoef_yn(_params->ekf2_pcoef_yn),
 	_param_ekf2_pcoef_z(_params->ekf2_pcoef_z),
-	_param_ekf2_pcoef_thr(_params->ekf2_pcoef_thr),
-	_param_ekf2_pcoef_thr_tau(_params->ekf2_pcoef_thr_tau),
+#  endif // CONFIG_EKF2_WIND
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 #if defined(CONFIG_EKF2_AIRSPEED)

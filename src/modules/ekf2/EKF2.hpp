@@ -550,6 +550,9 @@ private:
 		(ParamExtFloat<px4::params::EKF2_GND_MAX_HGT>) _param_ekf2_gnd_max_hgt,
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
+		(ParamExtFloat<px4::params::EKF2_PCOEF_THR>) _param_ekf2_pcoef_thr,
+		(ParamExtFloat<px4::params::EKF2_PCOEF_TTAU>) _param_ekf2_pcoef_thr_tau,
+#  if defined(CONFIG_EKF2_WIND)
 		// Corrections for static pressure position error where Ps_error = Ps_meas - Ps_truth
 		(ParamExtFloat<px4::params::EKF2_ASPD_MAX>) _param_ekf2_aspd_max,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_XP>) _param_ekf2_pcoef_xp,
@@ -557,8 +560,7 @@ private:
 		(ParamExtFloat<px4::params::EKF2_PCOEF_YP>) _param_ekf2_pcoef_yp,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_YN>) _param_ekf2_pcoef_yn,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_Z>) _param_ekf2_pcoef_z,
-		(ParamExtFloat<px4::params::EKF2_PCOEF_THR>) _param_ekf2_pcoef_thr,
-		(ParamExtFloat<px4::params::EKF2_PCOEF_TTAU>) _param_ekf2_pcoef_thr_tau,
+#  endif // CONFIG_EKF2_WIND
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 

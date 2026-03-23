@@ -317,6 +317,10 @@ struct parameters {
 	float ekf2_gnd_max_hgt{0.5f};           ///< Height above ground at which baro ground effect becomes insignificant (m)
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
+	float ekf2_pcoef_thr{0.0f};      // propwash baro altitude correction per unit thrust (m)
+	float ekf2_pcoef_thr_tau{0.0f};  // first-order lag time constant for thrust compensation (s)
+
+#  if defined(CONFIG_EKF2_WIND)
 	// static barometer pressure position error coefficient along body axes
 	float ekf2_pcoef_xp{0.0f};    // (-)
 	float ekf2_pcoef_xn{0.0f};    // (-)
@@ -324,11 +328,9 @@ struct parameters {
 	float ekf2_pcoef_yn{0.0f};    // (-)
 	float ekf2_pcoef_z{0.0f};     // (-)
 
-	float ekf2_pcoef_thr{0.0f};      // propwash baro altitude correction per unit thrust (m)
-	float ekf2_pcoef_thr_tau{0.0f};  // first-order lag time constant for thrust compensation (s)
-
 	// upper limit on airspeed used for correction  (m/s**2)
 	float ekf2_aspd_max{20.0f};
+#  endif // CONFIG_EKF2_WIND
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 

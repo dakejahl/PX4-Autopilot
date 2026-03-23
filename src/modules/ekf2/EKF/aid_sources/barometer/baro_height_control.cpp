@@ -235,6 +235,7 @@ float Ekf::compensateBaroAltitude(const imuSample &imu_sample, const baroSample 
 		baro_alt += _params.ekf2_pcoef_thr * thrust;
 	}
 
+#if defined(CONFIG_EKF2_WIND)
 	// Airspeed-induced static pressure position error compensation
 	if (_control_status.flags.wind && isLocalHorizontalPositionValid()) {
 		// calculate static pressure error = Pmeas - Ptruth
@@ -264,6 +265,7 @@ float Ekf::compensateBaroAltitude(const imuSample &imu_sample, const baroSample 
 		// correct baro measurement using pressure error estimate and assuming sea level gravity
 		baro_alt += pstatic_err / (_air_density * CONSTANTS_ONE_G);
 	}
+#endif // CONFIG_EKF2_WIND
 
 	return baro_alt;
 }
