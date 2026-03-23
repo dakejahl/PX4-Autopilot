@@ -109,6 +109,7 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_pcoef_yp(_params->ekf2_pcoef_yp),
 	_param_ekf2_pcoef_yn(_params->ekf2_pcoef_yn),
 	_param_ekf2_pcoef_z(_params->ekf2_pcoef_z),
+	_param_ekf2_pcoef_thr(_params->ekf2_pcoef_thr),
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 #if defined(CONFIG_EKF2_AIRSPEED)
@@ -2178,6 +2179,20 @@ void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 		}
 
 		_ekf.set_air_density(airdata.rho);
+
+#if defined(CONFIG_EKF2_BARO_COMPENSATION)
+		vehicle_thrust_setpoint_s thrust_sp;
+
+		if (_vehicle_thrust_setpoint_sub.copy(&thrust_sp)) {
+			if (hrt_elapsed_time(&thrust_sp.timestamp) < 500_ms) {
+				_ekf.set_thrust_magnitude(math::constrain(-thrust_sp.xyz[2], 0.f, 1.f));
+
+			} else {
+				_ekf.set_thrust_magnitude(0.f);
+			}
+		}
+
+#endif // CONFIG_EKF2_BARO_COMPENSATION
 
 		_ekf.setBaroData(baroSample{airdata.timestamp_sample, airdata.baro_alt_meter, reset});
 

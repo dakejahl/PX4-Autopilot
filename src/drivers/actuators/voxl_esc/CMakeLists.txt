@@ -49,5 +49,4 @@ px4_add_module(
 		mixer_module
 	MODULE_CONFIG
 		module.yaml
-		voxl_esc_params.yaml
 	)

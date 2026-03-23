@@ -47,5 +47,4 @@ px4_add_module(
 		mixer_module
 	MODULE_CONFIG
 		module.yaml
-		voxl2_io_params.yaml
 	)

@@ -38,6 +38,4 @@ px4_add_module(
 		pmw3901_main.cpp
 		PMW3901.cpp
 		PMW3901.hpp
-	MODULE_CONFIG
-		parameters.yaml
 	)

@@ -38,8 +38,6 @@ px4_add_module(
 		PCF8583.cpp
 		PCF8583.hpp
 		pcf8583_main.cpp
-	MODULE_CONFIG
-		parameters.yaml
 	DEPENDS
 		drivers__device
 		px4_work_queue

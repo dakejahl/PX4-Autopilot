@@ -37,8 +37,6 @@ px4_add_module(
 	SRCS
 		FixedwingRateControl.cpp
 		FixedwingRateControl.hpp
-	MODULE_CONFIG
-		fw_rate_control_params.yaml
 	DEPENDS
 		px4_work_queue
 		RateControl

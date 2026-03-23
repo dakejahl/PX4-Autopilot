@@ -47,8 +47,6 @@ px4_add_module(
 		sensors/mocap.cpp
 		sensors/land.cpp
 		sensors/landing_target.cpp
-	MODULE_CONFIG
-		params.yaml
 	DEPENDS
 		controllib
 		geo

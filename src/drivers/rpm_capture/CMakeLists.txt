@@ -44,6 +44,4 @@ px4_add_module(
 		-DPARAM_PREFIX="${PARAM_PREFIX}"
 	SRCS
 		RPMCapture.cpp
-	MODULE_CONFIG
-		rpm_capture_params.yaml
 	)

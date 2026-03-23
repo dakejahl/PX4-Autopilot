@@ -40,8 +40,6 @@ px4_add_module(
 	SRCS
 		ina220_main.cpp
 		ina220.cpp
-	MODULE_CONFIG
-		ina220_params.yaml
 	DEPENDS
 		battery
 		px4_work_queue

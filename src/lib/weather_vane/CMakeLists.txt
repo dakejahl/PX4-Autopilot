@@ -32,4 +32,3 @@
 ############################################################################
 
 px4_add_library(WeatherVane WeatherVane.cpp)
-set_property(GLOBAL APPEND PROPERTY PX4_MODULE_CONFIG_FILES ${CMAKE_CURRENT_SOURCE_DIR}/weathervane_params.yaml)

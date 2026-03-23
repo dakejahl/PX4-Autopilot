@@ -48,10 +48,6 @@
 #include <px4_platform_common/px4_config.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 
-extern "C" {
-	__EXPORT void fc_uninitialize_i2c_bus(int fd);
-}
-
 namespace device
 {
 
@@ -126,7 +122,7 @@ I2C::init()
 	_i2c_fd = _config_i2c_bus(get_device_bus(), get_device_address(), _frequency);
 	pthread_mutex_unlock(_mutex);
 
-	if (_i2c_fd == -1) {
+	if (_i2c_fd == PX4_ERROR) {
 		PX4_ERR("i2c init failed");
 		goto out;
 	}
@@ -136,8 +132,6 @@ I2C::init()
 
 	if (ret != OK) {
 		PX4_ERR("i2c probe failed");
-		fc_uninitialize_i2c_bus(_i2c_fd);
-		_i2c_fd = -1;
 		goto out;
 	}
 

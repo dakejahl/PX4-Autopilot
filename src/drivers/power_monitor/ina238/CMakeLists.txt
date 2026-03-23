@@ -38,8 +38,6 @@ px4_add_module(
 	SRCS
 		ina238_main.cpp
 		ina238.cpp
-	MODULE_CONFIG
-		ina238_params.yaml
 	DEPENDS
 		battery
 		px4_work_queue

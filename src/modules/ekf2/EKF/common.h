@@ -323,6 +323,8 @@ struct parameters {
 	float ekf2_pcoef_yn{0.0f};    // (-)
 	float ekf2_pcoef_z{0.0f};     // (-)
 
+	float ekf2_pcoef_thr{0.0f};  // propwash baro altitude correction per unit thrust (m)
+
 	// upper limit on airspeed used for correction  (m/s**2)
 	float ekf2_aspd_max{20.0f};
 # endif // CONFIG_EKF2_BARO_COMPENSATION

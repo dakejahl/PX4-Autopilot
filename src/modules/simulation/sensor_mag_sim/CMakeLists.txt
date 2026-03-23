@@ -38,8 +38,6 @@ px4_add_module(
 	SRCS
 		SensorMagSim.cpp
 		SensorMagSim.hpp
-	MODULE_CONFIG
-		parameters.yaml
 	DEPENDS
 		drivers_magnetometer
 		geo

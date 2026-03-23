@@ -63,7 +63,6 @@ px4_add_module(
 		worker_thread.cpp
 	MODULE_CONFIG
 		module.yaml
-		commander_params.yaml
 	DEPENDS
 		ArmAuthorization
 		circuit_breaker

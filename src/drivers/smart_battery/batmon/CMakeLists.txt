@@ -38,8 +38,6 @@ px4_add_module(
 	SRCS
 		batmon.cpp
 
-	MODULE_CONFIG
-		batmon_params.yaml
 	DEPENDS
 		drivers__smbus_sbs
 		drivers__smbus

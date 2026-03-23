@@ -35,8 +35,6 @@ px4_add_module(
 	MAIN mappydot
 	SRCS
 		MappyDot.cpp
-	MODULE_CONFIG
-		parameters.yaml
 	DEPENDS
 		drivers_rangefinder
 	)

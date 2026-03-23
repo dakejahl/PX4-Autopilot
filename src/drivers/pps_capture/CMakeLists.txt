@@ -44,6 +44,4 @@ px4_add_module(
 		-DPARAM_PREFIX="${PARAM_PREFIX}"
 	SRCS
 		PPSCapture.cpp
-	MODULE_CONFIG
-		pps_capture_params.yaml
 	)

@@ -39,8 +39,6 @@ px4_add_module(
 		ms4515_main.cpp
 		MS4515.cpp
 		MS4515.hpp
-	MODULE_CONFIG
-		parameters.yaml
 	DEPENDS
 		px4_work_queue
 	)

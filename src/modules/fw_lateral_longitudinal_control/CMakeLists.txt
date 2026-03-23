@@ -12,6 +12,4 @@ px4_add_module(
         FwLateralLongitudinalControl.hpp
         DEPENDS
         ${CONTROL_DEPENDENCIES}
-	MODULE_CONFIG
-		fw_lat_long_params.yaml
-	)
+)

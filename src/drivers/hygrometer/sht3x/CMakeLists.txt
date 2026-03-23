@@ -38,8 +38,6 @@ px4_add_module(
 	SRCS
 		sht3x.cpp
 		sht3x.h
-	MODULE_CONFIG
-		sht3x_params.yaml
 	DEPENDS
 		px4_work_queue
 	)

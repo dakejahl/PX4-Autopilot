@@ -37,8 +37,6 @@ px4_add_module(
 		teraranger_main.cpp
 		TERARANGER.cpp
 		TERARANGER.hpp
-	MODULE_CONFIG
-		parameters.yaml
 	DEPENDS
 		drivers_rangefinder
 		px4_work_queue

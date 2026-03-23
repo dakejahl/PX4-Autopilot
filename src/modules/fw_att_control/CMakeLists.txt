@@ -39,8 +39,6 @@ px4_add_module(
 		FixedwingAttitudeControl.hpp
 
 		fw_wheel_controller.cpp
-	MODULE_CONFIG
-		fw_att_control_params.yaml
 	DEPENDS
 		px4_work_queue
 	)

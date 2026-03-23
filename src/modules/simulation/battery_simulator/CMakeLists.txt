@@ -38,8 +38,6 @@ px4_add_module(
 	SRCS
 		BatterySimulator.cpp
 		BatterySimulator.hpp
-	MODULE_CONFIG
-		battery_simulator_params.yaml
 	DEPENDS
 		battery
 		mathlib

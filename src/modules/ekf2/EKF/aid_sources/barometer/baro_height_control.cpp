@@ -52,7 +52,7 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 	if (_baro_buffer && _baro_buffer->pop_first_older_than(imu_sample.time_us, &baro_sample)) {
 
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
-		const float measurement = compensateBaroForDynamicPressure(imu_sample, baro_sample.hgt);
+		const float measurement = compensateBaroAltitude(imu_sample, baro_sample.hgt);
 #else
 		const float measurement = baro_sample.hgt;
 #endif
@@ -203,8 +203,18 @@ void Ekf::stopBaroHgtFusion()
 }
 
 #if defined(CONFIG_EKF2_BARO_COMPENSATION)
-float Ekf::compensateBaroForDynamicPressure(const imuSample &imu_sample, const float baro_alt_uncompensated) const
+float Ekf::compensateBaroAltitude(const imuSample &imu_sample, const float baro_alt_uncompensated) const
 {
+	float baro_alt = baro_alt_uncompensated;
+
+	// Propwash-induced static pressure compensation for multirotor vehicles.
+	// Corrects for the pressure change at the baro sensor caused by rotor downwash,
+	// which is proportional to collective thrust magnitude.
+	if (!_control_status.flags.fixed_wing && (fabsf(_params.ekf2_pcoef_thr) > FLT_EPSILON)) {
+		baro_alt += _params.ekf2_pcoef_thr * _thrust_magnitude;
+	}
+
+	// Airspeed-induced static pressure position error compensation
 	if (_control_status.flags.wind && isLocalHorizontalPositionValid()) {
 		// calculate static pressure error = Pmeas - Ptruth
 		// model position error sensitivity as a body fixed ellipse with a different scale in the positive and
@@ -231,10 +241,9 @@ float Ekf::compensateBaroForDynamicPressure(const imuSample &imu_sample, const f
 		const float pstatic_err = 0.5f * _air_density * (airspeed_squared.dot(K_pstatic_coef));
 
 		// correct baro measurement using pressure error estimate and assuming sea level gravity
-		return baro_alt_uncompensated + pstatic_err / (_air_density * CONSTANTS_ONE_G);
+		baro_alt += pstatic_err / (_air_density * CONSTANTS_ONE_G);
 	}
 
-	// otherwise return the uncorrected baro measurement
-	return baro_alt_uncompensated;
+	return baro_alt;
 }
 #endif // CONFIG_EKF2_BARO_COMPENSATION

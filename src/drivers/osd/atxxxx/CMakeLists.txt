@@ -35,8 +35,6 @@ px4_add_module(
 	MAIN atxxxx
 	SRCS
 		atxxxx.cpp
-	MODULE_CONFIG
-		params.yaml
 	DEPENDS
 		px4_work_queue
 	)

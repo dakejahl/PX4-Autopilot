@@ -35,8 +35,6 @@ px4_add_module(
 	MAIN lightware_laser_i2c
 	SRCS
 		lightware_laser_i2c.cpp
-	MODULE_CONFIG
-		parameters.yaml
 	DEPENDS
 		drivers_rangefinder
 	)
