@@ -86,6 +86,7 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/vehicle_thrust_setpoint.h>
 #include <uORB/topics/yaw_estimator_status.h>
 
 #if defined(CONFIG_EKF2_AIRSPEED)
@@ -357,6 +358,10 @@ private:
 
 	uORB::Subscription _airdata_sub{ORB_ID(vehicle_air_data)};
 
+# if defined(CONFIG_EKF2_BARO_COMPENSATION)
+	uORB::Subscription _vehicle_thrust_setpoint_sub {ORB_ID(vehicle_thrust_setpoint)};
+# endif // CONFIG_EKF2_BARO_COMPENSATION
+
 	uORB::PublicationMulti<estimator_bias_s> _estimator_baro_bias_pub{ORB_ID(estimator_baro_bias)};
 	uORB::PublicationMulti<estimator_aid_source1d_s> _estimator_aid_src_baro_hgt_pub {ORB_ID(estimator_aid_src_baro_hgt)};
 #endif // CONFIG_EKF2_BAROMETER
@@ -552,6 +557,7 @@ private:
 		(ParamExtFloat<px4::params::EKF2_PCOEF_YP>) _param_ekf2_pcoef_yp,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_YN>) _param_ekf2_pcoef_yn,
 		(ParamExtFloat<px4::params::EKF2_PCOEF_Z>) _param_ekf2_pcoef_z,
+		(ParamExtFloat<px4::params::EKF2_PCOEF_THR>) _param_ekf2_pcoef_thr,
 # endif // CONFIG_EKF2_BARO_COMPENSATION
 #endif // CONFIG_EKF2_BAROMETER
 
