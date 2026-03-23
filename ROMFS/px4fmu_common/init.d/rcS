@@ -582,6 +582,11 @@ else
 		gyro_fft start
 	fi
 
+	if param compare -s IMU_ACC_FFT_EN 1
+	then
+		accel_fft start
+	fi
+
 	if param compare -s IMU_GYRO_CAL_EN 1
 	then
 		gyro_calibration start
