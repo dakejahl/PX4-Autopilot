@@ -57,7 +57,12 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 		const float measurement = baro_sample.hgt;
 #endif
 
-		const float measurement_var = sq(_params.ekf2_baro_noise);
+		float measurement_var = sq(_params.ekf2_baro_noise);
+
+		// Inflate baro noise during ground effect to reduce its influence on the height estimate
+		if (_control_status.flags.gnd_effect && (_params.ekf2_baro_ge_ni > 0.f)) {
+			measurement_var += sq(_params.ekf2_baro_ge_ni);
+		}
 
 		const bool measurement_valid = PX4_ISFINITE(measurement) && PX4_ISFINITE(measurement_var);
 
@@ -84,23 +89,6 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 						-(measurement - bias_est.getBias()),      // observation
 						measurement_var + bias_est.getBiasVar(),  // observation variance
 						math::max(_params.ekf2_baro_gate, 1.f)); // innovation gate
-
-		// Compensate for positive static pressure transients (negative vertical position innovations)
-		// caused by rotor wash ground interaction by applying a temporary deadzone to baro innovations.
-		if (_control_status.flags.gnd_effect && (_params.ekf2_gnd_eff_dz > 0.f)) {
-
-			const float deadzone_start = 0.0f;
-			const float deadzone_end = deadzone_start + _params.ekf2_gnd_eff_dz;
-
-			if (aid_src.innovation < -deadzone_start) {
-				if (aid_src.innovation <= -deadzone_end) {
-					aid_src.innovation += deadzone_end;
-
-				} else {
-					aid_src.innovation = -deadzone_start;
-				}
-			}
-		}
 
 		// update the bias estimator before updating the main filter but after
 		// using its current state to compute the vertical position innovation

@@ -59,6 +59,7 @@ public:
 	void SetUp() override
 	{
 		_ekf->init(0);
+		_ekf->getParamHandle()->ekf2_baro_ge_ni = 0.f; // disable ground effect for base tests
 		_ekf_wrapper.disableBaroHeightFusion();
 		_ekf_wrapper.disableRangeHeightFusion();
 		_sensor_simulator.runSeconds(0.1);
@@ -414,4 +415,64 @@ TEST_F(EkfHeightFusionTest, changeEkfOriginAlt)
 
 	EXPECT_TRUE(reset_logging_checker.isVerticalVelocityResetCounterIncreasedBy(0));
 	EXPECT_TRUE(reset_logging_checker.isVerticalPositionResetCounterIncreasedBy(1));
+}
+
+TEST_F(EkfHeightFusionTest, baroGroundEffectVarianceInflation)
+{
+	// GIVEN: GPS reference with baro and range fusion, ground effect enabled
+	const float ge_ni = 4.0f;
+	const float ge_hgt = 1.0f;
+	_ekf->getParamHandle()->ekf2_baro_ge_ni = ge_ni;
+	_ekf->getParamHandle()->ekf2_baro_ge_hgt = ge_hgt;
+
+	_ekf_wrapper.setGpsHeightRef();
+	_ekf_wrapper.enableBaroHeightFusion();
+	_ekf_wrapper.enableGpsHeightFusion();
+	_ekf_wrapper.enableRangeHeightFusion();
+
+	// Range reports low altitude -> ground effect should activate
+	_sensor_simulator._rng.setData(0.5f, 100);
+	_sensor_simulator.runSeconds(11);
+
+	EXPECT_TRUE(_ekf_wrapper.isIntendingBaroHeightFusion());
+	EXPECT_TRUE(_ekf->control_status_flags().gnd_effect);
+
+	const float baro_noise = _ekf->getParamHandle()->ekf2_baro_noise;
+	const float nominal_var = baro_noise * baro_noise;
+	const float expected_inflation = ge_ni * ge_ni;
+
+	// observation_variance includes bias var, so check that it exceeds nominal + inflation
+	EXPECT_GT(_ekf->aid_src_baro_hgt().observation_variance, nominal_var + expected_inflation * 0.9f);
+
+	// WHEN: range reports high altitude -> ground effect should clear after terrain converges
+	_sensor_simulator._rng.setData(5.0f, 100);
+	_sensor_simulator.runSeconds(15);
+
+	EXPECT_FALSE(_ekf->control_status_flags().gnd_effect);
+	EXPECT_LT(_ekf->aid_src_baro_hgt().observation_variance, nominal_var + expected_inflation);
+}
+
+TEST_F(EkfHeightFusionTest, baroGroundEffectDisabledWhenParamZero)
+{
+	// GIVEN: GPS reference with baro and range, ground effect noise inflation param set to zero
+	_ekf->getParamHandle()->ekf2_baro_ge_ni = 0.f;
+	_ekf->getParamHandle()->ekf2_baro_ge_hgt = 1.0f;
+
+	_ekf_wrapper.setGpsHeightRef();
+	_ekf_wrapper.enableBaroHeightFusion();
+	_ekf_wrapper.enableGpsHeightFusion();
+	_ekf_wrapper.enableRangeHeightFusion();
+
+	// Range reports low altitude — ground effect flag is set but variance is not inflated
+	_sensor_simulator._rng.setData(0.5f, 100);
+	_sensor_simulator.runSeconds(11);
+
+	EXPECT_TRUE(_ekf_wrapper.isIntendingBaroHeightFusion());
+	EXPECT_TRUE(_ekf->control_status_flags().gnd_effect);
+
+	const float baro_noise = _ekf->getParamHandle()->ekf2_baro_noise;
+	const float nominal_var = baro_noise * baro_noise;
+
+	// observation_variance should be near nominal (plus bias var) with no GE inflation
+	EXPECT_LT(_ekf->aid_src_baro_hgt().observation_variance, nominal_var * 3.f);
 }

@@ -945,21 +945,33 @@ float Ekf::getTiltVariance() const
 void Ekf::updateGroundEffect()
 {
 	if (_control_status.flags.in_air && !_control_status.flags.fixed_wing) {
+		bool gnd_effect = false;
+
 #if defined(CONFIG_EKF2_TERRAIN)
 
 		if (isTerrainEstimateValid()) {
-			// automatically set ground effect if terrain is valid
-			float height = getHagl();
-			_control_status.flags.gnd_effect = (height < _params.ekf2_gnd_max_hgt);
+			gnd_effect = (getHagl() < _params.ekf2_baro_ge_hgt);
 
 		} else
 #endif // CONFIG_EKF2_TERRAIN
-			if (_control_status.flags.gnd_effect) {
-				// Turn off ground effect compensation if it times out
-				if (isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT)) {
-					_control_status.flags.gnd_effect = false;
-				}
+#if defined(CONFIG_EKF2_RANGE_FINDER)
+
+			if (_range_sensor.isDataHealthy()) {
+				gnd_effect = (_range_sensor.getDistBottom() < _params.ekf2_baro_ge_hgt);
+
+			} else
+#endif // CONFIG_EKF2_RANGE_FINDER
+			{
+				// No height-above-ground source available — hold current state until timeout
+				gnd_effect = _control_status.flags.gnd_effect
+					     && !isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT);
 			}
+
+		if (gnd_effect) {
+			_time_last_gnd_effect_on = _time_delayed_us;
+		}
+
+		_control_status.flags.gnd_effect = gnd_effect;
 
 	} else {
 		_control_status.flags.gnd_effect = false;
