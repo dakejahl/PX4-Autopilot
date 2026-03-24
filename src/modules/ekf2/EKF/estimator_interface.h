@@ -451,8 +451,6 @@ protected:
 	uint64_t _time_last_baro_buffer_push{0};
 #endif // CONFIG_EKF2_BAROMETER
 
-	uint64_t _time_last_gnd_effect_on{0};
-
 	fault_status_u _fault_status{};
 
 	// allocate data buffers and initialize interface variables

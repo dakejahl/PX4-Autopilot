@@ -944,8 +944,14 @@ float Ekf::getTiltVariance() const
 #if defined(CONFIG_EKF2_BAROMETER)
 void Ekf::updateGroundEffect()
 {
-	if (_control_status.flags.in_air && !_control_status.flags.fixed_wing) {
+	if (!_control_status.flags.fixed_wing) {
 		bool gnd_effect = false;
+
+		if (!_control_status.flags.in_air) {
+			// On the ground — always in ground effect zone
+			_control_status.flags.gnd_effect = true;
+			return;
+		}
 
 #if defined(CONFIG_EKF2_TERRAIN)
 
@@ -962,14 +968,9 @@ void Ekf::updateGroundEffect()
 			} else
 #endif // CONFIG_EKF2_RANGE_FINDER
 			{
-				// No height-above-ground source available — hold current state until timeout
-				gnd_effect = _control_status.flags.gnd_effect
-					     && !isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT);
+				// No terrain or range source — use EKF height above origin as proxy
+				gnd_effect = (-_state.pos(2) < _params.ekf2_baro_ge_hgt);
 			}
-
-		if (gnd_effect) {
-			_time_last_gnd_effect_on = _time_delayed_us;
-		}
 
 		_control_status.flags.gnd_effect = gnd_effect;
 

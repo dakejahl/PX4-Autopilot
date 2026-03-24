@@ -83,9 +83,7 @@ static constexpr uint64_t BADACC_PROBATION =
 static constexpr float BADACC_BIAS_PNOISE =
 	4.9f;  ///< The delta velocity process noise is set to this when accel data is declared bad (m/sec**2)
 
-// ground effect compensation
-static constexpr uint64_t GNDEFFECT_TIMEOUT =
-	10e6; ///< Maximum period of time that ground effect protection will be active after it was last turned on (uSec)
+
 
 enum class PositionFrame : uint8_t {
 	LOCAL_FRAME_NED = 0,
