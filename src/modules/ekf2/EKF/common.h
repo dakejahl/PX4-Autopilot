@@ -304,7 +304,7 @@ struct parameters {
 #if defined(CONFIG_EKF2_BAROMETER)
 	int32_t ekf2_baro_ctrl {1};
 	float ekf2_baro_delay{0.0f};            ///< barometer height measurement delay relative to the IMU (mSec)
-	float ekf2_baro_noise{2.0f};            ///< observation noise for barometric height fusion (m)
+	float ekf2_baro_noise{1.0f};            ///< observation noise for barometric height fusion (m)
 	float baro_bias_nsd{0.13f};             ///< process noise for barometric height bias estimation (m/s/sqrt(Hz))
 	float ekf2_baro_gate{5.0f};             ///< barometric and GPS height innovation consistency gate size (STD)
 

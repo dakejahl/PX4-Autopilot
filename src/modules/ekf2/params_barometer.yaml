@@ -34,7 +34,7 @@ parameters:
       description:
         short: Measurement noise for barometric altitude
       type: float
-      default: 3.5
+      default: 1.0
       min: 0.01
       max: 15.0
       unit: m
