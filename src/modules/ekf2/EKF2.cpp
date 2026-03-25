@@ -100,8 +100,6 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_baro_delay(_params->ekf2_baro_delay),
 	_param_ekf2_baro_noise(_params->ekf2_baro_noise),
 	_param_ekf2_baro_gate(_params->ekf2_baro_gate),
-	_param_ekf2_gnd_eff_dz(_params->ekf2_gnd_eff_dz),
-	_param_ekf2_gnd_max_hgt(_params->ekf2_gnd_max_hgt),
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 	_param_ekf2_aspd_max(_params->ekf2_aspd_max),
 	_param_ekf2_pcoef_xp(_params->ekf2_pcoef_xp),
@@ -2636,8 +2634,6 @@ void EKF2::UpdateSystemFlagsSample(ekf2_timestamps_s &ekf2_timestamps)
 
 			flags.at_rest = vehicle_land_detected.at_rest;
 			flags.in_air = !vehicle_land_detected.landed;
-			flags.gnd_effect = vehicle_land_detected.in_ground_effect;
-
 			flags.constant_pos = _param_ekf2_pos_lock.get() && !flags.in_air && _ekf.isGlobalHorizontalPositionValid();
 		}
 

@@ -941,32 +941,6 @@ float Ekf::getTiltVariance() const
 	return rot_var_ned(0) + rot_var_ned(1);
 }
 
-#if defined(CONFIG_EKF2_BAROMETER)
-void Ekf::updateGroundEffect()
-{
-	if (_control_status.flags.in_air && !_control_status.flags.fixed_wing) {
-#if defined(CONFIG_EKF2_TERRAIN)
-
-		if (isTerrainEstimateValid()) {
-			// automatically set ground effect if terrain is valid
-			float height = getHagl();
-			_control_status.flags.gnd_effect = (height < _params.ekf2_gnd_max_hgt);
-
-		} else
-#endif // CONFIG_EKF2_TERRAIN
-			if (_control_status.flags.gnd_effect) {
-				// Turn off ground effect compensation if it times out
-				if (isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT)) {
-					_control_status.flags.gnd_effect = false;
-				}
-			}
-
-	} else {
-		_control_status.flags.gnd_effect = false;
-	}
-}
-#endif // CONFIG_EKF2_BAROMETER
-
 
 void Ekf::updateIMUBiasInhibit(const imuSample &imu_delayed)
 {

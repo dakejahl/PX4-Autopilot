@@ -39,28 +39,6 @@ parameters:
       max: 15.0
       unit: m
       decimal: 2
-    EKF2_GND_EFF_DZ:
-      description:
-        short: Baro deadzone range for height fusion
-        long: Sets the value of deadzone applied to negative baro innovations. Deadzone
-          is enabled when EKF2_GND_EFF_DZ > 0.
-      type: float
-      default: 4.0
-      min: 0.0
-      max: 10.0
-      unit: m
-      decimal: 1
-    EKF2_GND_MAX_HGT:
-      description:
-        short: Height above ground level for ground effect zone
-        long: Sets the maximum distance to the ground level where negative baro innovations
-          are expected.
-      type: float
-      default: 0.5
-      min: 0.0
-      max: 5.0
-      unit: m
-      decimal: 1
     EKF2_PCOEF_XP:
       description:
         short: Static pressure position error coefficient for the positive X axis

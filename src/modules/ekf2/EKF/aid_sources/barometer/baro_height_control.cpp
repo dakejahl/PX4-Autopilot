@@ -76,6 +76,7 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 				// Initialize the pressure offset (included in the baro bias)
 				bias_est.setBias(-_gpos.altitude() + _baro_lpf.getState());
 			}
+
 		}
 
 		// vertical position innovation - baro measurement has opposite sign to earth z axis
@@ -85,26 +86,32 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 						measurement_var + bias_est.getBiasVar(),  // observation variance
 						math::max(_params.ekf2_baro_gate, 1.f)); // innovation gate
 
-		// Compensate for positive static pressure transients (negative vertical position innovations)
-		// caused by rotor wash ground interaction by applying a temporary deadzone to baro innovations.
-		if (_control_status.flags.gnd_effect && (_params.ekf2_gnd_eff_dz > 0.f)) {
+		// Takeoff ground effect protection: suspend baro fusion when the
+		// innovation spikes during the post-takeoff window. Ground effect causes
+		// a transient pressure increase that biases the baro low. Suspending
+		// fusion prevents this transient from corrupting the height state.
+		static constexpr uint64_t kTakeoffGroundEffectWindowUs = 10'000'000; // 10s
+		static constexpr float kInnovThresholdMult = 3.f;
 
-			const float deadzone_start = 0.0f;
-			const float deadzone_end = deadzone_start + _params.ekf2_gnd_eff_dz;
+		const bool in_takeoff_window = _control_status.flags.in_air
+					       && !isTimedOut(_time_last_on_ground_us, kTakeoffGroundEffectWindowUs);
+		const float innov_threshold_var = sq(kInnovThresholdMult) * measurement_var;
+		const float innov_sq = aid_src.innovation * aid_src.innovation;
 
-			if (aid_src.innovation < -deadzone_start) {
-				if (aid_src.innovation <= -deadzone_end) {
-					aid_src.innovation += deadzone_end;
+		if (in_takeoff_window && (innov_sq > innov_threshold_var)) {
+			_control_status.flags.gnd_effect = true;
 
-				} else {
-					aid_src.innovation = -deadzone_start;
-				}
-			}
+		} else if (_control_status.flags.gnd_effect && (innov_sq < innov_threshold_var)) {
+			_control_status.flags.gnd_effect = false;
+		}
+
+		if (!in_takeoff_window) {
+			_control_status.flags.gnd_effect = false;
 		}
 
 		// update the bias estimator before updating the main filter but after
 		// using its current state to compute the vertical position innovation
-		if (measurement_valid) {
+		if (measurement_valid && !_control_status.flags.gnd_effect) {
 			bias_est.setMaxStateNoise(sqrtf(measurement_var));
 			bias_est.setProcessNoiseSpectralDensity(_params.baro_bias_nsd);
 			bias_est.fuseBias(measurement - _gpos.altitude(), measurement_var + P(State::pos.idx + 2, State::pos.idx + 2));
@@ -123,7 +130,14 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 
 			if (continuing_conditions_passing) {
 
-				fuseVerticalPosition(aid_src);
+				if (_control_status.flags.gnd_effect) {
+					// Intentionally not fusing — keep time_last_fuse current
+					// to prevent the fusion timeout from declaring baro failure
+					aid_src.time_last_fuse = _time_delayed_us;
+
+				} else {
+					fuseVerticalPosition(aid_src);
+				}
 
 				const bool is_fusion_failing = isTimedOut(aid_src.time_last_fuse, _params.hgt_fusion_timeout_max);
 
