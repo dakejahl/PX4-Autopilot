@@ -101,7 +101,6 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_baro_noise(_params->ekf2_baro_noise),
 	_param_ekf2_baro_gate(_params->ekf2_baro_gate),
 	_param_ekf2_baro_nz_lim(_params->ekf2_baro_noise_lim),
-	_param_ekf2_baro_nz_tau(_params->ekf2_baro_nz_tau),
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 	_param_ekf2_aspd_max(_params->ekf2_aspd_max),
 	_param_ekf2_pcoef_xp(_params->ekf2_pcoef_xp),

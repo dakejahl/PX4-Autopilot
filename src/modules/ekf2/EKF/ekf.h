@@ -612,9 +612,6 @@ private:
 
 	HeightBiasEstimator _baro_b_est{HeightSensor::BARO, _height_sensor_ref};
 
-	float _baro_innov_sq_filt{0.f};  ///< filtered squared baro innovation for adaptive noise estimation
-	uint64_t _last_baro_time_us{0};
-
 #endif // CONFIG_EKF2_BAROMETER
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)

@@ -68,8 +68,6 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 				_baro_lpf.reset(measurement);
 				_baro_counter = 1;
 				_control_status.flags.baro_fault = false;
-				_baro_innov_sq_filt = 0.f;
-				_last_baro_time_us = 0;
 
 			} else {
 				_baro_lpf.update(measurement);
@@ -81,35 +79,21 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 				bias_est.setBias(-_gpos.altitude() + _baro_lpf.getState());
 			}
 
-			// Adaptive baro noise estimation from innovation magnitude.
+			// Adaptive baro noise: inflate variance when innovation exceeds base noise.
 			// Compute preliminary innovation (does not depend on measurement_var).
 			const float observation = -(measurement - bias_est.getBias());
 			const float baro_innov = -_gpos.altitude() - observation;
 
 			if (_params.ekf2_baro_noise_lim > FLT_EPSILON) {
-				const float max_var = sq(_params.ekf2_baro_noise_lim);
 				const float innov_sq = baro_innov * baro_innov;
 
 				if (innov_sq > base_var) {
-					// Innovation exceeds base noise — instant attack to max variance
-					_baro_innov_sq_filt = max_var;
-
-				} else {
-					// Innovation within normal range — decay back toward base
-					const float baro_dt = (_last_baro_time_us > 0)
-								 ? math::constrain((baro_sample.time_us - _last_baro_time_us) * 1e-6f, _dt_ekf_avg, 1.f)
-								 : _dt_ekf_avg;
-					const float decay = math::max(0.f, 1.f - baro_dt / math::max(_params.ekf2_baro_nz_tau, 0.01f));
-					_baro_innov_sq_filt *= decay;
+					measurement_var = sq(_params.ekf2_baro_noise_lim);
 				}
-
-				measurement_var = math::constrain(_baro_innov_sq_filt, base_var, max_var);
 			}
 
 			// Diagnostic flag: indicates baro noise is currently inflated
 			_control_status.flags.gnd_effect = (measurement_var > base_var);
-
-			_last_baro_time_us = baro_sample.time_us;
 		}
 
 		// vertical position innovation - baro measurement has opposite sign to earth z axis
