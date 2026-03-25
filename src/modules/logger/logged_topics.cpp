@@ -372,6 +372,8 @@ void LoggedTopics::add_system_identification_topics()
 void LoggedTopics::add_high_rate_sensors_topics()
 {
 	add_topic_multi("distance_sensor", 0, 4);
+	add_topic("estimator_aid_src_baro_hgt");
+	add_topic("estimator_status_flags");
 	add_topic_multi("sensor_baro", 0, 4);
 	add_topic_multi("sensor_optical_flow", 0, 2);
 	add_topic_multi("sensor_gps", 0, 4);
