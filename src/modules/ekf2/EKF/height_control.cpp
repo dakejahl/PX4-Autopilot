@@ -42,8 +42,6 @@ void Ekf::controlHeightFusion(const imuSample &imu_delayed)
 	checkVerticalAccelerationHealth(imu_delayed);
 
 #if defined(CONFIG_EKF2_BAROMETER)
-	updateGroundEffect();
-
 	controlBaroHeightFusion(imu_delayed);
 #endif // CONFIG_EKF2_BAROMETER
 

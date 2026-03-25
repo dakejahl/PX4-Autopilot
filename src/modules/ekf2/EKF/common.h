@@ -83,9 +83,6 @@ static constexpr uint64_t BADACC_PROBATION =
 static constexpr float BADACC_BIAS_PNOISE =
 	4.9f;  ///< The delta velocity process noise is set to this when accel data is declared bad (m/sec**2)
 
-// ground effect compensation
-static constexpr uint64_t GNDEFFECT_TIMEOUT =
-	10e6; ///< Maximum period of time that ground effect protection will be active after it was last turned on (uSec)
 
 enum class PositionFrame : uint8_t {
 	LOCAL_FRAME_NED = 0,
@@ -267,7 +264,6 @@ struct systemFlagUpdate {
 	bool at_rest{false};
 	bool in_air{true};
 	bool is_fixed_wing{false};
-	bool gnd_effect{false};
 	bool constant_pos{false};
 	bool in_transition{false};
 };
@@ -312,8 +308,7 @@ struct parameters {
 	float baro_bias_nsd{0.13f};             ///< process noise for barometric height bias estimation (m/s/sqrt(Hz))
 	float ekf2_baro_gate{5.0f};             ///< barometric and GPS height innovation consistency gate size (STD)
 
-	float ekf2_gnd_eff_dz{5.0f};            ///< Size of deadzone applied to negative baro innovations when ground effect compensation is active (m)
-	float ekf2_gnd_max_hgt{0.5f};           ///< Height above ground at which baro ground effect becomes insignificant (m)
+	float ekf2_baro_noise_lim{10.0f};       ///< maximum adaptive baro noise (m), 0 = disabled
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 	// static barometer pressure position error coefficient along body axes

@@ -57,15 +57,18 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 		const float measurement = baro_sample.hgt;
 #endif
 
-		const float measurement_var = sq(_params.ekf2_baro_noise);
+		const float base_var = sq(_params.ekf2_baro_noise);
 
-		const bool measurement_valid = PX4_ISFINITE(measurement) && PX4_ISFINITE(measurement_var);
+		const bool measurement_valid = PX4_ISFINITE(measurement) && PX4_ISFINITE(base_var);
+
+		float measurement_var = base_var;
 
 		if (measurement_valid) {
 			if ((_baro_counter == 0) || baro_sample.reset) {
 				_baro_lpf.reset(measurement);
 				_baro_counter = 1;
 				_control_status.flags.baro_fault = false;
+				_baro_innov_sq_filt = 0.f;
 
 			} else {
 				_baro_lpf.update(measurement);
@@ -76,6 +79,33 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 				// Initialize the pressure offset (included in the baro bias)
 				bias_est.setBias(-_gpos.altitude() + _baro_lpf.getState());
 			}
+
+			// Adaptive baro noise estimation from innovation magnitude.
+			// Compute preliminary innovation (does not depend on measurement_var).
+			const float observation = -(measurement - bias_est.getBias());
+			const float baro_innov = -_gpos.altitude() - observation;
+
+			if (_params.ekf2_baro_noise_lim > FLT_EPSILON) {
+				const float max_var = sq(_params.ekf2_baro_noise_lim);
+				const float innov_sq = baro_innov * baro_innov;
+
+				// Decay the filter
+				static constexpr float kBaroInnovDecayTau = 2.f; // seconds
+				const float decay = math::max(0.f, 1.f - _dt_ekf_avg / kBaroInnovDecayTau);
+				_baro_innov_sq_filt *= decay;
+
+				// Only update max-hold for innovations within the adaptive range.
+				// Larger innovations indicate sensor faults and should be rejected
+				// by the standard innovation gate, not accommodated with noise inflation.
+				if (innov_sq <= max_var) {
+					_baro_innov_sq_filt = math::max(innov_sq, _baro_innov_sq_filt);
+				}
+
+				measurement_var = math::constrain(_baro_innov_sq_filt, base_var, max_var);
+			}
+
+			// Diagnostic flag: indicates baro noise is currently inflated
+			_control_status.flags.gnd_effect = (measurement_var > base_var);
 		}
 
 		// vertical position innovation - baro measurement has opposite sign to earth z axis
@@ -84,23 +114,6 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 						-(measurement - bias_est.getBias()),      // observation
 						measurement_var + bias_est.getBiasVar(),  // observation variance
 						math::max(_params.ekf2_baro_gate, 1.f)); // innovation gate
-
-		// Compensate for positive static pressure transients (negative vertical position innovations)
-		// caused by rotor wash ground interaction by applying a temporary deadzone to baro innovations.
-		if (_control_status.flags.gnd_effect && (_params.ekf2_gnd_eff_dz > 0.f)) {
-
-			const float deadzone_start = 0.0f;
-			const float deadzone_end = deadzone_start + _params.ekf2_gnd_eff_dz;
-
-			if (aid_src.innovation < -deadzone_start) {
-				if (aid_src.innovation <= -deadzone_end) {
-					aid_src.innovation += deadzone_end;
-
-				} else {
-					aid_src.innovation = -deadzone_start;
-				}
-			}
-		}
 
 		// update the bias estimator before updating the main filter but after
 		// using its current state to compute the vertical position innovation

@@ -612,6 +612,8 @@ private:
 
 	HeightBiasEstimator _baro_b_est{HeightSensor::BARO, _height_sensor_ref};
 
+	float _baro_innov_sq_filt{0.f};  ///< filtered squared baro innovation for adaptive noise estimation
+
 #endif // CONFIG_EKF2_BAROMETER
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
@@ -967,8 +969,6 @@ private:
 #if defined(CONFIG_EKF2_BAROMETER)
 	void controlBaroHeightFusion(const imuSample &imu_sample);
 	void stopBaroHgtFusion();
-
-	void updateGroundEffect();
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 	float compensateBaroForDynamicPressure(const imuSample &imu_sample, float baro_alt_uncompensated) const;

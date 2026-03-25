@@ -39,26 +39,17 @@ parameters:
       max: 15.0
       unit: m
       decimal: 2
-    EKF2_GND_EFF_DZ:
+    EKF2_BARO_NZ_LIM:
       description:
-        short: Baro deadzone range for height fusion
-        long: Sets the value of deadzone applied to negative baro innovations. Deadzone
-          is enabled when EKF2_GND_EFF_DZ > 0.
+        short: Maximum adaptive barometer noise
+        long: Upper limit on barometer measurement noise estimated from innovation
+          magnitude. The EKF adaptively inflates baro measurement noise when
+          innovations are large, e.g. due to ground effect or surface proximity.
+          Set to 0 to disable adaptive noise estimation.
       type: float
-      default: 4.0
+      default: 10.0
       min: 0.0
-      max: 10.0
-      unit: m
-      decimal: 1
-    EKF2_GND_MAX_HGT:
-      description:
-        short: Height above ground level for ground effect zone
-        long: Sets the maximum distance to the ground level where negative baro innovations
-          are expected.
-      type: float
-      default: 0.5
-      min: 0.0
-      max: 5.0
+      max: 30.0
       unit: m
       decimal: 1
     EKF2_PCOEF_XP:
