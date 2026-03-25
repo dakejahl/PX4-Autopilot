@@ -90,18 +90,17 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 				const float max_var = sq(_params.ekf2_baro_noise_lim);
 				const float innov_sq = baro_innov * baro_innov;
 
-				// Decay the filter using actual baro sample interval
-				const float baro_dt = (_last_baro_time_us > 0)
-							 ? math::constrain((baro_sample.time_us - _last_baro_time_us) * 1e-6f, _dt_ekf_avg, 1.f)
-							 : _dt_ekf_avg;
-				const float decay = math::max(0.f, 1.f - baro_dt / math::max(_params.ekf2_baro_nz_tau, 0.01f));
-				_baro_innov_sq_filt *= decay;
+				if (innov_sq > base_var) {
+					// Innovation exceeds base noise — instant attack to max variance
+					_baro_innov_sq_filt = max_var;
 
-				// Only update max-hold for innovations within the adaptive range.
-				// Larger innovations indicate sensor faults and should be rejected
-				// by the standard innovation gate, not accommodated with noise inflation.
-				if (innov_sq <= max_var) {
-					_baro_innov_sq_filt = math::max(innov_sq, _baro_innov_sq_filt);
+				} else {
+					// Innovation within normal range — decay back toward base
+					const float baro_dt = (_last_baro_time_us > 0)
+								 ? math::constrain((baro_sample.time_us - _last_baro_time_us) * 1e-6f, _dt_ekf_avg, 1.f)
+								 : _dt_ekf_avg;
+					const float decay = math::max(0.f, 1.f - baro_dt / math::max(_params.ekf2_baro_nz_tau, 0.01f));
+					_baro_innov_sq_filt *= decay;
 				}
 
 				measurement_var = math::constrain(_baro_innov_sq_filt, base_var, max_var);

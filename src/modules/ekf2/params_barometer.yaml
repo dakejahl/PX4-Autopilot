@@ -47,9 +47,9 @@ parameters:
           innovations are large, e.g. due to ground effect or surface proximity.
           Set to 0 to disable adaptive noise estimation.
       type: float
-      default: 10.0
+      default: 100.0
       min: 0.0
-      max: 30.0
+      max: 1000.0
       unit: m
       decimal: 1
     EKF2_BARO_NZ_TAU:
