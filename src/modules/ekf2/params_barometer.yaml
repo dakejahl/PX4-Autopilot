@@ -52,6 +52,17 @@ parameters:
       max: 30.0
       unit: m
       decimal: 1
+    EKF2_BARO_NZ_TAU:
+      description:
+        short: Adaptive barometer noise decay time constant
+        long: Time constant for exponential decay of adaptive baro noise.
+          Full decay takes approximately 3x this value.
+      type: float
+      default: 0.5
+      min: 0.1
+      max: 10.0
+      unit: s
+      decimal: 2
     EKF2_PCOEF_XP:
       description:
         short: Static pressure position error coefficient for the positive X axis

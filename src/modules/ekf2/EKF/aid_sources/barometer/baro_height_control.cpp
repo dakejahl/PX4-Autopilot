@@ -94,8 +94,7 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 				const float baro_dt = (_last_baro_time_us > 0)
 							 ? math::constrain((baro_sample.time_us - _last_baro_time_us) * 1e-6f, _dt_ekf_avg, 1.f)
 							 : _dt_ekf_avg;
-				static constexpr float kBaroInnovDecayTau = 2.f; // seconds
-				const float decay = math::max(0.f, 1.f - baro_dt / kBaroInnovDecayTau);
+				const float decay = math::max(0.f, 1.f - baro_dt / math::max(_params.ekf2_baro_nz_tau, 0.01f));
 				_baro_innov_sq_filt *= decay;
 
 				// Only update max-hold for innovations within the adaptive range.

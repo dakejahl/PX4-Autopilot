@@ -309,6 +309,7 @@ struct parameters {
 	float ekf2_baro_gate{5.0f};             ///< barometric and GPS height innovation consistency gate size (STD)
 
 	float ekf2_baro_noise_lim{10.0f};       ///< maximum adaptive baro noise (m), 0 = disabled
+	float ekf2_baro_nz_tau{0.5f};           ///< time constant for adaptive baro noise decay (s)
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 	// static barometer pressure position error coefficient along body axes

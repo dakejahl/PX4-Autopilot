@@ -542,6 +542,7 @@ private:
 		(ParamExtFloat<px4::params::EKF2_BARO_NOISE>) _param_ekf2_baro_noise,
 		(ParamExtFloat<px4::params::EKF2_BARO_GATE>) _param_ekf2_baro_gate,
 		(ParamExtFloat<px4::params::EKF2_BARO_NZ_LIM>) _param_ekf2_baro_nz_lim,
+		(ParamExtFloat<px4::params::EKF2_BARO_NZ_TAU>) _param_ekf2_baro_nz_tau,
 
 # if defined(CONFIG_EKF2_BARO_COMPENSATION)
 		// Corrections for static pressure position error where Ps_error = Ps_meas - Ps_truth
