@@ -52,6 +52,14 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
+# Layout constants
+# ---------------------------------------------------------------------------
+
+_SUBTITLE_X = 0.5
+_SUBTITLE_Y = 0.94
+_LAYOUT_TOP = 0.93  # top of plot area, just below subtitle
+
+# ---------------------------------------------------------------------------
 # ULog helpers
 # ---------------------------------------------------------------------------
 
@@ -527,10 +535,10 @@ def plot_residual_diagnostics(diag, calib):
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle("Residual Correlation Diagnostics",
                  fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.94,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "Why does residual correlation remain after linear compensation? "
              "Left: time delay analysis. Right: nonlinearity analysis.",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     # Top-left: Cross-correlation
     ax = axes[0, 0]
@@ -635,19 +643,19 @@ def plot_residual_diagnostics(diag, calib):
             bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f0f0",
                       edgecolor="#cccccc"))
 
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
 def plot_open_loop_delay(ol):
     """Plot open-loop delay analysis (feedback-rejected)."""
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     fig.suptitle("Open-Loop Delay Analysis (Feedback-Rejected)",
                  fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.93,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "High-pass filtered to remove altitude controller feedback. "
              "Shows true physical motor-to-baro delay.",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     # Left: Cross-correlation
     ax = axes[0]
@@ -682,7 +690,7 @@ def plot_open_loop_delay(ol):
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.90])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
@@ -734,10 +742,10 @@ def plot_altitude_overview(ekf_baro_obs, ekf_z, range_data, thrust_data,
     """Altitude overview — baro observation, EKF Z, and distance sensor."""
     fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
     fig.suptitle("Altitude Overview", fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.94,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "Baro altitude vs EKF and range sensor. "
              "Gap between baro and range reveals propwash-induced pressure error.",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     ax = axes[0]
 
@@ -783,7 +791,7 @@ def plot_altitude_overview(ekf_baro_obs, ekf_z, range_data, thrust_data,
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
@@ -794,11 +802,11 @@ def plot_compensation_comparison(baro_err, thrust_data, calib, online_k,
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=True)
     fig.suptitle("Compensation Comparison: Online vs Offline",
                  fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.94,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "Left: baro corrected using online estimator K. "
              "Right: corrected using offline calibration (range-sensor ground truth).\n"
              "Closer baro-range agreement = better compensation.",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     t = baro_err["time_s"]
     err = baro_err["error"]
@@ -888,7 +896,7 @@ def plot_compensation_comparison(baro_err, thrust_data, calib, online_k,
     axes[1, 0].set_ylim(ylim)
     axes[1, 1].set_ylim(ylim)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
@@ -896,13 +904,13 @@ def plot_online_vs_offline(baro_err, thrust_data, calib, online_k,
                            armed_start, armed_end,
                            existing_pcoef=0.0):
     """Scatter comparison and summary: online vs offline calibration."""
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5.5))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6.5))
     fig.suptitle("Online vs Offline: Error vs Thrust",
                  fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.93,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "Scatter plots show baro-range error vs thrust. "
              "Good compensation removes the thrust correlation (flat scatter near zero).",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     t = baro_err["time_s"]
     err = baro_err["error"]
@@ -974,7 +982,7 @@ def plot_online_vs_offline(baro_err, thrust_data, calib, online_k,
     for ax in axes:
         ax.set_ylim(ylim)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.90])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
@@ -988,10 +996,10 @@ def plot_estimator_convergence(est_data, armed_start, armed_end,
     """Estimator convergence: K estimate, error variance, convergence status."""
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
     fig.suptitle("Online Estimator Convergence", fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.94,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "RLS estimator progress. K should stabilize before convergence locks. "
              "Sufficient thrust excitation (std > 0.05) is required.",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     t = est_data["time_s"]
     armed = (t >= armed_start) & (t <= armed_end)
@@ -1040,7 +1048,7 @@ def plot_estimator_convergence(est_data, armed_start, armed_end,
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
@@ -1115,11 +1123,11 @@ def plot_compensation_effect(est_data, thrust_data, armed_start, armed_end):
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle("Estimated Compensation Effect", fontsize=14, fontweight="bold")
-    fig.text(0.5, 0.94,
+    fig.text(_SUBTITLE_X, _SUBTITLE_Y,
              "CF residual (baro minus accel-predicted altitude) before and after "
              "applying the online K estimate. Corrected residual should be flat with "
              "no thrust correlation. DC bias removed for comparison.",
-             ha="center", fontsize=9, style="italic", color="0.4")
+             ha="center", va="top", fontsize=9, style="italic", color="0.4")
 
     # Top-left: Residual before/after
     ax = axes[0, 0]
@@ -1195,7 +1203,7 @@ def plot_compensation_effect(est_data, thrust_data, armed_start, armed_end):
             bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f0f0",
                       edgecolor="#cccccc"))
 
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.tight_layout(rect=[0, 0, 1, _LAYOUT_TOP])
     return fig
 
 
@@ -1272,9 +1280,15 @@ def main():
         print(f"Error: file not found: {args.ulog_file}", file=sys.stderr)
         sys.exit(1)
 
-    # Create per-log output directory: <output_dir>/<log_name>/
+    # Create per-log output directory: <default_base>/<log_name>/ when using
+    # the default, or use --output-dir directly when explicitly provided.
     log_name = os.path.splitext(os.path.basename(args.ulog_file))[0]
-    output_dir = os.path.join(args.output_dir, log_name)
+
+    if args.output_dir == default_log_dir:
+        output_dir = os.path.join(args.output_dir, log_name)
+    else:
+        output_dir = args.output_dir
+
     os.makedirs(output_dir, exist_ok=True)
 
     # Copy ULG into output dir for co-location
