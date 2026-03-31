@@ -2180,9 +2180,13 @@ void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 		_ekf.set_air_density(airdata.rho);
 
 		// Rate-limit baro data to reduce EKF fusion CPU load
-		const hrt_abstime baro_interval_us = static_cast<hrt_abstime>(1e6f / _param_ekf2_baro_rate.get());
+		const float baro_rate_hz = _param_ekf2_baro_rate.get();
+		const hrt_abstime baro_interval_us = (baro_rate_hz > 0.f)
+						     ? static_cast<hrt_abstime>(1e6f / baro_rate_hz)
+						     : 0;
 
-		if (reset || (airdata.timestamp_sample >= _last_baro_ekf_timestamp + baro_interval_us)) {
+		if (reset || (baro_interval_us == 0)
+		    || (airdata.timestamp_sample >= _last_baro_ekf_timestamp + baro_interval_us)) {
 			_ekf.setBaroData(baroSample{airdata.timestamp_sample, airdata.baro_alt_meter, reset});
 			_last_baro_ekf_timestamp = airdata.timestamp_sample;
 		}
@@ -2532,9 +2536,13 @@ void EKF2::UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps)
 		}
 
 		// Rate-limit mag data to reduce EKF fusion CPU load (3-axis fusion is expensive)
-		const hrt_abstime mag_interval_us = static_cast<hrt_abstime>(1e6f / _param_ekf2_mag_rate.get());
+		const float mag_rate_hz = _param_ekf2_mag_rate.get();
+		const hrt_abstime mag_interval_us = (mag_rate_hz > 0.f)
+						    ? static_cast<hrt_abstime>(1e6f / mag_rate_hz)
+						    : 0;
 
-		if (reset || (magnetometer.timestamp_sample >= _last_mag_ekf_timestamp + mag_interval_us)) {
+		if (reset || (mag_interval_us == 0)
+		    || (magnetometer.timestamp_sample >= _last_mag_ekf_timestamp + mag_interval_us)) {
 			_ekf.setMagData(magSample{magnetometer.timestamp_sample, Vector3f{magnetometer.magnetometer_ga}, reset});
 			_last_mag_ekf_timestamp = magnetometer.timestamp_sample;
 		}
