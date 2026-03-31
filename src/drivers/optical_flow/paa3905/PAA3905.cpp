@@ -306,6 +306,9 @@ void PAA3905::RunImpl()
 					}
 
 					if (prev_mode != _mode) {
+						static constexpr const char *mode_str[] = {"Bright", "LowLight", "SuperLowLight"};
+						PX4_INFO("mode: %s -> %s", mode_str[static_cast<int>(prev_mode)], mode_str[static_cast<int>(_mode)]);
+
 						// update scheduling on mode change
 						if (!_motion_interrupt_enabled) {
 							ScheduleOnInterval(_scheduled_interval_us, _scheduled_interval_us);

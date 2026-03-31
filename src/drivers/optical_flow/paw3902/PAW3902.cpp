@@ -313,6 +313,7 @@ void PAW3902::RunImpl()
 						_bright_to_low_counter++;
 
 						if (_bright_to_low_counter >= 10) {
+							PX4_INFO("mode: Bright -> LowLight");
 							_mode = Mode::LowLight;
 							Reset();
 						}
@@ -341,6 +342,7 @@ void PAW3902::RunImpl()
 						_low_to_superlow_counter++;
 
 						if (_low_to_superlow_counter >= 10) {
+							PX4_INFO("mode: LowLight -> SuperLowLight");
 							_mode = Mode::SuperLowLight;
 							Reset();
 						}
@@ -352,6 +354,7 @@ void PAW3902::RunImpl()
 						_low_to_superlow_counter = 0;
 
 						if (_low_to_bright_counter >= 10) {
+							PX4_INFO("mode: LowLight -> Bright");
 							_mode = Mode::Bright;
 							Reset();
 						}
@@ -387,6 +390,7 @@ void PAW3902::RunImpl()
 					}
 
 					if (_superlow_to_low_counter >= 10) {
+						PX4_INFO("mode: SuperLowLight -> LowLight");
 						_mode = Mode::LowLight;
 						Reset();
 					}
