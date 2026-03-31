@@ -23,7 +23,7 @@ parameters:
       bit:
         0: GNSS altitude offset
         1: Thrust compensation
-      default: 3
+      default: 1
       min: 0
       max: 3
     SENS_BARO_PCOEF:
