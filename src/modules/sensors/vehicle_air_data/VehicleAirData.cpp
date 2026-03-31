@@ -99,6 +99,58 @@ float VehicleAirData::AirTemperatureUpdate(const float temperature_baro, Tempera
 	return math::constrain(temperature, TEMPERATURE_MIN_CELSIUS, TEMPERATURE_MAX_CELSIUS);
 }
 
+void VehicleAirData::updateThrustBuffer()
+{
+	vehicle_thrust_setpoint_s thrust_sp;
+
+	while (_vehicle_thrust_setpoint_sub.update(&thrust_sp)) {
+		ThrustSample &sample = _thrust_buffer[_thrust_buffer_head];
+		sample.timestamp = thrust_sp.timestamp;
+		sample.thrust_z = PX4_ISFINITE(thrust_sp.xyz[2]) ? fabsf(thrust_sp.xyz[2]) : 0.f;
+
+		_thrust_buffer_head = (_thrust_buffer_head + 1) % THRUST_BUFFER_SIZE;
+
+		if (_thrust_buffer_count < THRUST_BUFFER_SIZE) {
+			_thrust_buffer_count++;
+		}
+	}
+}
+
+float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
+{
+	const float pcoef = _param_sens_baro_pcoef.get();
+
+	if (fabsf(pcoef) < FLT_EPSILON || _thrust_buffer_count == 0) {
+		return 0.f;
+	}
+
+	// Find the thrust sample closest to the baro measurement time
+	int best_idx = -1;
+	hrt_abstime best_dt = UINT64_MAX;
+
+	for (int i = 0; i < _thrust_buffer_count; i++) {
+		int idx = (_thrust_buffer_head - 1 - i + THRUST_BUFFER_SIZE) % THRUST_BUFFER_SIZE;
+		const hrt_abstime ts = _thrust_buffer[idx].timestamp;
+
+		if (ts == 0) {
+			continue;
+		}
+
+		const hrt_abstime dt = (ts >= timestamp_sample) ? (ts - timestamp_sample) : (timestamp_sample - ts);
+
+		if (dt < best_dt) {
+			best_dt = dt;
+			best_idx = idx;
+		}
+	}
+
+	if (best_idx < 0 || best_dt > 500_ms) {
+		return 0.f;
+	}
+
+	return pcoef * _thrust_buffer[best_idx].thrust_z;
+}
+
 bool VehicleAirData::ParametersUpdate(bool force)
 {
 	// Check if parameters have changed
@@ -143,6 +195,8 @@ void VehicleAirData::Run()
 	const hrt_abstime time_now_us = hrt_absolute_time();
 
 	const bool parameter_update = ParametersUpdate();
+
+	updateThrustBuffer();
 
 	estimator_status_flags_s estimator_status_flags;
 	const bool estimator_status_flags_updated = _estimator_status_flags_sub.update(&estimator_status_flags);
@@ -260,7 +314,7 @@ void VehicleAirData::Run()
 		if (!_relative_calibration_done) {
 			_relative_calibration_done = UpdateRelativeCalibrations(time_now_us);
 
-		} else if (!_baro_gnss_calibration_done && _param_sens_baro_autocal.get() && latest_estimator_status_flags.cs_gps_hgt) {
+		} else if (!_baro_gnss_calibration_done && (_param_sens_baro_autocal.get() & 1) && latest_estimator_status_flags.cs_gps_hgt) {
 			_baro_gnss_calibration_done = BaroGNSSAltitudeOffset();
 		}
 	}
@@ -292,7 +346,8 @@ void VehicleAirData::Run()
 						const float ambient_temperature = AirTemperatureUpdate(temperature_baro, temperature_source, time_now_us);
 
 						const float pressure_sealevel_pa = _param_sens_baro_qnh.get() * 100.f;
-						const float altitude = getAltitudeFromPressure(pressure_pa, pressure_sealevel_pa);
+						float altitude = getAltitudeFromPressure(pressure_pa, pressure_sealevel_pa);
+						altitude += thrustCompensation(timestamp_sample);
 
 						// calculate air density
 						const float air_density = getDensityFromPressureAndTemp(pressure_pa, ambient_temperature);
