@@ -57,6 +57,7 @@
 #include <uORB/topics/vehicle_air_data.h>
 #include <uORB/topics/estimator_status_flags.h>
 #include <uORB/topics/sensor_gps.h>
+#include <uORB/topics/actuator_motors.h>
 
 using namespace time_literals;
 
@@ -90,6 +91,25 @@ private:
 	bool UpdateRelativeCalibrations(hrt_abstime time_now_us);
 	bool BaroGNSSAltitudeOffset();
 
+	/**
+	 * Compute altitude correction for thrust-induced static pressure error.
+	 * Uses time-matched motor data from a small ring buffer to account for
+	 * baro sensor measurement delay.
+	 * Returns pcoef * mean_motor_output, or 0 if disabled/unavailable.
+	 */
+	float thrustCompensation(hrt_abstime timestamp_sample);
+
+	/** Drain actuator_motors subscription and store in ring buffer. */
+	void updateMotorBuffer();
+
+	/** Compute mean motor output [0,1] from an actuator_motors sample. */
+	static float meanMotorOutput(const actuator_motors_s &motors);
+
+	static constexpr int MOTOR_BUFFER_SIZE = 8; ///< ~160ms at 50Hz
+	actuator_motors_s _motor_buffer[MOTOR_BUFFER_SIZE] {};
+	int _motor_buffer_head{0};
+	int _motor_buffer_count{0};
+
 	static constexpr int MAX_SENSOR_COUNT = 4;
 
 	uORB::Publication<sensors_status_s> _sensors_status_baro_pub{ORB_ID(sensors_status_baro)};
@@ -110,6 +130,7 @@ private:
 	};
 
 	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
+	uORB::Subscription _actuator_motors_sub{ORB_ID(actuator_motors)};
 
 	calibration::Barometer _calibration[MAX_SENSOR_COUNT];
 
@@ -147,8 +168,8 @@ private:
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::SENS_BARO_QNH>) _param_sens_baro_qnh,
-		(ParamFloat<px4::params::SENS_BARO_RATE>) _param_sens_baro_rate,
-		(ParamBool<px4::params::SENS_BAR_AUTOCAL>) _param_sens_baro_autocal
+		(ParamInt<px4::params::SENS_BAR_AUTOCAL>) _param_sens_baro_autocal,
+		(ParamFloat<px4::params::SENS_BARO_PCOEF>) _param_sens_baro_pcoef
 	)
 };
 }; // namespace sensors

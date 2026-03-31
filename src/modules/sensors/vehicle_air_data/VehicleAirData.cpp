@@ -99,6 +99,70 @@ float VehicleAirData::AirTemperatureUpdate(const float temperature_baro, Tempera
 	return math::constrain(temperature, TEMPERATURE_MIN_CELSIUS, TEMPERATURE_MAX_CELSIUS);
 }
 
+float VehicleAirData::meanMotorOutput(const actuator_motors_s &motors)
+{
+	float sum = 0.f;
+	int count = 0;
+
+	for (int i = 0; i < actuator_motors_s::NUM_CONTROLS; i++) {
+		if (PX4_ISFINITE(motors.control[i])) {
+			sum += math::constrain(motors.control[i], 0.f, 1.f);
+			count++;
+		}
+	}
+
+	return (count > 0) ? sum / count : 0.f;
+}
+
+void VehicleAirData::updateMotorBuffer()
+{
+	actuator_motors_s motors;
+
+	while (_actuator_motors_sub.update(&motors)) {
+		_motor_buffer[_motor_buffer_head] = motors;
+		_motor_buffer_head = (_motor_buffer_head + 1) % MOTOR_BUFFER_SIZE;
+
+		if (_motor_buffer_count < MOTOR_BUFFER_SIZE) {
+			_motor_buffer_count++;
+		}
+	}
+}
+
+float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
+{
+	const float pcoef = _param_sens_baro_pcoef.get();
+
+	if (fabsf(pcoef) < FLT_EPSILON || _motor_buffer_count == 0) {
+		return 0.f;
+	}
+
+	// Find the motor sample closest to the baro measurement time
+	int best_idx = -1;
+	hrt_abstime best_dt = UINT64_MAX;
+
+	for (int i = 0; i < _motor_buffer_count; i++) {
+		int idx = (_motor_buffer_head - 1 - i + MOTOR_BUFFER_SIZE) % MOTOR_BUFFER_SIZE;
+		const hrt_abstime ts = _motor_buffer[idx].timestamp;
+
+		if (ts == 0) {
+			continue;
+		}
+
+		const hrt_abstime dt = (ts >= timestamp_sample) ? (ts - timestamp_sample) : (timestamp_sample - ts);
+
+		if (dt < best_dt) {
+			best_dt = dt;
+			best_idx = idx;
+		}
+	}
+
+	if (best_idx < 0 || best_dt > 500_ms) {
+		return 0.f;
+	}
+
+	return pcoef * meanMotorOutput(_motor_buffer[best_idx]);
+}
+
 bool VehicleAirData::ParametersUpdate(bool force)
 {
 	// Check if parameters have changed
@@ -143,6 +207,8 @@ void VehicleAirData::Run()
 	const hrt_abstime time_now_us = hrt_absolute_time();
 
 	const bool parameter_update = ParametersUpdate();
+
+	updateMotorBuffer();
 
 	estimator_status_flags_s estimator_status_flags;
 	const bool estimator_status_flags_updated = _estimator_status_flags_sub.update(&estimator_status_flags);
@@ -260,67 +326,60 @@ void VehicleAirData::Run()
 		if (!_relative_calibration_done) {
 			_relative_calibration_done = UpdateRelativeCalibrations(time_now_us);
 
-		} else if (!_baro_gnss_calibration_done && _param_sens_baro_autocal.get() && latest_estimator_status_flags.cs_gps_hgt) {
+		} else if (!_baro_gnss_calibration_done && (_param_sens_baro_autocal.get() & 1) && latest_estimator_status_flags.cs_gps_hgt) {
 			_baro_gnss_calibration_done = BaroGNSSAltitudeOffset();
 		}
 	}
 
 	// Publish
-	if (_param_sens_baro_rate.get() > 0) {
-		int interval_us = 1e6f / _param_sens_baro_rate.get();
+	for (int instance = 0; instance < MAX_SENSOR_COUNT; instance++) {
+		if (updated[instance] && (_data_sum_count[instance] > 0)) {
 
-		for (int instance = 0; instance < MAX_SENSOR_COUNT; instance++) {
-			if (updated[instance] && (_data_sum_count[instance] > 0)) {
+			const hrt_abstime timestamp_sample = _timestamp_sample_sum[instance] / _data_sum_count[instance];
 
-				const hrt_abstime timestamp_sample = _timestamp_sample_sum[instance] / _data_sum_count[instance];
+			bool publish = (time_now_us <= timestamp_sample + 1_s);
 
-				if (time_now_us >= _last_publication_timestamp[instance] + interval_us) {
-
-					bool publish = (time_now_us <= timestamp_sample + 1_s);
-
-					if (publish) {
-						publish = (_selected_sensor_sub_index >= 0)
-							  && (instance == _selected_sensor_sub_index)
-							  && (_voter.get_sensor_state(_selected_sensor_sub_index) == DataValidator::ERROR_FLAG_NO_ERROR);
-					}
-
-					if (publish) {
-						const float pressure_pa = _data_sum[instance] / _data_sum_count[instance];
-						const float temperature_baro = _temperature_sum[instance] / _data_sum_count[instance];
-						TemperatureSource temperature_source = _calibration[instance].external() ? TemperatureSource::EXTERNAL_BARO :
-										       TemperatureSource::DEFAULT_TEMP;
-						const float ambient_temperature = AirTemperatureUpdate(temperature_baro, temperature_source, time_now_us);
-
-						const float pressure_sealevel_pa = _param_sens_baro_qnh.get() * 100.f;
-						const float altitude = getAltitudeFromPressure(pressure_pa, pressure_sealevel_pa);
-
-						// calculate air density
-						const float air_density = getDensityFromPressureAndTemp(pressure_pa, ambient_temperature);
-
-						// populate vehicle_air_data with and publish
-						vehicle_air_data_s out{};
-						out.timestamp_sample = timestamp_sample;
-						out.baro_device_id = _calibration[instance].device_id();
-						out.baro_alt_meter = altitude;
-						out.ambient_temperature = ambient_temperature;
-						out.temperature_source = static_cast<uint8_t>(temperature_source);
-						out.baro_pressure_pa = pressure_pa;
-						out.rho = air_density;
-						out.calibration_count = _calibration[instance].calibration_count();
-						out.timestamp = hrt_absolute_time();
-
-						_vehicle_air_data_pub.publish(out);
-					}
-
-					_last_publication_timestamp[instance] = time_now_us;
-
-					// reset
-					_timestamp_sample_sum[instance] = 0;
-					_data_sum[instance] = 0;
-					_temperature_sum[instance] = 0;
-					_data_sum_count[instance] = 0;
-				}
+			if (publish) {
+				publish = (_selected_sensor_sub_index >= 0)
+					  && (instance == _selected_sensor_sub_index)
+					  && (_voter.get_sensor_state(_selected_sensor_sub_index) == DataValidator::ERROR_FLAG_NO_ERROR);
 			}
+
+			if (publish) {
+				const float pressure_pa = _data_sum[instance] / _data_sum_count[instance];
+				const float temperature_baro = _temperature_sum[instance] / _data_sum_count[instance];
+				TemperatureSource temperature_source = _calibration[instance].external() ? TemperatureSource::EXTERNAL_BARO :
+								       TemperatureSource::DEFAULT_TEMP;
+				const float ambient_temperature = AirTemperatureUpdate(temperature_baro, temperature_source, time_now_us);
+
+				const float pressure_sealevel_pa = _param_sens_baro_qnh.get() * 100.f;
+				float altitude = getAltitudeFromPressure(pressure_pa, pressure_sealevel_pa);
+
+				altitude += thrustCompensation(timestamp_sample);
+
+				// calculate air density
+				const float air_density = getDensityFromPressureAndTemp(pressure_pa, ambient_temperature);
+
+				// populate vehicle_air_data with and publish
+				vehicle_air_data_s out{};
+				out.timestamp_sample = timestamp_sample;
+				out.baro_device_id = _calibration[instance].device_id();
+				out.baro_alt_meter = altitude;
+				out.ambient_temperature = ambient_temperature;
+				out.temperature_source = static_cast<uint8_t>(temperature_source);
+				out.baro_pressure_pa = pressure_pa;
+				out.rho = air_density;
+				out.calibration_count = _calibration[instance].calibration_count();
+				out.timestamp = hrt_absolute_time();
+
+				_vehicle_air_data_pub.publish(out);
+			}
+
+			// reset
+			_timestamp_sample_sum[instance] = 0;
+			_data_sum[instance] = 0;
+			_temperature_sum[instance] = 0;
+			_data_sum_count[instance] = 0;
 		}
 	}
 
