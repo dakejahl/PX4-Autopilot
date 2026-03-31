@@ -13,7 +13,7 @@ Analyzes baro thrust compensation from flight logs. Three modes:
 3. **Standalone calibration** (range sensor, no estimator):
    Identifies SENS_BARO_PCOEF from baro vs range error.
 
-The correction model: baro_alt += SENS_BARO_PCOEF * mean_motor_output
+The correction model: baro_alt += SENS_BARO_PCOEF * |thrust_z|
 
 Requirements:
     - Flight log (.ulg)
@@ -82,27 +82,16 @@ def us_to_seconds(ts_us, start_us):
     return (ts_us.astype(np.int64) - np.int64(start_us)) / 1e6
 
 
-def mean_motor_thrust(motors_data):
-    """Compute mean motor output [0, 1] from actuator_motors control array.
+def thrust_z_magnitude(thrust_sp_data):
+    """Compute vertical thrust magnitude [0, 1] from vehicle_thrust_setpoint.
 
-    Averages all finite (active) motor channels per sample.
+    Uses |xyz[2]| which is the Z body-axis component (negative = upward in FRD).
+    This matches the firmware compensation signal in VehicleAirData.
     """
-    # Collect all motor channels present in the data
-    channels = []
-    for i in range(12):
-        key = f"control[{i}]"
-        if key in motors_data:
-            channels.append(motors_data[key])
-
-    if not channels:
-        return np.zeros(len(next(iter(motors_data.values()))))
-
-    stack = np.column_stack(channels)  # (N, num_motors)
-    finite_mask = np.isfinite(stack)
-    # Replace NaN with 0 for sum, count only finite
-    safe = np.where(finite_mask, np.clip(stack, 0, 1), 0)
-    counts = finite_mask.sum(axis=1).clip(min=1)
-    return safe.sum(axis=1) / counts
+    z = thrust_sp_data.get("xyz[2]", None)
+    if z is None:
+        return np.zeros(len(next(iter(thrust_sp_data.values()))))
+    return np.where(np.isfinite(z), np.abs(z), 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -187,14 +176,14 @@ def extract_range(ulog):
 
 
 def extract_thrust(ulog):
-    """Extract mean motor thrust from actuator_motors."""
+    """Extract vertical thrust magnitude from vehicle_thrust_setpoint."""
     start_us = ulog.start_timestamp
-    motors = get_topic(ulog, "actuator_motors")
-    if motors is None:
+    thrust_sp = get_topic(ulog, "vehicle_thrust_setpoint")
+    if thrust_sp is None:
         return None
     return {
-        "time_s": us_to_seconds(motors.data["timestamp"], start_us),
-        "thrust": mean_motor_thrust(motors.data),
+        "time_s": us_to_seconds(thrust_sp.data["timestamp"], start_us),
+        "thrust": thrust_z_magnitude(thrust_sp.data),
     }
 
 
@@ -1349,7 +1338,7 @@ def main():
               file=sys.stderr)
         sys.exit(1)
     if thrust_data is None:
-        print("Error: no thrust data (actuator_motors) in log",
+        print("Error: no thrust data (vehicle_thrust_setpoint) in log",
               file=sys.stderr)
         sys.exit(1)
 
