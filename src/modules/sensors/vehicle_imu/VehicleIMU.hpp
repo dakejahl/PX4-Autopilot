@@ -35,9 +35,11 @@
 
 #include <Integrator.hpp>
 
+#include <containers/Bitset.hpp>
 #include <lib/mathlib/math/Limits.hpp>
 #include <lib/mathlib/math/WelfordMean.hpp>
 #include <lib/mathlib/math/WelfordMeanVector.hpp>
+#include <lib/mathlib/math/filter/NotchFilter.hpp>
 #include <lib/matrix/matrix/math.hpp>
 #include <lib/perf/perf_counter.h>
 #include <lib/sensor_calibration/Accelerometer.hpp>
@@ -50,10 +52,14 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionMultiArray.hpp>
 #include <uORB/SubscriptionCallback.hpp>
+#include <uORB/topics/esc_status.h>
 #include <uORB/topics/estimator_sensor_bias.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/sensor_accel_fft.h>
+#include <uORB/topics/sensor_accel_fifo.h>
+#include <uORB/topics/sensor_selection.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_imu.h>
 #include <uORB/topics/vehicle_imu_status.h>
@@ -86,6 +92,17 @@ private:
 
 	void UpdateIntegratorConfiguration();
 
+#if !defined(CONSTRAINED_FLASH)
+	bool UpdateAccelFifo();
+	void FilterAcceleration(int axis, float data[], int N);
+
+	void UpdateDynamicNotchEscRpm(const hrt_abstime &time_now_us, bool force = false);
+	void DisableDynamicNotchEscRpm();
+
+	void UpdateDynamicNotchFFT(const hrt_abstime &time_now_us, bool force = false);
+	void DisableDynamicNotchFFT();
+#endif // !CONSTRAINED_FLASH
+
 	inline void UpdateAccelVibrationMetrics(const matrix::Vector3f &acceleration);
 	inline void UpdateGyroVibrationMetrics(const matrix::Vector3f &angular_velocity);
 
@@ -107,7 +124,14 @@ private:
 	uORB::SubscriptionMultiArray<estimator_sensor_bias_s> _estimator_sensor_bias_subs{ORB_ID::estimator_sensor_bias};
 
 	uORB::Subscription _sensor_accel_sub;
+	uORB::Subscription _sensor_accel_fifo_sub;
 	uORB::SubscriptionCallbackWorkItem _sensor_gyro_sub;
+
+#if !defined(CONSTRAINED_FLASH)
+	uORB::Subscription _esc_status_sub{ORB_ID(esc_status)};
+	uORB::Subscription _sensor_accel_fft_sub{ORB_ID(sensor_accel_fft)};
+	uORB::Subscription _sensor_selection_sub{ORB_ID(sensor_selection)};
+#endif // !CONSTRAINED_FLASH
 
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 
@@ -195,6 +219,47 @@ private:
 
 	hrt_abstime _in_flight_calibration_check_timestamp_last{0};
 
+#if !defined(CONSTRAINED_FLASH)
+
+	enum DynamicNotch {
+		EscRpm = 1,
+		FFT    = 2,
+	};
+
+	static constexpr hrt_abstime DYNAMIC_NOTCH_FILTER_TIMEOUT = 3_s;
+
+	// ESC RPM
+	static constexpr int MAX_NUM_ESCS = sizeof(esc_status_s::esc) / sizeof(esc_status_s::esc[0]);
+
+	using NotchFilterHarmonic = math::NotchFilter<float>[3][MAX_NUM_ESCS];
+	NotchFilterHarmonic *_dynamic_notch_filter_esc_rpm{nullptr};
+
+	int _esc_rpm_harmonics{0};
+	px4::Bitset<MAX_NUM_ESCS> _esc_available{};
+	hrt_abstime _last_esc_rpm_notch_update[MAX_NUM_ESCS] {};
+
+	perf_counter_t _dynamic_notch_filter_esc_rpm_disable_perf{nullptr};
+	perf_counter_t _dynamic_notch_filter_esc_rpm_init_perf{nullptr};
+	perf_counter_t _dynamic_notch_filter_esc_rpm_update_perf{nullptr};
+
+	// FFT
+	static constexpr int MAX_NUM_FFT_PEAKS = sizeof(sensor_accel_fft_s::peak_frequencies_x)
+			/ sizeof(sensor_accel_fft_s::peak_frequencies_x[0]);
+
+	math::NotchFilter<float> _dynamic_notch_filter_fft[3][MAX_NUM_FFT_PEAKS] {};
+
+	perf_counter_t _dynamic_notch_filter_fft_disable_perf{nullptr};
+	perf_counter_t _dynamic_notch_filter_fft_update_perf{nullptr};
+
+	hrt_abstime _last_fft_notch_update{0};
+	bool _dynamic_notch_fft_available{false};
+
+	bool _is_primary_accel{false};
+	bool _sensor_selection_initialized{false};
+#endif // !CONSTRAINED_FLASH
+
+	bool _accel_fifo_available{false};
+
 	perf_counter_t _accel_generation_gap_perf{perf_alloc(PC_COUNT, MODULE_NAME": accel data gap")};
 	perf_counter_t _gyro_generation_gap_perf{perf_alloc(PC_COUNT, MODULE_NAME": gyro data gap")};
 
@@ -202,6 +267,12 @@ private:
 		(ParamInt<px4::params::IMU_INTEG_RATE>) _param_imu_integ_rate,
 		(ParamBool<px4::params::SENS_IMU_AUTOCAL>) _param_sens_imu_autocal,
 		(ParamBool<px4::params::SENS_IMU_CLPNOTI>) _param_sens_imu_notify_clipping
+#if !defined(CONSTRAINED_FLASH)
+		, (ParamInt<px4::params::IMU_ACC_DNF_EN>) _param_imu_acc_dnf_en,
+		(ParamInt<px4::params::IMU_ACC_DNF_HMC>) _param_imu_acc_dnf_hmc,
+		(ParamFloat<px4::params::IMU_ACC_DNF_BW>) _param_imu_acc_dnf_bw,
+		(ParamFloat<px4::params::IMU_ACC_DNF_MIN>) _param_imu_acc_dnf_min
+#endif // !CONSTRAINED_FLASH
 	)
 };
 
