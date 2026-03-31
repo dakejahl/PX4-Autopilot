@@ -14,13 +14,12 @@ The `vehicle_air_data` module compensates for this by applying a correction to
 the barometer altitude before publishing:
 
 ```
-corrected_baro_alt = raw_baro_alt + SENS_BARO_PCOEF * mean_motor_output
+corrected_baro_alt = raw_baro_alt + SENS_BARO_PCOEF * abs(thrust_z)
 ```
 
-where `mean_motor_output` is the average of active motor commands from
-`actuator_motors` [0, 1]. Using actual motor output (rather than thrust
-setpoint) captures physical motor spin-up delay, eliminating the need for
-a separate time constant parameter.
+where `thrust_z` is the Z body-axis component of `vehicle_thrust_setpoint`
+[0, 1]. Using the vertical thrust setpoint (rather than individual motor
+outputs) provides correct behavior for both multicopter and VTOL aircraft.
 
 ## How Calibration Works
 
@@ -147,5 +146,5 @@ If not using the online estimator, you can calibrate manually:
 
 | Parameter | Description | Range | Default |
 |-----------|-------------|-------|---------|
-| `SENS_BARO_PCOEF` | Baro altitude correction per unit motor thrust [m] | -30 to 30 | 0.0 |
+| `SENS_BARO_PCOEF` | Baro altitude correction per unit vertical thrust [m] | -30 to 30 | 0.0 |
 | `SENS_BAR_AUTOCAL` | Bitmask: bit 0 = GNSS offset, bit 1 = online thrust cal | 0 to 3 | 1 |

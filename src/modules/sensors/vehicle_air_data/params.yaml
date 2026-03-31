@@ -28,11 +28,11 @@ parameters:
       max: 3
     SENS_BARO_PCOEF:
       description:
-        short: Baro altitude correction per unit mean motor output
+        short: Baro altitude correction per unit vertical thrust
         long: |-
-          Corrects propwash-induced baro error proportional to mean
-          motor output from actuator_motors. Sign depends on sensor
-          placement relative to propellers. Set to 0 to disable.
+          Corrects propwash-induced baro error proportional to vertical
+          thrust setpoint magnitude. Sign depends on sensor placement
+          relative to propellers. Set to 0 to disable.
       type: float
       default: 0.0
       min: -30.0

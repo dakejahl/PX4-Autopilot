@@ -206,27 +206,16 @@ void BaroThrustEstimator::Run()
 		}
 	}
 
-	// Get mean motor thrust — uses latest sample rather than time-matched (unlike
-	// thrustCompensation). Fine for a statistical estimator; timing jitter is noise.
+	// Get vertical thrust setpoint — uses latest sample rather than time-matched
+	// (unlike thrustCompensation). Fine for a statistical estimator; timing jitter is noise.
 	float thrust = 0.f;
 
-	actuator_motors_s motors{};
+	vehicle_thrust_setpoint_s thrust_sp{};
 
-	if (_actuator_motors_sub.copy(&motors)
-	    && hrt_elapsed_time(&motors.timestamp) < 500_ms) {
-		float sum = 0.f;
-		int count = 0;
-
-		for (int i = 0; i < actuator_motors_s::NUM_CONTROLS; i++) {
-			if (PX4_ISFINITE(motors.control[i])) {
-				sum += math::constrain(motors.control[i], 0.f, 1.f);
-				count++;
-			}
-		}
-
-		if (count > 0) {
-			thrust = sum / count;
-		}
+	if (_vehicle_thrust_setpoint_sub.copy(&thrust_sp)
+	    && hrt_elapsed_time(&thrust_sp.timestamp) < 500_ms
+	    && PX4_ISFINITE(thrust_sp.xyz[2])) {
+		thrust = fabsf(thrust_sp.xyz[2]);
 
 	} else {
 		estimation_active = false;

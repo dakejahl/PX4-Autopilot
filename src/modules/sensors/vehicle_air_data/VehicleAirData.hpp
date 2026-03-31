@@ -50,7 +50,7 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionMultiArray.hpp>
 #include <uORB/SubscriptionCallback.hpp>
-#include <uORB/topics/actuator_motors.h>
+#include <uORB/topics/vehicle_thrust_setpoint.h>
 #include <uORB/topics/differential_pressure.h>
 #include <uORB/topics/estimator_status_flags.h>
 #include <uORB/topics/parameter_update.h>
@@ -92,13 +92,18 @@ private:
 	bool BaroGNSSAltitudeOffset();
 
 	float thrustCompensation(hrt_abstime timestamp_sample);
-	void updateMotorBuffer();
-	static float meanMotorOutput(const actuator_motors_s &motors);
+	void updateThrustBuffer();
 
-	static constexpr int MOTOR_BUFFER_SIZE = 8;
-	actuator_motors_s _motor_buffer[MOTOR_BUFFER_SIZE] {};
-	int _motor_buffer_head{0};
-	int _motor_buffer_count{0};
+	static constexpr int THRUST_BUFFER_SIZE = 8;
+
+	struct ThrustSample {
+		hrt_abstime timestamp{0};
+		float thrust_z{0.f};
+	};
+
+	ThrustSample _thrust_buffer[THRUST_BUFFER_SIZE] {};
+	int _thrust_buffer_head{0};
+	int _thrust_buffer_count{0};
 
 	static constexpr int MAX_SENSOR_COUNT = 4;
 
@@ -120,7 +125,7 @@ private:
 	};
 
 	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
-	uORB::Subscription _actuator_motors_sub{ORB_ID(actuator_motors)};
+	uORB::Subscription _vehicle_thrust_setpoint_sub{ORB_ID(vehicle_thrust_setpoint)};
 
 	calibration::Barometer _calibration[MAX_SENSOR_COUNT];
 

@@ -61,7 +61,7 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_status.h>
-#include <uORB/topics/actuator_motors.h>
+#include <uORB/topics/vehicle_thrust_setpoint.h>
 
 using namespace time_literals;
 
@@ -99,7 +99,7 @@ private:
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _vehicle_acceleration_sub{ORB_ID(vehicle_acceleration)};
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
-	uORB::Subscription _actuator_motors_sub{ORB_ID(actuator_motors)};
+	uORB::Subscription _vehicle_thrust_setpoint_sub{ORB_ID(vehicle_thrust_setpoint)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};

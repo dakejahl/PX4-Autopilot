@@ -98,31 +98,19 @@ float VehicleAirData::AirTemperatureUpdate(const float temperature_baro, Tempera
 	return math::constrain(temperature, TEMPERATURE_MIN_CELSIUS, TEMPERATURE_MAX_CELSIUS);
 }
 
-float VehicleAirData::meanMotorOutput(const actuator_motors_s &motors)
+void VehicleAirData::updateThrustBuffer()
 {
-	float sum = 0.f;
-	int count = 0;
+	vehicle_thrust_setpoint_s thrust_sp;
 
-	for (int i = 0; i < actuator_motors_s::NUM_CONTROLS; i++) {
-		if (PX4_ISFINITE(motors.control[i])) {
-			sum += math::constrain(motors.control[i], 0.f, 1.f);
-			count++;
-		}
-	}
+	while (_vehicle_thrust_setpoint_sub.update(&thrust_sp)) {
+		ThrustSample &sample = _thrust_buffer[_thrust_buffer_head];
+		sample.timestamp = thrust_sp.timestamp;
+		sample.thrust_z = PX4_ISFINITE(thrust_sp.xyz[2]) ? fabsf(thrust_sp.xyz[2]) : 0.f;
 
-	return (count > 0) ? sum / count : 0.f;
-}
+		_thrust_buffer_head = (_thrust_buffer_head + 1) % THRUST_BUFFER_SIZE;
 
-void VehicleAirData::updateMotorBuffer()
-{
-	actuator_motors_s motors;
-
-	while (_actuator_motors_sub.update(&motors)) {
-		_motor_buffer[_motor_buffer_head] = motors;
-		_motor_buffer_head = (_motor_buffer_head + 1) % MOTOR_BUFFER_SIZE;
-
-		if (_motor_buffer_count < MOTOR_BUFFER_SIZE) {
-			_motor_buffer_count++;
+		if (_thrust_buffer_count < THRUST_BUFFER_SIZE) {
+			_thrust_buffer_count++;
 		}
 	}
 }
@@ -131,17 +119,17 @@ float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
 {
 	const float pcoef = _param_sens_baro_pcoef.get();
 
-	if (fabsf(pcoef) < FLT_EPSILON || _motor_buffer_count == 0) {
+	if (fabsf(pcoef) < FLT_EPSILON || _thrust_buffer_count == 0) {
 		return 0.f;
 	}
 
-	// Find the motor sample closest to the baro measurement time
+	// Find the thrust sample closest to the baro measurement time
 	int best_idx = -1;
 	hrt_abstime best_dt = UINT64_MAX;
 
-	for (int i = 0; i < _motor_buffer_count; i++) {
-		int idx = (_motor_buffer_head - 1 - i + MOTOR_BUFFER_SIZE) % MOTOR_BUFFER_SIZE;
-		const hrt_abstime ts = _motor_buffer[idx].timestamp;
+	for (int i = 0; i < _thrust_buffer_count; i++) {
+		int idx = (_thrust_buffer_head - 1 - i + THRUST_BUFFER_SIZE) % THRUST_BUFFER_SIZE;
+		const hrt_abstime ts = _thrust_buffer[idx].timestamp;
 
 		if (ts == 0) {
 			continue;
@@ -159,7 +147,7 @@ float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
 		return 0.f;
 	}
 
-	return pcoef * meanMotorOutput(_motor_buffer[best_idx]);
+	return pcoef * _thrust_buffer[best_idx].thrust_z;
 }
 
 bool VehicleAirData::ParametersUpdate(bool force)
@@ -207,7 +195,7 @@ void VehicleAirData::Run()
 
 	const bool parameter_update = ParametersUpdate();
 
-	updateMotorBuffer();
+	updateThrustBuffer();
 
 	estimator_status_flags_s estimator_status_flags;
 	const bool estimator_status_flags_updated = _estimator_status_flags_sub.update(&estimator_status_flags);
