@@ -555,7 +555,9 @@ void VehicleMagnetometer::Run()
 		}
 	}
 
-	// Publish
+	// Publish at full sensor rate — Run() is triggered per sensor_mag publication via
+	// SubscriptionCallbackWorkItem, so _data_sum_count is normally 1. Rate limiting
+	// is handled downstream by EKF2 (EKF2_MAG_RATE).
 	{
 		const bool multi_mode = (_param_sens_mag_mode.get() == 0);
 

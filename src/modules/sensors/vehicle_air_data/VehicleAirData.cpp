@@ -265,7 +265,9 @@ void VehicleAirData::Run()
 		}
 	}
 
-	// Publish
+	// Publish at full sensor rate — Run() is triggered per sensor_baro publication via
+	// SubscriptionCallbackWorkItem, so _data_sum_count is normally 1. Rate limiting
+	// is handled downstream by EKF2 (EKF2_BARO_RATE).
 	for (int instance = 0; instance < MAX_SENSOR_COUNT; instance++) {
 		if (updated[instance] && (_data_sum_count[instance] > 0)) {
 
