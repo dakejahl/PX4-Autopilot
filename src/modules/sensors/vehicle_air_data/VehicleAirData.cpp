@@ -276,6 +276,11 @@ void VehicleAirData::updateThrustEstimator(float baro_alt, hrt_abstime timestamp
 void VehicleAirData::saveThrustEstimatorParams()
 {
 	if (!_thrust_estimator.convergedLocked()) {
+		PX4_INFO("baro thrust estimator did not converge (K=%.2f, var=%.1f, err=%.2f, thr_std=%.3f)",
+			 (double)_thrust_estimator.kEstimate(),
+			 (double)_thrust_estimator.kEstimateVar(),
+			 (double)_thrust_estimator.errorVar(),
+			 (double)_thrust_estimator.thrustStd());
 		return;
 	}
 
