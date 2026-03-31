@@ -20,10 +20,11 @@ Requirements:
     - Python packages: pyulog, numpy, matplotlib
 
 Usage:
-    python3 baro_thrust_calibration.py <log.ulg> [--output-dir <dir>]  (default: /tmp/baro_analysis)
+    python3 baro_thrust_calibration.py <log.ulg> [--output-dir <dir>]
+        If --output-dir is not given, results are written to logs/<log_name>/ in the PX4 root.
 
 Outputs:
-    - baro_calibration.pdf    Analysis plots
+    - <log_name>.pdf    Analysis plots (saved in the output directory)
     - Console output with parameters and diagnostics
 """
 
@@ -611,11 +612,11 @@ def plot_residual_diagnostics(diag, calib):
         "  Model R\u00b2 comparison:",
         f"    Linear (zero lag):     {diag['linear_r2']:.3f}",
         f"    Linear (best lag):     {diag['best_lag_r2']:.3f}"
-        f"  (+{r2_gain_lag:.3f})",
+        f"  (+{r2_gain_lag:.3f})",  # noqa: intentional string concat
         f"    Quadratic (zero lag):  {diag['quad_r2']:.3f}"
-        f"  (+{r2_gain_quad:.3f})",
+        f"  (+{r2_gain_quad:.3f})",  # noqa: intentional string concat
         f"    Quadratic + best lag:  {diag['combined_r2']:.3f}"
-        f"  (+{r2_gain_comb:.3f})",
+        f"  (+{r2_gain_comb:.3f})",  # noqa: intentional string concat
         "",
         f"  Optimal lag: {diag['best_lag_s']*1000:+.0f}ms",
         "",

@@ -17,15 +17,18 @@ the barometer altitude before publishing:
 corrected_baro_alt = raw_baro_alt + SENS_BARO_PCOEF * abs(thrust_z)
 ```
 
-where `thrust_z` is the Z body-axis component of `vehicle_thrust_setpoint`
-[0, 1]. Using the vertical thrust setpoint (rather than individual motor
-outputs) provides correct behavior for both multicopter and VTOL aircraft.
+where `thrust_z` is the Z body-axis component (`vehicle_thrust_setpoint.xyz[2]`),
+which is signed in PX4 (negative for upward thrust in FRD). The correction uses
+its magnitude `|thrust_z|` in [0, 1]. Using the vertical thrust setpoint (rather
+than individual motor outputs) provides correct behavior for both multicopter and
+VTOL aircraft.
 
 ## How Calibration Works
 
 ### Online (Preferred)
 
-The online estimator is enabled by default (`SENS_BAR_AUTOCAL` bit 1).
+The online estimator is disabled by default. Enable it by setting
+`SENS_BAR_AUTOCAL` bit 1 (e.g. set to 3 for both GNSS cal and thrust comp).
 The `baro_thrust_estimator` module identifies `SENS_BARO_PCOEF` automatically
 during flight using an accel-baro complementary filter and RLS estimation.
 Parameters are saved to flash on disarm once converged, and the estimator

@@ -39,8 +39,9 @@
  * Uses a complementary filter (accel-integrated altitude vs baro) to isolate
  * thrust-induced baro pressure errors. The CF residual (baro - accel_prediction)
  * captures propwash effects while rejecting real altitude changes and accel drift.
- * An RLS estimator identifies the gain K using mean motor output from
- * actuator_motors. Converged parameters are saved on disarm.
+ * An RLS estimator identifies the gain K using the commanded collective thrust
+ * magnitude from vehicle_thrust_setpoint (|xyz[2]|). Converged parameters are
+ * saved on disarm.
  */
 
 #include "BaroThrustEstimator.hpp"
@@ -367,8 +368,8 @@ Online estimator for barometer thrust compensation (SENS_BARO_PCOEF).
 
 Uses an accel-baro complementary filter to isolate thrust-induced baro pressure errors.
 The CF residual captures propwash effects while rejecting real altitude changes and
-accelerometer drift. An RLS estimator identifies the thrust-to-baro gain K using mean
-motor output from actuator_motors (which includes physical spin-up delay).
+accelerometer drift. An RLS estimator identifies the thrust-to-baro gain K using the
+commanded collective thrust magnitude from vehicle_thrust_setpoint (|xyz[2]|).
 Converged parameters are saved on disarm and refined over subsequent flights.
 
 )DESCR_STR");
