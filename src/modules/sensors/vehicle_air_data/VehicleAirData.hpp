@@ -91,6 +91,10 @@ private:
 	bool UpdateRelativeCalibrations(hrt_abstime time_now_us);
 	bool BaroGNSSAltitudeOffset();
 
+	// Note: applies a single PCOEF to whichever baro the voter selects as primary.
+	// If baros are at different locations (e.g., internal vs external CAN), they may
+	// experience different propwash magnitudes — a per-instance PCOEF would be needed
+	// to handle that correctly. For now this assumes co-located sensors.
 	float thrustCompensation(hrt_abstime timestamp_sample);
 	void updateThrustBuffer();
 

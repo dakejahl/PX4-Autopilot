@@ -124,7 +124,9 @@ float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
 		return 0.f;
 	}
 
-	// Find the thrust sample closest to the baro measurement time
+	// Find the thrust sample closest to the baro measurement time.
+	// Buffer is chronologically ordered (newest at head-1), so once
+	// the time delta starts increasing we've passed the closest match.
 	int best_idx = -1;
 	hrt_abstime best_dt = UINT64_MAX;
 
@@ -141,6 +143,9 @@ float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
 		if (dt < best_dt) {
 			best_dt = dt;
 			best_idx = idx;
+
+		} else {
+			break;
 		}
 	}
 

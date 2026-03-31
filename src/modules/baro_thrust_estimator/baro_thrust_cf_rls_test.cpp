@@ -217,6 +217,22 @@ TEST_F(BaroThrustCfRlsTest, ConvergenceRequiresMinTime)
 	EXPECT_FALSE(_estimator.convergedLocked());
 }
 
+TEST_F(BaroThrustCfRlsTest, NoExcitationDoesNotConverge)
+{
+	_estimator.reset();
+
+	// Constant thrust — no excitation. RLS can fit K but the excitation
+	// gate should prevent convergence since we can't trust the estimate.
+	for (float t = 0.f; t < 80.f; t += _dt) {
+		const float thrust = 0.5f;
+		const float residual = -3.f * thrust;
+		_estimator.updateEstimator(residual, thrust, _dt);
+		_estimator.checkConvergence(t, _dt);
+	}
+
+	EXPECT_FALSE(_estimator.convergedLocked());
+}
+
 TEST_F(BaroThrustCfRlsTest, ConvergenceLocksAfterHoldTime)
 {
 	_estimator.reset();
