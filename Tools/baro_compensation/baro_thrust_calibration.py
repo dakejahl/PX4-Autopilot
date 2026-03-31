@@ -28,7 +28,9 @@ Outputs:
 """
 
 import argparse
+import io
 import os
+import shutil
 import sys
 
 import numpy as np
@@ -146,7 +148,7 @@ def extract_baro(ulog):
     if vad is None:
         return None
     return {
-        "time_s": us_to_seconds(vad.data["timestamp"], start_us),
+        "time_s": us_to_seconds(vad.data["timestamp_sample"], start_us),
         "alt_m": vad.data["baro_alt_meter"],
     }
 
@@ -301,6 +303,111 @@ def calibrate(baro_err, thrust_data, hover_start, hover_end):
         "best_rmse": rmse,
         "recommended_pcoef": -K,
     }
+
+    return result
+
+
+def estimate_open_loop_delay(baro_err, thrust_data, hover_start, hover_end):
+    """Estimate physical motor-to-baro delay, rejecting closed-loop feedback.
+
+    The naive cross-correlation between baro error and motor output includes
+    feedback artifacts: baro_error -> EKF -> controller -> motor.  This path
+    operates below the altitude controller bandwidth (~1-2 Hz).
+
+    By high-pass filtering both signals (subtracting a smoothed version),
+    we isolate motor variation above the controller bandwidth — mostly
+    pilot input and attitude controller, not altitude feedback.  The
+    cross-correlation of these high-passed signals gives the true
+    open-loop physical delay (motor -> pressure -> baro integration).
+
+    Returns dict with open-loop delay estimate, or None if insufficient data.
+    """
+    err_t = baro_err["time_s"]
+    err = baro_err["error"]
+
+    MIN_RANGE_M = 0.5
+    hov = ((err_t >= hover_start) & (err_t <= hover_end)
+           & (baro_err["range_alt"] > MIN_RANGE_M))
+    if hov.sum() < 100:
+        return None
+
+    err_t_hov = err_t[hov]
+    err_hov = err[hov]
+    dt_median = float(np.median(np.diff(err_t_hov)))
+
+    if dt_median <= 0:
+        return None
+
+    # Interpolate motor to error timestamps
+    thrust_hov = np.interp(err_t_hov, thrust_data["time_s"],
+                           thrust_data["thrust"])
+
+    # High-pass filter: subtract moving average to remove feedback loop.
+    # 500ms window ≈ 2Hz cutoff, above altitude controller bandwidth.
+    window = max(3, int(round(0.5 / dt_median)))
+    if window % 2 == 0:
+        window += 1  # odd for symmetric window
+
+    def highpass(sig):
+        # Centered moving average (causal padding to avoid edge shift)
+        kernel = np.ones(window) / window
+        smoothed = np.convolve(sig, kernel, mode="same")
+        return sig - smoothed
+
+    err_hp = highpass(err_hov)
+    thr_hp = highpass(thrust_hov)
+
+    # Check that high-pass signals have meaningful variance
+    if np.std(err_hp) < 1e-6 or np.std(thr_hp) < 1e-6:
+        return None
+
+    result = {}
+
+    # Cross-correlation of high-passed signals
+    err_c = err_hp - np.mean(err_hp)
+    thr_c = thr_hp - np.mean(thr_hp)
+    xcorr = np.correlate(err_c, thr_c, "full")
+    mid = len(thr_c) - 1
+    lags = (np.arange(len(xcorr)) - mid) * dt_median
+    norm = np.sqrt(np.sum(err_c**2) * np.sum(thr_c**2))
+    if norm > 0:
+        xcorr = xcorr / norm
+
+    # Focus on ±500ms window
+    window_mask = (lags >= -0.5) & (lags <= 0.5)
+    lags_w = lags[window_mask]
+    xcorr_w = xcorr[window_mask]
+    peak_idx = np.argmax(np.abs(xcorr_w))
+
+    result["lags_s"] = lags_w
+    result["xcorr"] = xcorr_w
+    result["peak_lag_s"] = float(lags_w[peak_idx])
+    result["peak_r"] = float(xcorr_w[peak_idx])
+    result["hp_window_ms"] = window * dt_median * 1000
+
+    # Lag sweep R² on high-passed signals
+    max_lag = 0.3
+    lag_steps = np.arange(-max_lag, max_lag + dt_median, dt_median)
+    lag_r2 = np.zeros(len(lag_steps))
+
+    err_hp_var = np.var(err_hp)
+    for i, lag in enumerate(lag_steps):
+        thr_shifted = highpass(
+            np.interp(err_t_hov + lag, thrust_data["time_s"],
+                      thrust_data["thrust"]))
+        A = np.column_stack([thr_shifted, np.ones(len(thr_shifted))])
+        c, _, _, _ = np.linalg.lstsq(A, err_hp, rcond=None)
+        resid = err_hp - A @ c
+        lag_r2[i] = 1.0 - np.var(resid) / err_hp_var
+
+    best_idx = np.argmax(lag_r2)
+    result["lag_steps_s"] = lag_steps
+    result["lag_r2"] = lag_r2
+    result["best_lag_s"] = float(lag_steps[best_idx])
+    result["best_lag_r2"] = float(lag_r2[best_idx])
+
+    zero_idx = np.argmin(np.abs(lag_steps))
+    result["zero_lag_r2"] = float(lag_r2[zero_idx])
 
     return result
 
@@ -532,17 +639,86 @@ def plot_residual_diagnostics(diag, calib):
     return fig
 
 
+def plot_open_loop_delay(ol):
+    """Plot open-loop delay analysis (feedback-rejected)."""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Open-Loop Delay Analysis (Feedback-Rejected)",
+                 fontsize=14, fontweight="bold")
+    fig.text(0.5, 0.93,
+             "High-pass filtered to remove altitude controller feedback. "
+             "Shows true physical motor-to-baro delay.",
+             ha="center", fontsize=9, style="italic", color="0.4")
+
+    # Left: Cross-correlation
+    ax = axes[0]
+    ax.plot(ol["lags_s"] * 1000, ol["xcorr"],
+            color="tab:blue", linewidth=1.0)
+    peak_lag = ol["peak_lag_s"]
+    peak_r = ol["peak_r"]
+    ax.axvline(peak_lag * 1000, color="tab:red", linestyle="--", linewidth=0.8,
+               label=f"Peak: {peak_lag*1000:+.0f}ms (r={peak_r:.3f})")
+    ax.axvline(0, color="k", linewidth=0.5, linestyle=":")
+    ax.set_xlabel("Lag [ms]  (positive = thrust leads error)")
+    ax.set_ylabel("Normalized cross-correlation")
+    ax.set_title("High-Pass Cross-Correlation")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+    # Right: Lag sweep R²
+    ax = axes[1]
+    ax.plot(ol["lag_steps_s"] * 1000, ol["lag_r2"],
+            color="tab:blue", linewidth=1.0)
+    best_lag = ol["best_lag_s"]
+    best_r2 = ol["best_lag_r2"]
+    zero_r2 = ol["zero_lag_r2"]
+    ax.axvline(best_lag * 1000, color="tab:red", linestyle="--", linewidth=0.8,
+               label=f"Best lag: {best_lag*1000:+.0f}ms (R\u00b2={best_r2:.3f})")
+    ax.axvline(0, color="k", linewidth=0.5, linestyle=":")
+    ax.axhline(zero_r2, color="tab:gray", linestyle=":", linewidth=0.8,
+               label=f"Zero lag R\u00b2={zero_r2:.3f}")
+    ax.set_xlabel("Thrust time shift [ms]")
+    ax.set_ylabel("R\u00b2")
+    ax.set_title("High-Pass Lag Sweep")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.90])
+    return fig
+
+
+def plot_summary_text(text_lines):
+    """Final page: full console output summary."""
+    fig, ax = plt.subplots(1, 1, figsize=(14, 10))
+    ax.axis("off")
+    fig.suptitle("Analysis Summary", fontsize=14, fontweight="bold")
+    ax.text(0.02, 0.98, "\n".join(text_lines), transform=ax.transAxes,
+            fontsize=10, verticalalignment="top", family="monospace",
+            bbox=dict(boxstyle="round,pad=0.5", facecolor="#f8f8f8",
+                      edgecolor="#cccccc"))
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    return fig
+
+
 def reconstruct_raw_error(baro_err, thrust_data, pcoef):
     """Undo existing baro compensation to reconstruct the raw error.
 
-    During flight the firmware applied: baro_alt += pcoef * motor_thrust.
-    To recover pre-compensation error: raw = observed - pcoef * thrust.
+    During flight the firmware applied at baro timestamps:
+        baro_alt += pcoef * motor_at(baro_timestamp_sample)
+    To preserve timing fidelity, undo at the original baro timestamps,
+    then re-interpolate to the range sensor time base.
     """
-    err_t = baro_err["time_s"]
-    thrust_mag = np.interp(err_t, thrust_data["time_s"],
-                           thrust_data["thrust"])
+    baro_t = baro_err["baro_full_time_s"]
+    baro_alt = baro_err["baro_full_alt"]
 
-    raw_error = baro_err["error"] - pcoef * thrust_mag
+    # Undo compensation at baro timestamps (matching firmware time-alignment)
+    thrust_at_baro = np.interp(baro_t, thrust_data["time_s"],
+                               thrust_data["thrust"])
+    raw_baro = baro_alt - pcoef * thrust_at_baro
+
+    # Re-interpolate raw baro to range sensor time base
+    rng_t = baro_err["time_s"]
+    raw_baro_interp = np.interp(rng_t, baro_t, raw_baro)
+    raw_error = raw_baro_interp - baro_err["range_alt"]
 
     result = dict(baro_err)
     result["error"] = raw_error
@@ -1045,6 +1221,24 @@ def _correlation_quality(r):
     return "weak"
 
 
+def _print_open_loop_delay(ol):
+    """Print open-loop delay estimate."""
+    print(f"\n--- Open-Loop Delay (feedback-rejected, "
+          f"HP cutoff ~{ol['hp_window_ms']:.0f}ms) ---")
+    peak = ol["peak_lag_s"] * 1000
+    print(f"  Cross-corr peak:  {peak:+.0f}ms (r={ol['peak_r']:.3f})")
+    best = ol["best_lag_s"] * 1000
+    print(f"  Best lag R\u00b2:      {ol['best_lag_r2']:.3f} "
+          f"(lag={best:+.0f}ms)")
+    print(f"  Zero lag R\u00b2:      {ol['zero_lag_r2']:.3f}")
+    delta = ol["best_lag_r2"] - ol["zero_lag_r2"]
+    if delta < 0.01:
+        print(f"  -> No significant delay detected")
+    else:
+        print(f"  -> Physical delay ~{abs(best):.0f}ms "
+              f"(R\u00b2 gain: +{delta:.3f})")
+
+
 def _print_diagnostics(diag):
     """Print residual diagnostic results to console."""
     print(f"\n--- Residual Diagnostics ---")
@@ -1066,16 +1260,43 @@ def main():
     parser = argparse.ArgumentParser(
         description="Analyze barometer thrust compensation from flight logs")
     parser.add_argument("ulog_file", help="Path to .ulg flight log")
-    parser.add_argument("--output-dir", "-o", default="/tmp/baro_analysis",
-                        help="Output directory (default: /tmp/baro_analysis)")
+    # Default output: logs/<log_name>/ relative to PX4 root (script location)
+    px4_root = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+    default_log_dir = os.path.join(px4_root, "logs")
+    parser.add_argument("--output-dir", "-o", default=default_log_dir,
+                        help="Output base directory (default: <PX4_ROOT>/logs/)")
     args = parser.parse_args()
 
     if not os.path.isfile(args.ulog_file):
         print(f"Error: file not found: {args.ulog_file}", file=sys.stderr)
         sys.exit(1)
 
-    output_dir = args.output_dir
+    # Create per-log output directory: <output_dir>/<log_name>/
+    log_name = os.path.splitext(os.path.basename(args.ulog_file))[0]
+    output_dir = os.path.join(args.output_dir, log_name)
     os.makedirs(output_dir, exist_ok=True)
+
+    # Copy ULG into output dir for co-location
+    ulg_dest = os.path.join(output_dir, os.path.basename(args.ulog_file))
+    if not os.path.exists(ulg_dest):
+        shutil.copy2(args.ulog_file, ulg_dest)
+
+    # Capture console output for summary page
+    _log_buf = io.StringIO()
+    _orig_stdout = sys.stdout
+
+    class _Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+        def write(self, data):
+            for s in self.streams:
+                s.write(data)
+        def flush(self):
+            for s in self.streams:
+                s.flush()
+
+    sys.stdout = _Tee(_orig_stdout, _log_buf)
 
     # Load log
     print(f"Loading {args.ulog_file} ...")
@@ -1238,12 +1459,20 @@ def main():
                             armed_start, armed_end,
                             existing_pcoef))
 
-                    # Residual diagnostics (use raw error for unbiased analysis)
+                    # Residual diagnostics on reconstructed raw error
                     diag = diagnose_residual(raw_baro_err, thrust_data,
                                             hover_start, hover_end)
                     if diag is not None:
                         _print_diagnostics(diag)
                         figures.append(plot_residual_diagnostics(diag, calib))
+
+                    # Open-loop delay (feedback-rejected)
+                    ol_delay = estimate_open_loop_delay(
+                        raw_baro_err, thrust_data,
+                        hover_start, hover_end)
+                    if ol_delay is not None:
+                        _print_open_loop_delay(ol_delay)
+                        figures.append(plot_open_loop_delay(ol_delay))
 
             else:
                 # --- CALIBRATION MODE ---
@@ -1298,6 +1527,14 @@ def main():
                     if diag is not None:
                         _print_diagnostics(diag)
                         figures.append(plot_residual_diagnostics(diag, calib))
+
+                    # Open-loop delay (feedback-rejected)
+                    ol_delay = estimate_open_loop_delay(
+                        baro_err, thrust_data,
+                        hover_start, hover_end)
+                    if ol_delay is not None:
+                        _print_open_loop_delay(ol_delay)
+                        figures.append(plot_open_loop_delay(ol_delay))
                 else:
                     print("  Calibration failed: insufficient data or "
                           "thrust variation.")
@@ -1308,15 +1545,17 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
-    # Write PDF (append number to avoid overwriting previous results)
-    if figures:
-        base = os.path.join(output_dir, "baro_calibration")
-        pdf_path = base + ".pdf"
-        counter = 1
+    # Restore stdout and grab captured text
+    sys.stdout = _orig_stdout
+    summary_text = _log_buf.getvalue()
 
-        while os.path.exists(pdf_path):
-            pdf_path = f"{base}_{counter}.pdf"
-            counter += 1
+    # Write PDF with log name in filename
+    if figures:
+        # Add summary page as final page
+        summary_lines = summary_text.strip().split("\n")
+        figures.append(plot_summary_text(summary_lines))
+
+        pdf_path = os.path.join(output_dir, f"{log_name}.pdf")
 
         with PdfPages(pdf_path) as pdf:
             for fig in figures:
