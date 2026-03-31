@@ -85,7 +85,7 @@ private:
 	static constexpr float MAX_VZ = 2.f;
 	static constexpr float MAX_VXY = 5.f;
 	static constexpr float PCOEF_MAX = 30.f;
-	static constexpr float MIN_K_UPDATE_THRESHOLD = 0.3f;
+	static constexpr float MIN_K_UPDATE_THRESHOLD = 0.1f;
 
 	void Run() override;
 	void updateParams() override;
