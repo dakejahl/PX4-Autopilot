@@ -174,7 +174,9 @@ BMP388::collect()
 	/* Correct for measurement integration delay: the pressure was
 	 * integrated over the preceding measurement_time window, so the
 	 * effective sample midpoint is half the measurement time before now. */
-	const hrt_abstime timestamp_sample = hrt_absolute_time() - get_measurement_time() / 2;
+	const hrt_abstime now = hrt_absolute_time();
+	const hrt_abstime half_meas = get_measurement_time() / 2;
+	const hrt_abstime timestamp_sample = (now > half_meas) ? (now - half_meas) : now;
 
 	if (!get_sensor_data(sensor_comp, &data)) {
 		perf_count(_comms_errors);
