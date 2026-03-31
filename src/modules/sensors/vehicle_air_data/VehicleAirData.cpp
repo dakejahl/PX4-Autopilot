@@ -163,6 +163,143 @@ float VehicleAirData::thrustCompensation(hrt_abstime timestamp_sample)
 	return pcoef * meanMotorOutput(_motor_buffer[best_idx]);
 }
 
+void VehicleAirData::updateThrustEstimator(float baro_alt, hrt_abstime timestamp_sample)
+{
+	if (!_armed || _landed) {
+		return;
+	}
+
+	// Compute dt
+	if (_last_estimator_update_time == 0) {
+		_last_estimator_update_time = timestamp_sample;
+		_estimation_start_time = timestamp_sample;
+		return;
+	}
+
+	const float dt = math::constrain(
+				 static_cast<float>(timestamp_sample - _last_estimator_update_time) * 1e-6f,
+				 0.001f, 0.5f);
+	_last_estimator_update_time = timestamp_sample;
+
+	if (!PX4_ISFINITE(baro_alt)) {
+		return;
+	}
+
+	// Get acceleration in body frame
+	vehicle_acceleration_s accel{};
+
+	if (!_vehicle_acceleration_sub.copy(&accel)
+	    || hrt_elapsed_time(&accel.timestamp) > 100_ms
+	    || !PX4_ISFINITE(accel.xyz[0]) || !PX4_ISFINITE(accel.xyz[1]) || !PX4_ISFINITE(accel.xyz[2])) {
+		return;
+	}
+
+	// Get attitude quaternion
+	vehicle_attitude_s att{};
+
+	if (!_vehicle_attitude_sub.copy(&att)
+	    || hrt_elapsed_time(&att.timestamp) > 100_ms
+	    || !PX4_ISFINITE(att.q[0])) {
+		return;
+	}
+
+	// Update complementary filter
+	const float accel_up = BaroThrustCfRls::computeAccelUp(
+				       Vector3f{accel.xyz}, Quatf{att.q});
+
+	const float residual = _thrust_estimator.updateCf(baro_alt, accel_up, dt);
+
+	if (!PX4_ISFINITE(residual)) {
+		return;
+	}
+
+	// Soft guards: skip RLS update but keep CF current
+	bool estimation_active = true;
+
+	vehicle_local_position_s local_pos{};
+
+	if (_vehicle_local_position_sub.copy(&local_pos)) {
+		if (local_pos.v_z_valid && fabsf(local_pos.vz) > ESTIMATOR_MAX_VZ) {
+			estimation_active = false;
+		}
+
+		if (local_pos.v_xy_valid
+		    && (local_pos.vx * local_pos.vx + local_pos.vy * local_pos.vy) > ESTIMATOR_MAX_VXY * ESTIMATOR_MAX_VXY) {
+			estimation_active = false;
+		}
+	}
+
+	// Get mean motor thrust
+	float thrust = 0.f;
+
+	actuator_motors_s motors{};
+
+	if (_actuator_motors_sub.copy(&motors)
+	    && hrt_elapsed_time(&motors.timestamp) < 500_ms) {
+		thrust = meanMotorOutput(motors);
+
+	} else {
+		estimation_active = false;
+	}
+
+	if (estimation_active && !_thrust_estimator.converged() && !_thrust_estimator.convergedLocked()) {
+		_thrust_estimator.updateEstimator(residual, thrust, dt);
+	}
+
+	if (!_thrust_estimator.convergedLocked()) {
+		const float elapsed_s = static_cast<float>(timestamp_sample - _estimation_start_time) * 1e-6f;
+		_thrust_estimator.checkConvergence(elapsed_s, dt);
+
+		if (_thrust_estimator.convergedLocked()) {
+			PX4_INFO("baro thrust compensation converged (K=%.2f)", (double)_thrust_estimator.kEstimate());
+		}
+	}
+
+	if (timestamp_sample - _last_estimator_publish_time > 200_ms) {
+		baro_thrust_estimate_s status{};
+		status.timestamp_sample = timestamp_sample;
+		status.residual = residual;
+		status.k_estimate = _thrust_estimator.kEstimate();
+		status.k_estimate_var = _thrust_estimator.kEstimateVar();
+		status.error_var = _thrust_estimator.errorVar();
+		status.thrust_std = _thrust_estimator.thrustStd();
+		status.converged = _thrust_estimator.converged();
+		status.estimation_active = estimation_active;
+		status.timestamp = hrt_absolute_time();
+
+		_baro_thrust_estimate_pub.publish(status);
+		_last_estimator_publish_time = timestamp_sample;
+	}
+}
+
+void VehicleAirData::saveThrustEstimatorParams()
+{
+	if (!_thrust_estimator.convergedLocked()) {
+		return;
+	}
+
+	const float K_est = _thrust_estimator.kEstimate();
+
+	if (fabsf(K_est) < MIN_K_UPDATE_THRESHOLD) {
+		PX4_INFO("baro thrust K_est=%.2f below threshold, calibration adequate", (double)K_est);
+		return;
+	}
+
+	const float pcoef_new = _param_sens_baro_pcoef.get() - K_est;
+
+	if (!PX4_ISFINITE(pcoef_new) || fabsf(pcoef_new) > PCOEF_MAX) {
+		PX4_WARN("baro thrust result out of range (pcoef=%.1f)", (double)pcoef_new);
+		return;
+	}
+
+	PX4_INFO("saving SENS_BARO_PCOEF=%.1f (K_est=%.2f, prev=%.1f)",
+		 (double)pcoef_new, (double)K_est,
+		 (double)_param_sens_baro_pcoef.get());
+
+	_param_sens_baro_pcoef.set(pcoef_new);
+	_param_sens_baro_pcoef.commit_no_notification();
+}
+
 bool VehicleAirData::ParametersUpdate(bool force)
 {
 	// Check if parameters have changed
@@ -209,6 +346,35 @@ void VehicleAirData::Run()
 	const bool parameter_update = ParametersUpdate();
 
 	updateMotorBuffer();
+
+	// Track arm state for thrust estimator disarm-save
+	if (_vehicle_status_sub.updated()) {
+		vehicle_status_s status;
+
+		if (_vehicle_status_sub.copy(&status)) {
+			const bool was_armed = _armed;
+			_armed = (status.arming_state == vehicle_status_s::ARMING_STATE_ARMED);
+
+			if (was_armed != _armed) {
+				if (was_armed && !_armed && (_param_sens_baro_autocal.get() & 2)) {
+					saveThrustEstimatorParams();
+				}
+
+				_thrust_estimator.reset();
+				_estimation_start_time = 0;
+				_last_estimator_update_time = 0;
+				_last_estimator_publish_time = 0;
+			}
+		}
+	}
+
+	if (_vehicle_land_detected_sub.updated()) {
+		vehicle_land_detected_s ld;
+
+		if (_vehicle_land_detected_sub.copy(&ld)) {
+			_landed = ld.landed;
+		}
+	}
 
 	estimator_status_flags_s estimator_status_flags;
 	const bool estimator_status_flags_updated = _estimator_status_flags_sub.update(&estimator_status_flags);
@@ -373,6 +539,11 @@ void VehicleAirData::Run()
 				out.timestamp = hrt_absolute_time();
 
 				_vehicle_air_data_pub.publish(out);
+
+				// Online thrust compensation estimation
+				if (_param_sens_baro_autocal.get() & 2) {
+					updateThrustEstimator(altitude, timestamp_sample);
+				}
 			}
 
 			// reset

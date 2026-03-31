@@ -31,6 +31,11 @@
 #
 ############################################################################
 
+px4_add_library(baro_thrust_cf_rls
+	baro_thrust_cf_rls.cpp
+	baro_thrust_cf_rls.hpp
+)
+
 px4_add_library(vehicle_air_data
 	VehicleAirData.cpp
 	VehicleAirData.hpp
@@ -38,9 +43,12 @@ px4_add_library(vehicle_air_data
 set_property(GLOBAL APPEND PROPERTY PX4_MODULE_CONFIG_FILES ${CMAKE_CURRENT_SOURCE_DIR}/params.yaml)
 target_link_libraries(vehicle_air_data
 	PRIVATE
+		baro_thrust_cf_rls
 		data_validator
 		px4_work_queue
 		sensor_calibration
 	PUBLIC
 		atmosphere
 )
+
+px4_add_unit_gtest(SRC baro_thrust_cf_rls_test.cpp LINKLIBS baro_thrust_cf_rls)

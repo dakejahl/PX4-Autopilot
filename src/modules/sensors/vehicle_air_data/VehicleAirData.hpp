@@ -33,6 +33,7 @@
 
 #pragma once
 
+#include "baro_thrust_cf_rls.hpp"
 #include "data_validator/DataValidatorGroup.hpp"
 
 #include <lib/sensor_calibration/Barometer.hpp>
@@ -50,14 +51,20 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionMultiArray.hpp>
 #include <uORB/SubscriptionCallback.hpp>
+#include <uORB/topics/actuator_motors.h>
+#include <uORB/topics/baro_thrust_estimate.h>
 #include <uORB/topics/differential_pressure.h>
+#include <uORB/topics/estimator_status_flags.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/sensor_baro.h>
-#include <uORB/topics/sensors_status.h>
-#include <uORB/topics/vehicle_air_data.h>
-#include <uORB/topics/estimator_status_flags.h>
 #include <uORB/topics/sensor_gps.h>
-#include <uORB/topics/actuator_motors.h>
+#include <uORB/topics/sensors_status.h>
+#include <uORB/topics/vehicle_acceleration.h>
+#include <uORB/topics/vehicle_air_data.h>
+#include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_status.h>
 
 using namespace time_literals;
 
@@ -91,30 +98,32 @@ private:
 	bool UpdateRelativeCalibrations(hrt_abstime time_now_us);
 	bool BaroGNSSAltitudeOffset();
 
-	/**
-	 * Compute altitude correction for thrust-induced static pressure error.
-	 * Uses time-matched motor data from a small ring buffer to account for
-	 * baro sensor measurement delay.
-	 * Returns pcoef * mean_motor_output, or 0 if disabled/unavailable.
-	 */
 	float thrustCompensation(hrt_abstime timestamp_sample);
-
-	/** Drain actuator_motors subscription and store in ring buffer. */
 	void updateMotorBuffer();
-
-	/** Compute mean motor output [0,1] from an actuator_motors sample. */
 	static float meanMotorOutput(const actuator_motors_s &motors);
 
-	static constexpr int MOTOR_BUFFER_SIZE = 8; ///< ~160ms at 50Hz
+	// Thrust estimator (online identification of SENS_BARO_PCOEF)
+	void updateThrustEstimator(float baro_alt, hrt_abstime timestamp_sample);
+	void saveThrustEstimatorParams();
+
+	static constexpr int MOTOR_BUFFER_SIZE = 8;
 	actuator_motors_s _motor_buffer[MOTOR_BUFFER_SIZE] {};
 	int _motor_buffer_head{0};
 	int _motor_buffer_count{0};
 
 	static constexpr int MAX_SENSOR_COUNT = 4;
 
+	// Thrust estimator constants
+	static constexpr float ESTIMATOR_MAX_VZ = 2.f;
+	static constexpr float ESTIMATOR_MAX_VXY = 5.f;
+	static constexpr float PCOEF_MAX = 30.f;
+	static constexpr float MIN_K_UPDATE_THRESHOLD = 0.3f;
+
 	uORB::Publication<sensors_status_s> _sensors_status_baro_pub{ORB_ID(sensors_status_baro)};
 
 	uORB::Publication<vehicle_air_data_s> _vehicle_air_data_pub{ORB_ID(vehicle_air_data)};
+
+	uORB::Publication<baro_thrust_estimate_s> _baro_thrust_estimate_pub{ORB_ID(baro_thrust_estimate)};
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
@@ -131,6 +140,13 @@ private:
 
 	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
 	uORB::Subscription _actuator_motors_sub{ORB_ID(actuator_motors)};
+
+	// Thrust estimator subscriptions
+	uORB::Subscription _vehicle_acceleration_sub{ORB_ID(vehicle_acceleration)};
+	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
+	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
 
 	calibration::Barometer _calibration[MAX_SENSOR_COUNT];
 
@@ -165,6 +181,14 @@ private:
 	AlphaFilter<float> _delta_baro_gnss_lpf{};
 	float _baro_gnss_offset_t1{NAN};
 	uint64_t _t_first_gnss_sample{0};
+
+	// Thrust estimator state
+	BaroThrustCfRls _thrust_estimator{};
+	bool _armed{false};
+	bool _landed{true};
+	hrt_abstime _estimation_start_time{0};
+	hrt_abstime _last_estimator_update_time{0};
+	hrt_abstime _last_estimator_publish_time{0};
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::SENS_BARO_QNH>) _param_sens_baro_qnh,
