@@ -229,7 +229,8 @@ void VehicleAirData::updateThrustEstimator(float baro_alt, hrt_abstime timestamp
 		}
 	}
 
-	// Get mean motor thrust
+	// Get mean motor thrust — uses latest sample rather than time-matched (unlike
+	// thrustCompensation). Fine for a statistical estimator; timing jitter is noise.
 	float thrust = 0.f;
 
 	actuator_motors_s motors{};

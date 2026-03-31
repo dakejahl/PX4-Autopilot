@@ -148,4 +148,4 @@ If not using the online estimator, you can calibrate manually:
 | Parameter | Description | Range | Default |
 |-----------|-------------|-------|---------|
 | `SENS_BARO_PCOEF` | Baro altitude correction per unit motor thrust [m] | -30 to 30 | 0.0 |
-| `SENS_BAR_AUTOCAL` | Bitmask: bit 0 = GNSS offset, bit 1 = online thrust cal | 0 to 3 | 3 |
+| `SENS_BAR_AUTOCAL` | Bitmask: bit 0 = GNSS offset, bit 1 = online thrust cal | 0 to 3 | 1 |
