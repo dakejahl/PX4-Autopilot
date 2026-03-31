@@ -309,6 +309,7 @@ private:
 	Vector3f _last_mag_bias_published{};
 
 	hrt_abstime _status_mag_pub_last{0};
+	hrt_abstime _last_mag_ekf_timestamp{0};
 
 	uORB::Subscription _magnetometer_sub{ORB_ID(vehicle_magnetometer)};
 
@@ -352,6 +353,7 @@ private:
 	uint8_t _baro_calibration_count {0};
 	uint32_t _device_id_baro{0};
 	hrt_abstime _status_baro_hgt_pub_last{0};
+	hrt_abstime _last_baro_ekf_timestamp{0};
 
 	float _last_baro_bias_published{};
 
@@ -538,6 +540,7 @@ private:
 
 #if defined(CONFIG_EKF2_BAROMETER)
 		(ParamExtInt<px4::params::EKF2_BARO_CTRL>) _param_ekf2_baro_ctrl,///< barometer control selection
+		(ParamFloat<px4::params::EKF2_BARO_RATE>) _param_ekf2_baro_rate,
 		(ParamExtFloat<px4::params::EKF2_BARO_DELAY>) _param_ekf2_baro_delay,
 		(ParamExtFloat<px4::params::EKF2_BARO_NOISE>) _param_ekf2_baro_noise,
 		(ParamExtFloat<px4::params::EKF2_BARO_GATE>) _param_ekf2_baro_gate,
@@ -575,6 +578,7 @@ private:
 #endif // CONFIG_EKF2_SIDESLIP
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
+		(ParamFloat<px4::params::EKF2_MAG_RATE>) _param_ekf2_mag_rate,
 		(ParamExtFloat<px4::params::EKF2_MAG_DELAY>) _param_ekf2_mag_delay,
 		(ParamExtFloat<px4::params::EKF2_MAG_E_NOISE>) _param_ekf2_mag_e_noise,
 		(ParamExtFloat<px4::params::EKF2_MAG_B_NOISE>) _param_ekf2_mag_b_noise,
