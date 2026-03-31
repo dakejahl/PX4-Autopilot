@@ -80,6 +80,7 @@ private:
 	uORB::PublicationMulti<sensor_baro_s> _sensor_baro_pub{ORB_ID(sensor_baro)};
 
 	bool _collect_phase{false};
+	hrt_abstime _conversion_start{0};
 
 	perf_counter_t _sample_perf;
 	perf_counter_t _measure_perf;
