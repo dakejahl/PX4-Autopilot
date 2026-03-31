@@ -64,10 +64,13 @@
  *    used for convergence detection.  The forgetting factor (lambda)
  *    down-weights old data to track slow parameter drift.
  *
- * Convergence requires: low parameter variance (P[0][0]), low
- * prediction error, sufficient thrust excitation, stable K estimate
- * for 10s, and a 10s hold period.  Once locked, K is saved to
- * SENS_BARO_PCOEF on disarm.
+ * Convergence requires: low parameter variance (P[0][0]), acceptable
+ * prediction error (absolute OR relative to explained variance),
+ * sufficient thrust excitation, stable K estimate for 10s, and a 10s
+ * hold period.  The relative error path allows first-flight calibration
+ * (PCOEF=0) where absolute residual is high but the model explains
+ * most of the variance.  Once locked, K is saved to SENS_BARO_PCOEF
+ * on disarm.
  */
 
 #pragma once
@@ -87,7 +90,9 @@ public:
 
 	// --- Convergence criteria ---
 	static constexpr float CONVERGENCE_VAR_THR = 3.f;       ///< max K variance (P[0][0]) to consider converged
-	static constexpr float CONVERGENCE_ERR_THR = 0.5f;      ///< max prediction error variance [m^2]
+	static constexpr float CONVERGENCE_ERR_THR = 0.5f;      ///< max prediction error variance (absolute) [m^2]
+	static constexpr float CONVERGENCE_ERR_REL_THR = 0.4f;  ///< max error/total variance ratio (model explains >60%)
+	static constexpr float CONVERGENCE_ERR_MAX_THR = 4.0f;   ///< absolute error cap for relative path [m^2]
 	static constexpr float MIN_THRUST_EXCITATION = 0.05f;    ///< min thrust std dev to trust the estimate
 	static constexpr float MIN_ESTIMATION_TIME_S = 30.f;     ///< min flight time before convergence allowed
 	static constexpr float K_STABILITY_TIME_S = 10.f;        ///< K must be stable within threshold for this long

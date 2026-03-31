@@ -120,8 +120,18 @@ void BaroThrustCfRls::checkConvergence(float elapsed_since_start_s, float dt)
 	}
 
 	const bool variance_ok = _rls.P[0][0] < CONVERGENCE_VAR_THR;
-	const bool error_ok = _rls.error_var < CONVERGENCE_ERR_THR;
 	const bool excitation_ok = fmaxf(_thrust_var.getState(), 0.f) > (MIN_THRUST_EXCITATION * MIN_THRUST_EXCITATION);
+
+	// Dual-path error check: absolute threshold works for refinement flights
+	// (PCOEF already set), relative threshold allows first calibration where
+	// the uncompensated CF residual is noisy but the model explains most of it.
+	const float K = _rls.theta[0];
+	const float explained_var = K * K * fmaxf(_thrust_var.getState(), 0.f);
+	const float total_var = explained_var + _rls.error_var;
+	const bool error_ok = _rls.error_var < CONVERGENCE_ERR_THR
+			      || (total_var > 1.f
+				  && _rls.error_var / total_var < CONVERGENCE_ERR_REL_THR
+				  && _rls.error_var < CONVERGENCE_ERR_MAX_THR);
 	const bool time_ok = elapsed_since_start_s > MIN_ESTIMATION_TIME_S;
 
 	const float k_current = _k_est_smoothed.getState();
