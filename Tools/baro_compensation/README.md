@@ -89,7 +89,7 @@ Summary including parameters found in the log, online estimator convergence
 status, range-based error statistics, and cross-validation between online and
 offline identification (when both are available).
 
-### PDF Report (`baro_calibration.pdf`)
+### PDF Report (`<log_name>.pdf`)
 
 Pages vary by mode. When the online estimator is present:
 

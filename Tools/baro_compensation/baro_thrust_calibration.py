@@ -164,14 +164,25 @@ def extract_ekf_baro_obs(ulog):
 
 
 def extract_range(ulog):
-    """Extract range sensor distance from distance_sensor."""
+    """Extract range sensor distance from distance_sensor.
+
+    Filters out non-finite distances and samples with signal_quality == 0.
+    """
     start_us = ulog.start_timestamp
     dist = get_topic(ulog, "distance_sensor")
     if dist is None:
         return None
+
+    time_s = us_to_seconds(dist.data["timestamp"], start_us)
+    distance_m = dist.data["current_distance"]
+
+    valid = np.isfinite(time_s) & np.isfinite(distance_m)
+    if "signal_quality" in dist.data.dtype.names:
+        valid &= dist.data["signal_quality"] > 0
+
     return {
-        "time_s": us_to_seconds(dist.data["timestamp"], start_us),
-        "distance_m": dist.data["current_distance"],
+        "time_s": time_s[valid],
+        "distance_m": distance_m[valid],
     }
 
 
@@ -1403,8 +1414,7 @@ def main():
             if is_calibrated:
                 # --- VALIDATION MODE ---
                 print(f"\n--- Range-Based Validation ---")
-                print(f"  Compensation was ACTIVE (PCOEF={existing_pcoef:+.1f},"
-                      f")")
+                print(f"  Compensation was ACTIVE (PCOEF={existing_pcoef:+.1f})")
 
                 print(f"  Observed error:  mean={np.mean(err_hov):+.3f}m,"
                       f" std={np.std(err_hov):.3f}m")
