@@ -244,5 +244,20 @@ param_modify_on_import_ret param_modify_on_import(bson_node_t node)
 		}
 	}
 
+	// 2026-03-30: move sensor rate limiting from publishers to EKF2
+	{
+		if (strcmp("SENS_BARO_RATE", node->name) == 0) {
+			strcpy(node->name, "EKF2_BARO_RATE");
+			PX4_INFO("migrating %s -> %s", "SENS_BARO_RATE", "EKF2_BARO_RATE");
+			return param_modify_on_import_ret::PARAM_MODIFIED;
+		}
+
+		if (strcmp("SENS_MAG_RATE", node->name) == 0) {
+			strcpy(node->name, "EKF2_MAG_RATE");
+			PX4_INFO("migrating %s -> %s", "SENS_MAG_RATE", "EKF2_MAG_RATE");
+			return param_modify_on_import_ret::PARAM_MODIFIED;
+		}
+	}
+
 	return param_modify_on_import_ret::PARAM_NOT_MODIFIED;
 }
