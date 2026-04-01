@@ -311,6 +311,11 @@ private:
 	hrt_abstime _status_mag_pub_last{0};
 	hrt_abstime _last_mag_ekf_timestamp{0};
 
+	// Prefilter accumulators: average samples between fusion intervals to
+	// preserve noise reduction without the aliasing of the old publish-side rate limiter
+	Vector3f _mag_prefilter_sum{};
+	int _mag_prefilter_count{0};
+
 	uORB::Subscription _magnetometer_sub{ORB_ID(vehicle_magnetometer)};
 
 	uORB::PublicationMulti<estimator_aid_source3d_s> _estimator_aid_src_mag_pub{ORB_ID(estimator_aid_src_mag)};
@@ -354,6 +359,9 @@ private:
 	uint32_t _device_id_baro{0};
 	hrt_abstime _status_baro_hgt_pub_last{0};
 	hrt_abstime _last_baro_ekf_timestamp{0};
+
+	float _baro_prefilter_sum{0.f};
+	int _baro_prefilter_count{0};
 
 	float _last_baro_bias_published{};
 
