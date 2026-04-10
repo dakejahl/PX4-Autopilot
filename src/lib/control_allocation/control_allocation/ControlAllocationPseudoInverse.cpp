@@ -145,6 +145,15 @@ ControlAllocationPseudoInverse::updateControlAllocationMatrixScale()
 			_control_allocation_scale(3 + axis_idx) = _control_allocation_scale(THRUST_Z);
 		}
 	}
+
+	if (_three_dimensional_thrust) {
+		// For 3D thrust vehicles (e.g. omnicopters), use the same scale for all thrust axes.
+		// Per-axis normalization causes direction-dependent force output because the scale
+		// factors differ between axes. Using a uniform scale (Z-axis reference) preserves the
+		// relative effectiveness between axes from the pseudo-inverse.
+		_control_allocation_scale(THRUST_X) = _control_allocation_scale(THRUST_Z);
+		_control_allocation_scale(THRUST_Y) = _control_allocation_scale(THRUST_Z);
+	}
 }
 
 void
@@ -184,6 +193,54 @@ ControlAllocationPseudoInverse::allocate()
 
 	_prev_actuator_sp = _actuator_sp;
 
-	// Allocate
-	_actuator_sp = _actuator_trim + _mix * (_control_sp - _control_trim);
+	if (_three_dimensional_thrust) {
+		// For 3D thrust vehicles, clamp the thrust setpoint magnitude to the maximum
+		// achievable in the requested direction. This prevents actuator saturation and
+		// ensures consistent force output regardless of thrust direction.
+		matrix::Vector<float, NUM_AXES> control_sp(_control_sp);
+
+		const matrix::Vector3f thrust_sp(control_sp(THRUST_X), control_sp(THRUST_Y), control_sp(THRUST_Z));
+		const float thrust_mag = thrust_sp.norm();
+
+		if (thrust_mag > FLT_EPSILON) {
+			const matrix::Vector3f thrust_dir = thrust_sp / thrust_mag;
+
+			// Find the maximum thrust magnitude in this direction before any actuator saturates
+			float max_magnitude = FLT_MAX;
+
+			for (int i = 0; i < _num_actuators; i++) {
+				const float contribution = _mix(i, THRUST_X) * thrust_dir(0)
+							   + _mix(i, THRUST_Y) * thrust_dir(1)
+							   + _mix(i, THRUST_Z) * thrust_dir(2);
+
+				if (fabsf(contribution) > FLT_EPSILON) {
+					float room;
+
+					if (contribution > 0.f) {
+						room = (_actuator_max(i) - _actuator_trim(i)) / contribution;
+
+					} else {
+						room = (_actuator_min(i) - _actuator_trim(i)) / contribution;
+					}
+
+					if (room > 0.f && room < max_magnitude) {
+						max_magnitude = room;
+					}
+				}
+			}
+
+			if (max_magnitude < FLT_MAX && max_magnitude > FLT_EPSILON) {
+				const float clamped_mag = fminf(thrust_mag, max_magnitude);
+				const matrix::Vector3f clamped_thrust = thrust_dir * clamped_mag;
+				control_sp(THRUST_X) = clamped_thrust(0);
+				control_sp(THRUST_Y) = clamped_thrust(1);
+				control_sp(THRUST_Z) = clamped_thrust(2);
+			}
+		}
+
+		_actuator_sp = _actuator_trim + _mix * (control_sp - _control_trim);
+
+	} else {
+		_actuator_sp = _actuator_trim + _mix * (_control_sp - _control_trim);
+	}
 }

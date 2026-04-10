@@ -168,6 +168,9 @@ ControlAllocator::update_allocation_method(bool force)
 		bool normalize_rpy[ActuatorEffectiveness::MAX_NUM_MATRICES];
 		_actuator_effectiveness->getNormalizeRPY(normalize_rpy);
 
+		bool three_dim_thrust[ActuatorEffectiveness::MAX_NUM_MATRICES];
+		_actuator_effectiveness->getThreeDimensionalThrust(three_dim_thrust);
+
 		for (int i = 0; i < _num_control_allocation; ++i) {
 			AllocationMethod method = configured_method;
 
@@ -195,6 +198,7 @@ ControlAllocator::update_allocation_method(bool force)
 
 			} else {
 				_control_allocation[i]->setNormalizeRPY(normalize_rpy[i]);
+				_control_allocation[i]->setThreeDimensionalThrust(three_dim_thrust[i]);
 				_control_allocation[i]->setActuatorSetpoint(actuator_sp[i]);
 			}
 		}

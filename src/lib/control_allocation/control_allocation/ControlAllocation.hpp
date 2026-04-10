@@ -247,6 +247,8 @@ public:
 
 	void setNormalizeRPY(bool normalize_rpy) { _normalize_rpy = normalize_rpy; }
 
+	void setThreeDimensionalThrust(bool enable) { _three_dimensional_thrust = enable; }
+
 protected:
 	friend class ControlAllocator; // for _actuator_sp
 
@@ -262,5 +264,6 @@ protected:
 	matrix::Vector<float, NUM_AXES> _control_trim; 		///< Control at trim actuator values
 	int _num_actuators{0};
 	bool _normalize_rpy{false};				///< if true, normalize roll, pitch and yaw columns
+	bool _three_dimensional_thrust{false};			///< if true, use uniform thrust normalization across all axes
 	bool _had_actuator_failure{false};
 };

@@ -97,6 +97,11 @@ public:
 		normalize[0] = true;
 	}
 
+	void getThreeDimensionalThrust(bool three_dim_thrust[MAX_NUM_MATRICES]) const override
+	{
+		three_dim_thrust[0] = !_geometry.three_dimensional_thrust_disabled;
+	}
+
 	static int computeEffectivenessMatrix(const Geometry &geometry,
 					      EffectivenessMatrix &effectiveness, int actuator_start_index = 0);
 

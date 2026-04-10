@@ -164,6 +164,18 @@ public:
 	}
 
 	/**
+	 * Query if the vehicle has three-dimensional thrust capability (e.g. omnicopter).
+	 * When true, thrust normalization uses a uniform scale across all axes and
+	 * direction-aware saturation clamping is applied during allocation.
+	 */
+	virtual void getThreeDimensionalThrust(bool three_dim_thrust[MAX_NUM_MATRICES]) const
+	{
+		for (int i = 0; i < MAX_NUM_MATRICES; ++i) {
+			three_dim_thrust[i] = false;
+		}
+	}
+
+	/**
 	 * Get the control effectiveness matrix if updated
 	 *
 	 * @return true if updated and matrix is set
