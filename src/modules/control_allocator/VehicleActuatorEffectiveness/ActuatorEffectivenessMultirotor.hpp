@@ -54,6 +54,11 @@ public:
 		normalize[0] = true;
 	}
 
+	void getThreeDimensionalThrust(bool three_dim_thrust[MAX_NUM_MATRICES]) const override
+	{
+		_mc_rotors.getThreeDimensionalThrust(three_dim_thrust);
+	}
+
 	const char *name() const override { return "Multirotor"; }
 
 protected:

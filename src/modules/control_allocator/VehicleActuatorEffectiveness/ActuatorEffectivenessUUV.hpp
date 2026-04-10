@@ -54,6 +54,11 @@ public:
 		normalize[0] = true;
 	}
 
+	void getThreeDimensionalThrust(bool three_dim_thrust[MAX_NUM_MATRICES]) const override
+	{
+		_rotors.getThreeDimensionalThrust(three_dim_thrust);
+	}
+
 	void updateSetpoint(const matrix::Vector<float, NUM_AXES> &control_sp, int matrix_index, ActuatorVector &actuator_sp,
 			    const ActuatorVector &actuator_min, const ActuatorVector &actuator_max) override;
 
