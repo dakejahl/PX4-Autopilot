@@ -27,6 +27,8 @@
 #include <uavcan/protocol/file_server.hpp>
 #include <uavcan/data_type.hpp>
 
+#include <px4_platform_common/log.h>
+
 namespace uavcan_posix
 {
 /**
@@ -438,7 +440,20 @@ protected:
 					} while (nread > 0 && remaining > 0);
 				}
 
-				(void)cache.close(fd, rv != 0 || total_read != inout_size);
+				const bool done = rv != 0 || total_read != (ssize_t)inout_size;
+
+				if (done) {
+					if (rv == 0) {
+						PX4_INFO("UAVCAN firmware update file transfer finished: %s",
+							 path.c_str());
+
+					} else {
+						PX4_WARN("UAVCAN firmware update file read error: %s rv=%d",
+							 path.c_str(), rv);
+					}
+				}
+
+				(void)cache.close(fd, done);
 				inout_size = total_read;
 			}
 		}

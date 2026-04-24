@@ -18,6 +18,8 @@
 
 #include <uavcan/protocol/firmware_update_trigger.hpp>
 
+#include <px4_platform_common/log.h>
+
 // TODO Get rid of the macro
 #if !defined(DIRENT_ISFILE) && defined(DT_REG)
 # define DIRENT_ISFILE(dtype)  ((dtype) == DT_REG)
@@ -94,7 +96,7 @@ protected:
 	 * @return                          True - the class will begin sending update requests.
 	 *                                  False - the node will be ignored, no request will be sent.
 	 */
-	virtual bool shouldRequestFirmwareUpdate(uavcan::NodeID,
+	virtual bool shouldRequestFirmwareUpdate(uavcan::NodeID node_id,
 			const uavcan::protocol::GetNodeInfo::Response &node_info,
 			FirmwareFilePath &out_firmware_file_path)
 	{
@@ -141,6 +143,8 @@ protected:
 				      descriptor.image_crc != node_info.software_version.image_crc)) {
 				rv = true;
 				out_firmware_file_path = bin_file_name;
+				PX4_INFO("UAVCAN firmware update needed: node %d, board 0x%04x, file %s",
+					 int(node_id.get()), board_id, bin_file_name);
 			}
 		}
 
@@ -166,12 +170,27 @@ protected:
 	 * @return                          True - the class will continue sending update requests with new firmware path.
 	 *                                  False - the node will be forgotten, new requests will not be sent.
 	 */
-	virtual bool shouldRetryFirmwareUpdate(uavcan::NodeID,
-					       const uavcan::protocol::file::BeginFirmwareUpdate::Response &,
+	virtual bool shouldRetryFirmwareUpdate(uavcan::NodeID node_id,
+					       const uavcan::protocol::file::BeginFirmwareUpdate::Response &error_response,
 					       FirmwareFilePath &)
 	{
+		PX4_WARN("UAVCAN firmware update rejected by node %d: error=%d \"%s\" (retrying)",
+			 int(node_id.get()), int(error_response.error),
+			 error_response.optional_error_message.c_str());
 		// TODO: Limit the number of attempts per node
 		return true;
+	}
+
+	/**
+	 * Invoked when a node confirms (ERROR_OK or ERROR_IN_PROGRESS) a BeginFirmwareUpdate
+	 * request. This is the point at which the target node has accepted the request and
+	 * will begin pulling the image via uavcan.protocol.file.Read.
+	 */
+	virtual void handleFirmwareUpdateConfirmation(uavcan::NodeID node_id,
+			const uavcan::protocol::file::BeginFirmwareUpdate::Response &response)
+	{
+		PX4_INFO("UAVCAN firmware update started on node %d (response error=%d)",
+			 int(node_id.get()), int(response.error));
 	}
 
 public:
