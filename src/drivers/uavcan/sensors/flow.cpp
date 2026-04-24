@@ -39,7 +39,8 @@ const char *const UavcanFlowBridge::NAME = "flow";
 
 UavcanFlowBridge::UavcanFlowBridge(uavcan::INode &node, NodeInfoPublisher *node_info_publisher) :
 	UavcanSensorBridgeBase("uavcan_flow", ORB_ID(sensor_optical_flow), node_info_publisher),
-	_sub_flow(node)
+	_sub_flow(node),
+	_sub_flow_aux(node)
 {
 	set_device_type(DRV_FLOW_DEVTYPE_UAVCAN);
 }
@@ -54,7 +55,61 @@ UavcanFlowBridge::init()
 		return res;
 	}
 
+	res = _sub_flow_aux.start(FlowAuxCbBinder(this, &UavcanFlowBridge::flow_aux_sub_cb));
+
+	if (res < 0) {
+		DEVICE_LOG("failed to start uavcan flow aux sub: %d", res);
+		return res;
+	}
+
 	return 0;
+}
+
+UavcanFlowBridge::AuxState *UavcanFlowBridge::aux_for_node(int node_id)
+{
+	for (auto &slot : _aux_cache) {
+		if (slot.node_id == node_id) {
+			return &slot;
+		}
+	}
+
+	for (auto &slot : _aux_cache) {
+		if (slot.node_id < 0) {
+			slot.node_id = node_id;
+			return &slot;
+		}
+	}
+
+	return nullptr;
+}
+
+void UavcanFlowBridge::flow_aux_sub_cb(const uavcan::ReceivedDataStructure<com::ark::equipment::flow::MeasurementAux>
+				       &msg)
+{
+	AuxState *aux = aux_for_node(msg.getSrcNodeID().get());
+
+	if (aux == nullptr) {
+		return;
+	}
+
+	// DSDL illumination_mode: 0=bright, 1=low, 2=super-low, 3=unknown.
+	// uORB mode:              0=unknown, 1=bright, 2=low, 3=super-low.
+	switch (msg.illumination_mode) {
+	case 0:  aux->mode = sensor_optical_flow_s::MODE_BRIGHT;         break;
+
+	case 1:  aux->mode = sensor_optical_flow_s::MODE_LOWLIGHT;       break;
+
+	case 2:  aux->mode = sensor_optical_flow_s::MODE_SUPER_LOWLIGHT; break;
+
+	default: aux->mode = sensor_optical_flow_s::MODE_UNKNOWN;        break;
+	}
+
+	aux->shutter             = msg.shutter;
+	aux->motion              = msg.motion;
+	aux->challenging_surface = msg.challenging_surface;
+	aux->chip_health_ok      = msg.chip_health_ok;
+	aux->discard_count       = msg.discard_count;
+	aux->mode_change_count   = msg.mode_change_count;
 }
 
 void UavcanFlowBridge::flow_sub_cb(const uavcan::ReceivedDataStructure<com::hex::equipment::flow::Measurement> &msg)
@@ -86,6 +141,18 @@ void UavcanFlowBridge::flow_sub_cb(const uavcan::ReceivedDataStructure<com::hex:
 	flow.max_flow_rate = NAN;
 	flow.min_ground_distance = NAN;
 	flow.max_ground_distance = NAN;
+
+	const AuxState *aux = aux_for_node(msg.getSrcNodeID().get());
+
+	if (aux != nullptr) {
+		flow.mode                = aux->mode;
+		flow.shutter             = aux->shutter;
+		flow.motion              = aux->motion;
+		flow.challenging_surface = aux->challenging_surface;
+		flow.chip_health_ok      = aux->chip_health_ok;
+		flow.discard_count       = aux->discard_count;
+		flow.mode_change_count   = aux->mode_change_count;
+	}
 
 	flow.timestamp = hrt_absolute_time();
 
