@@ -33,7 +33,8 @@
 
 /**
  * @file sensor_range_finder.hpp
- * Range finder class containing all the required checks
+ * Range finder class containing the validity checks performed on the data
+ * before it is fused by the EKF.
  *
  * @author Mathieu Bresciani <brescianimathieu@gmail.com>
  *
@@ -41,8 +42,8 @@
 #ifndef EKF_SENSOR_RANGE_FINDER_HPP
 #define EKF_SENSOR_RANGE_FINDER_HPP
 
+#include <cstdint>
 #include <matrix/math.hpp>
-#include <lib/mathlib/math/filter/MedianFilter.hpp>
 
 namespace estimator
 {
@@ -69,7 +70,6 @@ public:
 	bool isDataHealthy() const { return _is_sample_ready && _is_sample_valid; }
 	bool isDataReady() const { return _is_sample_ready; }
 	bool isRegularlySendingData() const { return _is_regularly_sending_data; }
-	bool isStuckDetectorEnabled() const { return _stuck_threshold > 0.f; }
 
 	void setSample(const rangeSample &sample)
 	{
@@ -92,18 +92,17 @@ public:
 
 	void setCosMaxTilt(float cos_max_tilt) { _range_cos_max_tilt = cos_max_tilt; }
 
+	// Sensor-reported nominal min/max range. Stored as informational metadata only —
+	// not used for validity gating. Consumers (e.g. control-limit calculations) read
+	// these directly via getValidMinVal()/getValidMaxVal().
 	void setLimits(float min_distance, float max_distance)
 	{
 		_rng_valid_min_val = min_distance;
 		_rng_valid_max_val = max_distance;
 	}
 
-	void setMaxFogDistance(float max_fog_dist) { _max_fog_dist = max_fog_dist; }
-
-	void setQualityHysteresis(float valid_quality_threshold_s)
-	{
-		_quality_hyst_us = uint64_t(valid_quality_threshold_s * 1e6f);
-	}
+	float getValidMinVal() const { return _rng_valid_min_val; }
+	float getValidMaxVal() const { return _rng_valid_max_val; }
 
 	float getCosTilt() const { return _cos_tilt_rng_to_earth; }
 
@@ -115,9 +114,6 @@ public:
 	void setDataReadiness(bool is_ready) { _is_sample_ready = is_ready; }
 	void setValidity(bool is_valid) { _is_sample_valid = is_valid; }
 
-	float getValidMinVal() const { return _rng_valid_min_val; }
-	float getValidMaxVal() const { return _rng_valid_max_val; }
-
 private:
 	void updateSensorToEarthRotation(const matrix::Dcmf &R_to_earth);
 
@@ -126,25 +122,13 @@ private:
 	bool isSampleOutOfDate(uint64_t current_time_us) const;
 	bool isDataContinuous() const { return _dt_data_lpf < 2e6f; }
 	bool isTiltOk() const { return _cos_tilt_rng_to_earth > _range_cos_max_tilt; }
-	bool isDataInRange() const;
-	bool isQualityOk(uint64_t current_time_us) const;
-	void updateStuckCheck();
-	void updateFogCheck(const float dist_bottom, const uint64_t time_us);
+	bool isQualityOk() const { return _sample.quality != 0; }
 
 	rangeSample _sample{};
 
 	bool _is_sample_ready{};	///< true when new range finder data has fallen behind the fusion time horizon and is available to be fused
-	bool _is_sample_valid{};	///< true if range finder sample retrieved from buffer is valid
+	bool _is_sample_valid{};	///< true if the most recent sample passed the validity checks
 	bool _is_regularly_sending_data{false}; ///< true if the interval between two samples is less than the maximum expected interval
-	uint64_t _time_last_valid_us{};	///< time the last range finder measurement was ready (uSec)
-
-	/*
-	 * Stuck check
-	 */
-	bool _is_stuck{};
-	float _stuck_threshold{0.1f};	///< minimum variation in range finder reading required to declare a range finder 'unstuck' when readings recommence after being out of range (m), set to zero to disable
-	float _stuck_min_val{};		///< minimum value for new rng measurement when being stuck
-	float _stuck_max_val{};		///< maximum value for new rng measurement when being stuck
 
 	/*
 	 * Data regularity check
@@ -162,25 +146,10 @@ private:
 	float _cos_pitch_offset{-1.0f}; 		///< cosine of the range finder tilt rotation about the Y body axis
 
 	/*
-	 * Range check
+	 * Sensor-reported nominal range limits (informational; consumed by control-limit code).
 	 */
-	float _rng_valid_min_val{};	///< minimum distance that the rangefinder can measure (m)
-	float _rng_valid_max_val{};	///< maximum distance that the rangefinder can measure (m)
-
-	/*
-	 * Quality check
-	 */
-	uint64_t _time_bad_quality_us{};	///< timestamp at which range finder signal quality was 0 (used for hysteresis)
-	uint64_t _quality_hyst_us{};		///< minimum duration during which the reported range finder signal quality needs to be non-zero in order to be declared valid (us)
-
-	/*
-	 * Fog check
-	 */
-	bool _is_blocked{false};
-	float _max_fog_dist{0.f};	//< maximum distance at which the range finder could detect fog (m)
-	math::MedianFilter<float, 5> _median_dist{};
-	float _prev_median_dist{0.f};
-
+	float _rng_valid_min_val{};	///< minimum distance the rangefinder can measure (m)
+	float _rng_valid_max_val{};	///< maximum distance the rangefinder can measure (m)
 };
 
 } // namespace sensor

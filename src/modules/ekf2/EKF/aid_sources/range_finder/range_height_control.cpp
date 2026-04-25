@@ -56,8 +56,6 @@ void Ekf::controlRangeHaglFusion(const imuSample &imu_sample)
 		// update range sensor angle parameters in case they have changed
 		_range_sensor.setPitchOffset(_params.ekf2_rng_pitch);
 		_range_sensor.setCosMaxTilt(_params.range_cos_max_tilt);
-		_range_sensor.setQualityHysteresis(_params.ekf2_rng_qlty_t);
-		_range_sensor.setMaxFogDistance(_params.ekf2_rng_fog);
 
 		_range_sensor.runChecks(imu_sample.time_us, _R_to_earth);
 

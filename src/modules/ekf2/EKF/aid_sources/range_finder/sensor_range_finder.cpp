@@ -72,29 +72,11 @@ void SensorRangeFinder::updateValidity(uint64_t current_time_us)
 
 	_is_regularly_sending_data = true;
 
-	// Don't run the checks unless we have retrieved new data from the buffer
+	// Only re-evaluate validity when a fresh sample has been popped from the buffer.
+	// Between samples we keep the previous validity verdict.
 	if (_is_sample_ready) {
-		_is_sample_valid = false;
-
-		_time_bad_quality_us = _sample.quality == 0 ? current_time_us : _time_bad_quality_us;
-
-		if (!isQualityOk(current_time_us) || !isTiltOk() || !isDataInRange()) {
-			return;
-		}
-
-		updateStuckCheck();
-		updateFogCheck(getDistBottom(), _sample.time_us);
-
-		if (!_is_stuck && !_is_blocked) {
-			_is_sample_valid = true;
-			_time_last_valid_us = _sample.time_us;
-		}
+		_is_sample_valid = isQualityOk() && isTiltOk();
 	}
-}
-
-bool SensorRangeFinder::isQualityOk(uint64_t current_time_us) const
-{
-	return current_time_us - _time_bad_quality_us > _quality_hyst_us;
 }
 
 void SensorRangeFinder::updateDtDataLpf(uint64_t current_time_us)
@@ -110,61 +92,6 @@ void SensorRangeFinder::updateDtDataLpf(uint64_t current_time_us)
 inline bool SensorRangeFinder::isSampleOutOfDate(uint64_t current_time_us) const
 {
 	return (current_time_us - _sample.time_us) > 2 * RNG_MAX_INTERVAL;
-}
-
-inline bool SensorRangeFinder::isDataInRange() const
-{
-	return (_sample.rng >= _rng_valid_min_val) && (_sample.rng <= _rng_valid_max_val);
-}
-
-void SensorRangeFinder::updateStuckCheck()
-{
-	if (!isStuckDetectorEnabled()) {
-		// Stuck detector disabled
-		_is_stuck = false;
-		return;
-	}
-
-	// Check for "stuck" range finder measurements when range was not valid for certain period
-	// This handles a failure mode observed with some lidar sensors
-	if (((_sample.time_us - _time_last_valid_us) > (uint64_t)10e6)) {
-
-		// require a variance of rangefinder values to check for "stuck" measurements
-		if (_stuck_max_val - _stuck_min_val > _stuck_threshold) {
-			_stuck_min_val = 0.0f;
-			_stuck_max_val = 0.0f;
-			_is_stuck = false;
-
-		} else {
-			if (_sample.rng > _stuck_max_val) {
-				_stuck_max_val = _sample.rng;
-			}
-
-			if (_stuck_min_val < 0.1f || _sample.rng < _stuck_min_val) {
-				_stuck_min_val = _sample.rng;
-			}
-
-			_is_stuck = true;
-		}
-	}
-}
-
-void SensorRangeFinder::updateFogCheck(const float dist_bottom, const uint64_t time_us)
-{
-	if (_max_fog_dist > 0.f) {
-
-		const float median_dist = _median_dist.apply(dist_bottom);
-		const float factor = 2.f; // magic hardcoded factor
-
-		if (!_is_blocked && median_dist < _max_fog_dist && _prev_median_dist - median_dist > factor * _max_fog_dist) {
-			_is_blocked = true;
-
-		} else if (_is_blocked && median_dist > factor * _max_fog_dist) {
-			_is_blocked = false;
-		}
-
-		_prev_median_dist = median_dist;
-	}
 }
 
 } // namespace sensor

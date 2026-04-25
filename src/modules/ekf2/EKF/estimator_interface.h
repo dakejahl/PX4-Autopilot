@@ -115,7 +115,8 @@ public:
 #if defined(CONFIG_EKF2_RANGE_FINDER)
 	void setRangeData(const estimator::sensor::rangeSample &range_sample);
 
-	// set sensor limitations reported by the rangefinder
+	// Forward sensor-reported nominal min/max range. Not used for validity gating;
+	// consumed by HAGL control-limit calculations.
 	void set_rangefinder_limits(float min_distance, float max_distance)
 	{
 		_range_sensor.setLimits(min_distance, max_distance);

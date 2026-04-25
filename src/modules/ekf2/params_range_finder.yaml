@@ -83,16 +83,6 @@ parameters:
       min: 1.0
       max: 10.0
       unit: m
-    EKF2_RNG_QLTY_T:
-      description:
-        short: Minumum range validity period
-        long: Minimum duration during which the reported range finder signal quality
-          needs to be non-zero in order to be declared valid (s)
-      type: float
-      default: 1.0
-      unit: s
-      min: 0.1
-      max: 5
     EKF2_RNG_K_GATE:
       description:
         short: Gate size used for range finder kinematic consistency check
@@ -140,16 +130,3 @@ parameters:
       default: 0.0
       unit: m
       decimal: 3
-    EKF2_RNG_FOG:
-      description:
-        short: Maximum distance at which the range finder could detect fog (m)
-        long: Limit for fog detection. If the range finder measures a distance greater
-          than this value, the measurement is considered to not be blocked by fog or rain.
-          If there's a jump from larger than RNG_FOG to smaller than EKF2_RNG_FOG, the
-          measurement may gets rejected. 0 - disabled
-      type: float
-      default: 3.0
-      min: 0.0
-      max: 20.0
-      unit: m
-      decimal: 1
