@@ -1,0 +1,36 @@
+module_name: IIS2MDC
+parameters:
+  - group: Magnetometer
+    definitions:
+      IIS2MDC_FILT:
+        description:
+          short: IIS2MDC CFG_REG_B filter configuration
+          long: |
+            Selects the CFG_REG_B filter configuration.
+
+            Offset cancellation averages a set/reset measurement pair (AN5080
+            section 8). It removes the intrinsic sensor offset and, as a side
+            effect, halves the bandwidth. The LPF-only setting matches that
+            bandwidth without cancelling the offset, so comparing it against
+            offset cancellation isolates the offset behaviour from the filtering.
+
+            Cycle mode alternates the configurations so a single log can be split
+            into interleaved segments. The active CFG_REG_B value is reported in
+            the debug_key_value topic under the key "mdc_cfgb".
+        type: enum
+        values:
+          0: Neither offset cancellation nor LPF
+          1: Offset cancellation
+          2: LPF only
+          3: Cycle through configurations
+        default: [1]
+      IIS2MDC_CYCLE:
+        description:
+          short: IIS2MDC filter configuration dwell time
+          long: |
+            Time spent in each configuration when IIS2MDC_FILT is set to cycle.
+        type: int32
+        unit: ms
+        min: 100
+        max: 60000
+        default: [2000]

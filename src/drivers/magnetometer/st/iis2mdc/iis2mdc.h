@@ -34,7 +34,14 @@
 #pragma once
 
 #include <px4_platform_common/i2c_spi_buses.h>
+#include <px4_platform_common/module_params.h>
 #include <lib/drivers/magnetometer/PX4Magnetometer.hpp>
+#include <uORB/Publication.hpp>
+#include <uORB/SubscriptionInterval.hpp>
+#include <uORB/topics/debug_key_value.h>
+#include <uORB/topics/parameter_update.h>
+
+using namespace time_literals;
 
 // IIS2MDC Registers
 #define IIS2MDC_ADDR_CFG_REG_A  0x60
@@ -46,19 +53,21 @@
 
 // IIS2MDC Definitions
 #define IIS2MDC_WHO_AM_I         0b01000000
-#define IIS2MDC_STATUS_REG_READY 0b00001111
+#define IIS2MDC_STATUS_REG_READY 0b00001000
 // CFG_REG_A
 #define COMP_TEMP_EN    (1 << 7)
 #define MD_CONTINUOUS   (0 << 0)
 #define ODR_100         ((1 << 3) | (1 << 2))
 // CFG_REG_B
+#define LPF             (1 << 0)
 #define OFF_CANC        (1 << 1)
+#define SET_FREQ        (1 << 2)
 // CFG_REG_C
 #define BDU             (1 << 4)
 
 extern device::Device *IIS2MDC_I2C_interface(const I2CSPIDriverConfig &config);
 
-class IIS2MDC : public I2CSPIDriver<IIS2MDC>
+class IIS2MDC : public I2CSPIDriver<IIS2MDC>, public ModuleParams
 {
 public:
 	IIS2MDC(device::Device *interface, const I2CSPIDriverConfig &config);
@@ -88,8 +97,27 @@ private:
 	uint8_t read_register(uint8_t reg);
 	void write_register(uint8_t reg, uint8_t value);
 
+	// Select the CFG_REG_B filter configuration, and report it so an interleaved
+	// A/B log can be split by configuration after the fact.
+	void ParametersUpdate(bool force = false);
+	void PublishConfig(const hrt_abstime &now);
+
 	device::Device *_interface;
 	PX4Magnetometer _px4_mag;
 	perf_counter_t _sample_count;
 	perf_counter_t _comms_errors;
+	perf_counter_t _data_not_ready;
+
+	uint8_t _cfg_reg_b{OFF_CANC};
+	uint8_t _cycle_index{0};
+	hrt_abstime _cycle_last{0};
+	hrt_abstime _config_published{0};
+
+	uORB::Publication<debug_key_value_s> _debug_pub{ORB_ID(debug_key_value)};
+	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+
+	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::IIS2MDC_FILT>) _param_iis2mdc_filt,
+		(ParamInt<px4::params::IIS2MDC_CYCLE>) _param_iis2mdc_cycle
+	)
 };

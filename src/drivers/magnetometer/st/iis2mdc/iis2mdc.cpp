@@ -37,20 +37,36 @@
 
 #include "iis2mdc.h"
 
+#include <string.h>
+
 using namespace time_literals;
+
+// CFG_REG_B filter configurations selected by IIS2MDC_FILT. Offset cancellation
+// averages a set/reset measurement pair, which also halves the bandwidth, so the
+// LPF-only entry exists to separate the two effects when comparing.
+static constexpr uint8_t FILTER_CONFIG[] = {
+	0,        // 0: neither
+	OFF_CANC, // 1: offset cancellation, the AN5080 reference configuration
+	LPF,      // 2: LPF only, bandwidth matched to offset cancellation
+};
+static constexpr int FILTER_CONFIG_COUNT = sizeof(FILTER_CONFIG) / sizeof(FILTER_CONFIG[0]);
+static constexpr int FILTER_MODE_CYCLE = FILTER_CONFIG_COUNT;
 
 IIS2MDC::IIS2MDC(device::Device *interface, const I2CSPIDriverConfig &config) :
 	I2CSPIDriver(config),
+	ModuleParams(nullptr),
 	_interface(interface),
 	_px4_mag(interface->get_device_id(), config.rotation),
 	_sample_count(perf_alloc(PC_COUNT, "iis2mdc_read")),
-	_comms_errors(perf_alloc(PC_COUNT, "iis2mdc_comms_errors"))
+	_comms_errors(perf_alloc(PC_COUNT, "iis2mdc_comms_errors")),
+	_data_not_ready(perf_alloc(PC_COUNT, "iis2mdc_not_ready"))
 {}
 
 IIS2MDC::~IIS2MDC()
 {
 	perf_free(_sample_count);
 	perf_free(_comms_errors);
+	perf_free(_data_not_ready);
 	delete _interface;
 }
 
@@ -61,18 +77,88 @@ int IIS2MDC::init()
 	}
 
 	write_register(IIS2MDC_ADDR_CFG_REG_A, MD_CONTINUOUS | ODR_100 | COMP_TEMP_EN);
-	write_register(IIS2MDC_ADDR_CFG_REG_B, OFF_CANC);
 	write_register(IIS2MDC_ADDR_CFG_REG_C, BDU);
 
-	_px4_mag.set_scale(100.f / 65535.f); // +/- 50 Gauss, 16bit
+	ModuleParams::updateParams();
+	ParametersUpdate(true); // writes CFG_REG_B
+
+	_px4_mag.set_scale(0.0015f); // 1.5 mGauss/LSB
 
 	ScheduleDelayed(20_ms);
 
 	return PX4_OK;
 }
 
+void IIS2MDC::ParametersUpdate(bool force)
+{
+	if (_parameter_update_sub.updated() || force) {
+		parameter_update_s param_update;
+		_parameter_update_sub.copy(&param_update);
+		updateParams();
+	}
+
+	const hrt_abstime now = hrt_absolute_time();
+	const int32_t mode = _param_iis2mdc_filt.get();
+	uint8_t cfg_reg_b = OFF_CANC;
+
+	if (mode == FILTER_MODE_CYCLE) {
+		int32_t cycle_ms = _param_iis2mdc_cycle.get();
+
+		if (cycle_ms < 100) {
+			cycle_ms = 100;
+		}
+
+		if (_cycle_last == 0) {
+			_cycle_last = now;
+		}
+
+		if (now - _cycle_last >= (hrt_abstime)cycle_ms * 1000) {
+			_cycle_last = now;
+			_cycle_index = (_cycle_index + 1) % FILTER_CONFIG_COUNT;
+		}
+
+		cfg_reg_b = FILTER_CONFIG[_cycle_index];
+
+	} else {
+		int index = mode;
+
+		if (index < 0) {
+			index = 0;
+
+		} else if (index >= FILTER_CONFIG_COUNT) {
+			index = FILTER_CONFIG_COUNT - 1;
+		}
+
+		_cycle_last = 0;
+		_cycle_index = 0;
+		cfg_reg_b = FILTER_CONFIG[index];
+	}
+
+	if (cfg_reg_b != _cfg_reg_b || force) {
+		_cfg_reg_b = cfg_reg_b;
+		write_register(IIS2MDC_ADDR_CFG_REG_B, _cfg_reg_b);
+		PublishConfig(now);
+
+	} else if (now - _config_published >= 1_s) {
+		PublishConfig(now);
+	}
+}
+
+void IIS2MDC::PublishConfig(const hrt_abstime &now)
+{
+	debug_key_value_s dbg{};
+	strncpy(dbg.key, "mdc_cfgb", sizeof(dbg.key));
+	dbg.value = (float)_cfg_reg_b;
+	dbg.timestamp = now;
+	_debug_pub.publish(dbg);
+
+	_config_published = now;
+}
+
 void IIS2MDC::RunImpl()
 {
+	ParametersUpdate();
+
 	uint8_t status = read_register(IIS2MDC_ADDR_STATUS_REG);
 
 	if (status & IIS2MDC_STATUS_REG_READY) {
@@ -95,11 +181,12 @@ void IIS2MDC::RunImpl()
 		}
 
 	} else {
-		PX4_DEBUG("not ready: %u", status);
-		perf_count(_comms_errors);
+		// Polled at twice the ODR so no sample is missed to clock drift; roughly
+		// half the polls find no new data, which is not an error.
+		perf_count(_data_not_ready);
 	}
 
-	ScheduleDelayed(10_ms);
+	ScheduleDelayed(5_ms);
 }
 
 uint8_t IIS2MDC::read_register_block(SensorData *data)
@@ -136,6 +223,10 @@ void IIS2MDC::write_register(uint8_t reg, uint8_t value)
 void IIS2MDC::print_status()
 {
 	I2CSPIDriverBase::print_status();
+	PX4_INFO("CFG_REG_B: 0x%02x (OFF_CANC %s, LPF %s)", _cfg_reg_b,
+		 (_cfg_reg_b & OFF_CANC) ? "on" : "off",
+		 (_cfg_reg_b & LPF) ? "on" : "off");
 	perf_print_counter(_sample_count);
 	perf_print_counter(_comms_errors);
+	perf_print_counter(_data_not_ready);
 }
