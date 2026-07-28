@@ -262,9 +262,10 @@
 
 #define FLASH_BASED_PARAMS
 
-/* Bench jitter instrumentation marker on the FMU_CH8 pad (TIM8_CH4, untouched by DShot when
- * only channels 1-4 carry motors) — see px4_platform_common/jitter_marker.h */
-#define BOARD_JITTER_MARKER_GPIO  /* PI2 */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTI|GPIO_PIN2)
+/* Bench jitter instrumentation marker on the FMU_CH4 pad (TIM5_CH1; an output channel DShot
+ * never claims when only channels 1-3 carry motors stays plain GPIO) — the ARK FPV fixture
+ * wires only M1-M4 to the logic analyzer. See px4_platform_common/jitter_marker.h */
+#define BOARD_JITTER_MARKER_GPIO  /* PH10 */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTH|GPIO_PIN10)
 
 /* High-resolution timer */
 #define HRT_TIMER               3  /* use timer3 for the HRT */
