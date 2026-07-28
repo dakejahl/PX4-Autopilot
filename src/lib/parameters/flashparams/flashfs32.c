@@ -58,6 +58,7 @@
 #include "flashfs.h"
 #include <nuttx/compiler.h>
 #include <nuttx/progmem.h>
+#include <px4_platform_common/jitter_marker.h>
 #include <board_config.h>
 
 #if defined(CONFIG_ARCH_HAVE_PROGMEM)
@@ -986,7 +987,9 @@ parameter_flashfs_write(flash_file_token_t token, uint8_t *buffer, size_t buf_si
 				pf = (flash_entry_header_t *) current_sector->address;
 
 				if (!blank_check(pf, total_size)) {
+					jitter_marker_burst(6);
 					rv = erase_sector(current_sector, pf);
+					jitter_marker_burst(7);
 				}
 			}//free_space_in_sector returned not-zero
 
@@ -1162,6 +1165,7 @@ int parameter_flashfs_init(sector_descriptor_t *fconfig, uint8_t *buffer, uint16
 		if (rv > 0) {
 			rv = 0;
 		}
+
 	}
 
 	return rv;

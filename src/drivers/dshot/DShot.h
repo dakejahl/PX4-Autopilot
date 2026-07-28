@@ -208,6 +208,25 @@ private:
 	perf_counter_t	_serial_telem_error_perf{perf_alloc(PC_COUNT, MODULE_NAME": serial telem error")};
 	perf_counter_t	_serial_telem_timeout_perf{perf_alloc(PC_COUNT, MODULE_NAME": serial telem timeout")};
 	perf_counter_t	_serial_telem_allsampled_perf{perf_alloc(PC_COUNT, MODULE_NAME": serial telem all sampled")};
+	perf_counter_t	_output_interval_perf{perf_alloc(PC_INTERVAL, MODULE_NAME": output interval")};
+
+	// Output-gap watchdog (bench jitter instrumentation): gaps between consecutive
+	// up_dshot_trigger() calls above the threshold are kept in a ring for `dshot status`.
+	// Only fast->slow transitions are recorded so a legitimately slow disarmed cadence
+	// (50 ms backup schedule) does not flush the interesting records.
+	static constexpr uint32_t GAP_RECORD_THRESHOLD_US = 2500;
+	static constexpr unsigned GAP_RECORD_COUNT = 32;
+	struct OutputGapRecord {
+		hrt_abstime timestamp;
+		uint32_t gap_us;
+	};
+	OutputGapRecord _output_gap_records[GAP_RECORD_COUNT] {};
+	unsigned _output_gap_next{0};
+	uint32_t _output_gap_total{0};
+	uint32_t _output_gap_max_us{0};
+	hrt_abstime _output_gap_max_timestamp{0};
+	uint32_t _previous_output_gap_us{0};
+	hrt_abstime _last_trigger_timestamp{0};
 
 	// Commands
 	struct DShotCommand {

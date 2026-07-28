@@ -158,6 +158,28 @@ bool DShot::updateOutputs(float *outputs, unsigned num_outputs, unsigned num_con
 
 	up_dshot_trigger();
 
+	perf_count(_output_interval_perf);
+	const hrt_abstime trigger_timestamp = hrt_absolute_time();
+
+	if (_last_trigger_timestamp != 0) {
+		const uint32_t gap_us = trigger_timestamp - _last_trigger_timestamp;
+
+		if (gap_us > _output_gap_max_us) {
+			_output_gap_max_us = gap_us;
+			_output_gap_max_timestamp = trigger_timestamp;
+		}
+
+		if (gap_us > GAP_RECORD_THRESHOLD_US && _previous_output_gap_us < 20000) {
+			_output_gap_records[_output_gap_next] = {trigger_timestamp, gap_us};
+			_output_gap_next = (_output_gap_next + 1) % GAP_RECORD_COUNT;
+			_output_gap_total++;
+		}
+
+		_previous_output_gap_us = gap_us;
+	}
+
+	_last_trigger_timestamp = trigger_timestamp;
+
 	return true;
 }
 
@@ -1126,6 +1148,19 @@ int DShot::print_status()
 	for (int i = 0; i < DSHOT_MAX_MOTORS; i++) {
 		if (_motor_mask & (1 << i)) {
 			PX4_INFO("    Motor %d: %d poles", i + 1, get_pole_count(i));
+		}
+	}
+
+	print_spacer();
+	PX4_INFO("Output gaps (> %lu us fast->slow transitions): %lu total, max %lu us at t=%llu us",
+		 (unsigned long)GAP_RECORD_THRESHOLD_US, (unsigned long)_output_gap_total,
+		 (unsigned long)_output_gap_max_us, (unsigned long long)_output_gap_max_timestamp);
+
+	for (unsigned i = 0; i < GAP_RECORD_COUNT; i++) {
+		const OutputGapRecord &record = _output_gap_records[(_output_gap_next + i) % GAP_RECORD_COUNT];
+
+		if (record.timestamp != 0) {
+			PX4_INFO("  gap %8lu us ending at t=%llu us", (unsigned long)record.gap_us, (unsigned long long)record.timestamp);
 		}
 	}
 

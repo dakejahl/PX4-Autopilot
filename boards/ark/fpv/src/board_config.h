@@ -262,6 +262,10 @@
 
 #define FLASH_BASED_PARAMS
 
+/* Bench jitter instrumentation marker on the FMU_CH8 pad (TIM8_CH4, untouched by DShot when
+ * only channels 1-4 carry motors) — see px4_platform_common/jitter_marker.h */
+#define BOARD_JITTER_MARKER_GPIO  /* PI2 */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTI|GPIO_PIN2)
+
 /* High-resolution timer */
 #define HRT_TIMER               3  /* use timer3 for the HRT */
 #define HRT_TIMER_CHANNEL       1 /* use capture/compare channel 1 */

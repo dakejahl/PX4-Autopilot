@@ -225,6 +225,11 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 
 	stm32_spiinitialize();
 
+#if defined(BOARD_JITTER_MARKER_GPIO)
+	/* Before flashfs init so a boot-time param sector compaction shows on the marker pad */
+	px4_arch_configgpio(BOARD_JITTER_MARKER_GPIO);
+#endif
+
 #if defined(FLASH_BASED_PARAMS)
 	static sector_descriptor_t params_sector_map[] = {
 		{15, 128 * 1024, 0x081E0000},

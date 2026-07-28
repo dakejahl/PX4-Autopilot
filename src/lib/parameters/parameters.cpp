@@ -56,6 +56,7 @@
 #include <drivers/drv_hrt.h>
 #include <lib/perf/perf_counter.h>
 #include <px4_platform_common/px4_config.h>
+#include <px4_platform_common/jitter_marker.h>
 #include <px4_platform_common/atomic_bitset.h>
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/posix.h>
@@ -857,9 +858,13 @@ int param_save_default(bool blocking)
 		}
 
 	} else {
+		jitter_marker_burst(4);
+		const hrt_abstime flash_save_start = hrt_absolute_time();
 		perf_begin(param_export_perf);
 		res = flash_param_save(nullptr);
 		perf_end(param_export_perf);
+		jitter_marker_burst(5);
+		PX4_INFO("flash param save took %.1f ms", (double)hrt_elapsed_time(&flash_save_start) / 1000.0);
 	}
 
 	if (res != PX4_OK) {

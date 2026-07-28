@@ -46,6 +46,7 @@
 #include "esc_calibration.h"
 #define DEFINE_GET_PX4_CUSTOM_MODE
 #include "px4_custom_mode.h"
+#include <px4_platform_common/jitter_marker.h>
 #include "ModeUtil/control_mode.hpp"
 #include "ModeUtil/conversions.hpp"
 #include <lib/modes/ui.hpp>
@@ -739,6 +740,8 @@ transition_result_t Commander::arm(arm_disarm_reason_t calling_reason, bool run_
 
 	_status_changed = true;
 
+	jitter_marker_burst(2);
+
 	return TRANSITION_CHANGED;
 }
 
@@ -795,6 +798,8 @@ transition_result_t Commander::disarm(arm_disarm_reason_t calling_reason, bool f
 	_param_com_flight_uuid.commit_no_notification();
 
 	_status_changed = true;
+
+	jitter_marker_burst(3);
 
 	return TRANSITION_CHANGED;
 }
