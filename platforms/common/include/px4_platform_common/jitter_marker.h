@@ -28,6 +28,15 @@
 
 static inline void jitter_marker_burst(int pulse_count)
 {
+	/* Re-assert the pad config: the boot-time setup can be overridden once the output
+	 * timers configure (per-translation-unit static — reconfiguring is idempotent). */
+	static bool configured = false;
+
+	if (!configured) {
+		px4_arch_configgpio(BOARD_JITTER_MARKER_GPIO);
+		configured = true;
+	}
+
 	for (int i = 0; i < pulse_count; i++) {
 		px4_arch_gpiowrite(BOARD_JITTER_MARKER_GPIO, true);
 		up_udelay(5);
