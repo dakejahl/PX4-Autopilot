@@ -1108,6 +1108,67 @@ int parameter_flashfs_erase(void)
 
 
 /****************************************************************************
+ * Name: parameter_flashfs_compact_if_full
+ *
+ * Description:
+ *   If the sector cannot take another entry the size of the one it holds
+ *   (plus margin for growth), rewrite that entry now through the normal
+ *   write path, which wraps and erases the sector. Doing this at boot means
+ *   the seconds-long erase — which hardware-stalls every read from the same
+ *   flash bank, silencing the DShot outputs long enough to trip the AM32
+ *   signal-loss reset — never lands on a later save. In-service saves stay
+ *   append-only (a few 32-byte row programs). If the blob outgrows the
+ *   margin between boots the old save-time wrap still covers it.
+ *
+ * Returned value:
+ *   1 if a compaction (sector erase + rewrite) was performed, 0 if there
+ *   was enough space or nothing is stored, or a negative errno.
+ *
+ ****************************************************************************/
+
+int parameter_flashfs_compact_if_full(void)
+{
+	if (sector_map == NULL) {
+		return -ENXIO;
+	}
+
+	flash_entry_header_t *pf = find_entry(parameters_token);
+
+	if (pf == NULL) {
+		return 0;
+	}
+
+	size_t data_length = entry_data_length(pf);
+	size_t entry_total = sizeof(flash_entry_header_t) + data_length + SizeMask;
+	size_t reserve = entry_total + 2048;
+
+	if (check_free_space_in_sector(pf, reserve) == NULL) {
+		return 0;
+	}
+
+	/* The entry data lives in the flash about to be erased: copy it out first. */
+
+	uint8_t *buffer;
+	size_t buffer_size = data_length;
+	int rv = parameter_flashfs_alloc(parameters_token, &buffer, &buffer_size);
+
+	if (rv != 0) {
+		return rv;
+	}
+
+	if (buffer_size < data_length) {
+		parameter_flashfs_free();
+		return -ENOMEM;
+	}
+
+	memcpy(buffer, entry_data(pf), data_length);
+	rv = parameter_flashfs_write(parameters_token, buffer, data_length);
+	parameter_flashfs_free();
+
+	return rv >= 0 ? 1 : rv;
+}
+
+/****************************************************************************
  * Name: parameter_flashfs_init
  *
  * Description:
@@ -1161,6 +1222,14 @@ int parameter_flashfs_init(sector_descriptor_t *fconfig, uint8_t *buffer, uint16
 		// A positive return value means flash space has been erased successfully.
 		if (rv > 0) {
 			rv = 0;
+		}
+
+	} else {
+		// Pay the sector-wrap erase here at boot, not on a save at the disarm edge.
+		int compacted = parameter_flashfs_compact_if_full();
+
+		if (compacted < 0) {
+			rv = compacted;
 		}
 	}
 
