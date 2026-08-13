@@ -1,0 +1,12 @@
+module_name: ppm_rc
+parameters:
+- group: System
+  definitions:
+    RC_PPM_ENABLE:
+      description:
+        short: PPM RC input enable
+        long: Enables the PPM RC driver, which decodes PPM on the pin assigned
+          the "PPM Input" output function.
+      type: boolean
+      default: 0
+      reboot_required: true

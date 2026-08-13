@@ -324,6 +324,17 @@
 #define HRT_PPM_CHANNEL         /* T8C1 */  1  /* use capture/compare channel 1 */
 #define GPIO_PPM_IN             /* PI5 T8C1 */ GPIO_TIM8_CH1IN_2
 
+/* Selectable PPM input pins, both on HRT_PPM_CHANNEL. Second element is the serial
+ * pin sharing the same package pin, 0 if none. Selected by RC_PPM_PIN.
+ *
+ *   0: PI5, FMU_PPM_INPUT, not broken out on every carrier
+ *   1: PC6, USART6_TX, the RC connector's TX pin
+ */
+#define GPIO_PPM_IN_LIST { \
+		{ GPIO_TIM8_CH1IN_2, 0 }, \
+		{ GPIO_TIM8_CH1IN_1, GPIO_USART6_TX }, \
+	}
+
 /* PWM input driver. Use FMU AUX5 pins attached to timer4 channel 2 */
 #define PWMIN_TIMER                       4
 #define PWMIN_TIMER_CHANNEL    /* T4C2 */ 2

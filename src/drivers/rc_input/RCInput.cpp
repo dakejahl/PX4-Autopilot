@@ -108,19 +108,16 @@ RCInput::init()
 	sbus_config(_rcs_fd, board_rc_singlewire(_device));
 
 #ifdef GPIO_PPM_IN
+	const int32_t ppm_pin = _param_rc_ppm_pin.get();
+	_ppm_pin = (ppm_pin > 0 && ppm_pin < PPM_PIN_COUNT) ? ppm_pin : 0;
+
 	// disable CPPM input by mapping it away from the timer capture input
-	px4_arch_unconfiggpio(GPIO_PPM_IN);
+	px4_arch_unconfiggpio(ppm_capture_pin());
 
-#ifdef RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX
-
-	// If we use the same STM32 pin for PPM input as well as serial input, we
-	// need to configure the serial port, as long as we're actually using that
-	// serial device.
-	if (strcmp(_device, RC_SERIAL_PORT) == 0) {
-		px4_arch_configgpio(RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX);
+	// hand the pin back to the serial port if the two share one
+	if (ppm_shared_serial_pin() != 0) {
+		px4_arch_configgpio(ppm_shared_serial_pin());
 	}
-
-#endif // RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX
 
 #endif // GPIO_PPM_IN
 
@@ -299,6 +296,18 @@ void RCInput::set_rc_scan_state(RC_SCAN newState)
 	_rc_scan_begin = 0;
 	_rc_scan_locked = false;
 }
+
+#ifdef GPIO_PPM_IN
+uint32_t RCInput::ppm_shared_serial_pin() const
+{
+	// only relevant when this instance actually owns the RC serial port
+	if (strcmp(_device, RC_SERIAL) != 0) {
+		return 0;
+	}
+
+	return PPM_PINS[_ppm_pin].shared_serial;
+}
+#endif // GPIO_PPM_IN
 
 void RCInput::rc_io_invert(bool invert)
 {
@@ -680,16 +689,13 @@ void RCInput::Run()
 			if (_rc_scan_begin == 0) {
 				_rc_scan_begin = cycle_timestamp;
 
-#ifdef RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX
-
-				if (strcmp(_device, RC_SERIAL_PORT) == 0) {
-					px4_arch_unconfiggpio(RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX);
+				// release the pin from the serial port first if the two share one
+				if (ppm_shared_serial_pin() != 0) {
+					px4_arch_unconfiggpio(ppm_shared_serial_pin());
 				}
 
-#endif // RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX
-
 				// Configure timer input pin for CPPM
-				px4_arch_configgpio(GPIO_PPM_IN);
+				px4_arch_configgpio(ppm_capture_pin());
 
 			} else if (_rc_scan_locked || cycle_timestamp - _rc_scan_begin < rc_scan_max) {
 
@@ -710,15 +716,12 @@ void RCInput::Run()
 
 			} else {
 				// disable CPPM input by mapping it away from the timer capture input
-				px4_arch_unconfiggpio(GPIO_PPM_IN);
+				px4_arch_unconfiggpio(ppm_capture_pin());
 
-#ifdef RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX
-
-				if (strcmp(_device, RC_SERIAL_PORT) == 0) {
-					px4_arch_configgpio(RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX);
+				// hand the pin back to the serial port if the two share one
+				if (ppm_shared_serial_pin() != 0) {
+					px4_arch_configgpio(ppm_shared_serial_pin());
 				}
-
-#endif // RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX
 
 				// Scan the next protocol
 				set_rc_scan_state(RC_SCAN_CRSF);

@@ -526,6 +526,11 @@ else
 	then
 		rpm_capture start
 	fi
+	# PPM RC input driver, decodes PPM on the pin assigned the PPM Input function
+	if param greater -s RC_PPM_ENABLE 0
+	then
+		ppm_rc start
+	fi
 	# Camera capture driver
 	if param greater -s CAM_CAP_FBACK 0
 	then
