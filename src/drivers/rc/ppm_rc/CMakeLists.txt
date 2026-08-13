@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2015-2018 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2026 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,27 +31,23 @@
 #
 ############################################################################
 
-add_library(rc
-	crsf.cpp
-	ghst.cpp
-	st24.cpp
-	sumd.cpp
-	sbus.cpp
-	dsm.cpp
-	common_rc.cpp
-	ppm_decoder.cpp
-)
-target_compile_options(rc
-	PRIVATE
-		#-DDEBUG_BUILD
-		-Wno-unused-result
-)
-target_link_libraries(rc PRIVATE prebuild_targets)
+# The output function parameters are named after the pin group the board exposes
+set(PARAM_PREFIX PWM_MAIN)
 
-if(PX4_TESTING AND (${PX4_PLATFORM} MATCHES "posix"))
-	add_subdirectory(rc_tests)
+if(CONFIG_BOARD_IO)
+	set(PARAM_PREFIX PWM_AUX)
 endif()
 
-if(${PX4_PLATFORM} MATCHES "nuttx")
-	target_link_libraries(rc PRIVATE nuttx_fs)
-endif()
+px4_add_module(
+	MODULE drivers__rc__ppm_rc
+	MAIN ppm_rc
+	COMPILE_FLAGS
+		-DPARAM_PREFIX="${PARAM_PREFIX}"
+	SRCS
+		PpmRc.cpp
+		PpmRc.hpp
+	MODULE_CONFIG
+		ppm_rc_params.yaml
+	DEPENDS
+		rc
+	)

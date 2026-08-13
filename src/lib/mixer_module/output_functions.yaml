@@ -71,3 +71,9 @@ functions:
         condition: "RPM_CAP_ENABLE==0"
         text: "RPM needs to be enabled via RPM_CAP_ENABLE parameter."
       exclude_from_actuator_testing: true
+    PPM_Input:
+      start: 2076
+      note:
+        condition: "RC_PPM_ENABLE==0"
+        text: "PPM RC needs to be enabled via RC_PPM_ENABLE parameter."
+      exclude_from_actuator_testing: true
