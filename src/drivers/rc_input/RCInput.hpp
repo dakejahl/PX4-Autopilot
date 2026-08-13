@@ -130,6 +130,30 @@ private:
 	void rc_io_invert(bool invert);
 	void swap_rx_tx(void);
 
+#if defined(GPIO_PPM_IN)
+	// A board may route more than one pin to HRT_PPM_CHANNEL. Each option pairs the timer
+	// capture configuration with the serial pin sharing the same package pin, 0 if none.
+	struct PpmPin {
+		uint32_t capture;
+		uint32_t shared_serial;
+	};
+
+#  if defined(GPIO_PPM_IN_LIST)
+	static constexpr PpmPin PPM_PINS[] = GPIO_PPM_IN_LIST;
+#  elif defined(RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX)
+	static constexpr PpmPin PPM_PINS[] {{GPIO_PPM_IN, RC_SERIAL_PORT_SHARED_PPM_PIN_GPIO_RX}};
+#  else
+	static constexpr PpmPin PPM_PINS[] {{GPIO_PPM_IN, 0}};
+#  endif
+
+	static constexpr uint8_t PPM_PIN_COUNT{sizeof(PPM_PINS) / sizeof(PPM_PINS[0])};
+
+	uint32_t ppm_capture_pin() const { return PPM_PINS[_ppm_pin].capture; }
+	uint32_t ppm_shared_serial_pin() const;
+
+	uint8_t _ppm_pin{0};
+#endif // GPIO_PPM_IN
+
 	input_rc_s _input_rc{};
 	hrt_abstime _rc_scan_begin{0};
 
@@ -171,6 +195,7 @@ private:
 		(ParamInt<px4::params::RC_RSSI_PWM_CHAN>) _param_rc_rssi_pwm_chan,
 		(ParamInt<px4::params::RC_RSSI_PWM_MIN>) _param_rc_rssi_pwm_min,
 		(ParamInt<px4::params::RC_RSSI_PWM_MAX>) _param_rc_rssi_pwm_max,
-		(ParamInt<px4::params::RC_INPUT_PROTO>) _param_rc_input_proto
+		(ParamInt<px4::params::RC_INPUT_PROTO>) _param_rc_input_proto,
+		(ParamInt<px4::params::RC_PPM_PIN>) _param_rc_ppm_pin
 	)
 };

@@ -23,6 +23,20 @@ parameters:
             max: 7
             default: -1
 
+        RC_PPM_PIN:
+            description:
+                short: PPM input pin
+                long: |
+                    Selects which pin carries PPM on boards that route more than one.
+                    Index into the board's PPM pin list, 0 is the board default.
+                    No effect on boards with a single PPM pin.
+            category: System
+            type: int32
+            min: 0
+            max: 3
+            default: 0
+            reboot_required: true
+
 serial_config:
     - command: set RC_INPUT_ARGS "-d ${SERIAL_DEV}"
       port_config_param:
