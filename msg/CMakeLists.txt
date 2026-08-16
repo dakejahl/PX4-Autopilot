@@ -199,6 +199,7 @@ set(msg_files
 	RtlTimeEstimate.msg
 	SatelliteInfo.msg
 	SensorAccel.msg
+	SensorAccelFft.msg
 	SensorAccelFifo.msg
 	SensorBaro.msg
 	SensorCombined.msg
