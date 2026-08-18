@@ -281,6 +281,7 @@ void PAA3905::RunImpl()
 							_mode = Mode::Bright;
 							_scheduled_interval_us = SAMPLE_INTERVAL_MODE_0 / 2;
 							perf_count(_mode_change_bright_perf);
+							if (_mode_change_count < UINT16_MAX) { ++_mode_change_count; }
 						}
 
 					} else if (ams_mode == 0x1) {
@@ -289,6 +290,7 @@ void PAA3905::RunImpl()
 							_mode = Mode::LowLight;
 							_scheduled_interval_us = SAMPLE_INTERVAL_MODE_1 / 2;
 							perf_count(_mode_change_low_light_perf);
+							if (_mode_change_count < UINT16_MAX) { ++_mode_change_count; }
 						}
 
 					} else if (ams_mode == 0x2) {
@@ -297,6 +299,7 @@ void PAA3905::RunImpl()
 							_mode = Mode::SuperLowLight;
 							_scheduled_interval_us = SAMPLE_INTERVAL_MODE_2 / 2;
 							perf_count(_mode_change_super_low_light_perf);
+							if (_mode_change_count < UINT16_MAX) { ++_mode_change_count; }
 						}
 
 					} else {
@@ -361,6 +364,7 @@ void PAA3905::RunImpl()
 						// false motion report, discarding
 						data_valid = false;
 						perf_count(_false_motion_perf);
+						if (_discard_count < UINT16_MAX) { ++_discard_count; }
 					}
 
 					break;
@@ -374,6 +378,7 @@ void PAA3905::RunImpl()
 						// false motion report, discarding
 						data_valid = false;
 						perf_count(_false_motion_perf);
+						if (_discard_count < UINT16_MAX) { ++_discard_count; }
 					}
 
 					break;
@@ -387,6 +392,7 @@ void PAA3905::RunImpl()
 						// false motion report, discarding
 						data_valid = false;
 						perf_count(_false_motion_perf);
+						if (_discard_count < UINT16_MAX) { ++_discard_count; }
 					}
 
 					break;
@@ -403,6 +409,14 @@ void PAA3905::RunImpl()
 
 				// motion in burst transfer
 				const bool motion_reported = (buffer.data.Motion & Motion_Bit::MotionOccurred);
+				const bool challenging_surface = (buffer.data.Motion & Motion_Bit::ChallengingSurface);
+
+				sensor_optical_flow.shutter = shutter;
+				sensor_optical_flow.motion = motion_reported;
+				sensor_optical_flow.challenging_surface = challenging_surface;
+				sensor_optical_flow.chip_health_ok = ((buffer.data.Observation & 0x3F) == 0x3F) && (_failure_count == 0);
+				sensor_optical_flow.discard_count = _discard_count;
+				sensor_optical_flow.mode_change_count = _mode_change_count;
 
 				const int16_t delta_x_raw = combine(buffer.data.Delta_X_H, buffer.data.Delta_X_L);
 				const int16_t delta_y_raw = combine(buffer.data.Delta_Y_H, buffer.data.Delta_Y_L);
