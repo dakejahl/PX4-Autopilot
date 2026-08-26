@@ -65,6 +65,10 @@
 #include "uavcan_main.hpp"
 #include <uavcan/util/templates.hpp>
 
+#if defined(UAVCAN_SOCKETCAN_NUTTX)
+#include <net/if.h>
+#endif
+
 #include <uavcan/protocol/param/ExecuteOpcode.hpp>
 
 //todo:The Inclusion of file_server_backend is killing
@@ -1268,10 +1272,12 @@ UavcanNode::print_info()
 
 	printf("\n");
 
+#if !defined(UAVCAN_SOCKETCAN_NUTTX)
 	// See https://github.com/PX4/PX4-Autopilot/issues/22871
 	printf("WARNING: CAN error counter values below may increase during this function call due to internal counter reading implementation.\n");
 	printf("Do not fully trust these counters until this issue is fixed.\n");
 	printf("\n");
+#endif
 
 	// UAVCAN node perfcounters
 	printf("UAVCAN node status:\n");
@@ -1289,6 +1295,33 @@ UavcanNode::print_info()
 		auto iface = _node.getDispatcher().getCanIOManager().getCanDriver().getIface(i);
 
 		if (iface) {
+#if defined(UAVCAN_SOCKETCAN_NUTTX)
+			{
+				auto *sif = static_cast<UAVCAN_DRIVER::CanIface *>(iface);
+				uint8_t state = 0;
+				uint8_t txerr = 0;
+				uint8_t rxerr = 0;
+				uint32_t overruns = 0;
+
+				if (sif->queryErrors(state, txerr, rxerr, overruns) == 0) {
+					const char *st = "unknown";
+
+					switch (state) {
+					case CAN_ERRSTATE_ACTIVE: st = "error-active"; break;
+
+					case CAN_ERRSTATE_WARNING: st = "error-warning"; break;
+
+					case CAN_ERRSTATE_PASSIVE: st = "error-passive"; break;
+
+					case CAN_ERRSTATE_BUSOFF: st = "bus-off"; break;
+					}
+
+					printf("\tBus state: %s\n", st);
+					printf("\tTXERRCNT: %u  RXERRCNT: %u\n", txerr, rxerr);
+					printf("\tRX overruns: %" PRIu32 "\n", overruns);
+				}
+			}
+#endif
 			printf("\tHW errors: %" PRIu64 "\n", iface->getErrorCount());
 
 			auto iface_perf_cnt = _node.getDispatcher().getCanIOManager().getIfacePerfCounters(i);

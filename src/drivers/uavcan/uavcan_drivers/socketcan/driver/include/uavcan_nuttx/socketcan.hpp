@@ -51,6 +51,7 @@ class CanIface : public uavcan::ICanIface
 	, uavcan::Noncopyable
 {
 	int               _fd{-1};
+	uint32_t          _index{0};
 	bool              _can_fd{false};
 
 	//// Send msg structure
@@ -90,6 +91,15 @@ public:
 	uavcan::uint16_t getNumFilters() const override;
 
 	int getFD();
+
+	/**
+	 * Read FlexCAN ESR1/ECR plus RX overrun count via SIOCGCANERRORS.
+	 * Returns 0 on success.
+	 */
+	int queryErrors(uint8_t &state, uint8_t &txerr, uint8_t &rxerr,
+			uint32_t &rx_overruns) const;
+
+	int setBitRate(uint32_t bitrate);
 };
 
 /**

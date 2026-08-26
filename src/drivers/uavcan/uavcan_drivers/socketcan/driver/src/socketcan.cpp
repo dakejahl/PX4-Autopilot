@@ -46,6 +46,7 @@
 
 #include <net/if.h>
 #include <sys/ioctl.h>
+#include <inttypes.h>
 #include <string.h>
 #include <errno.h>
 
@@ -80,6 +81,7 @@ uavcan::uint32_t CanIface::socketInit(uint32_t index)
 	bool can_fd = 0;
 
 	_can_fd = can_fd;
+	_index = index;
 
 	/* open socket */
 	if ((_fd = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
@@ -276,8 +278,16 @@ uavcan::int16_t CanIface::configureFilters(const uavcan::CanFilterConfig *filter
 
 uavcan::uint64_t CanIface::getErrorCount() const
 {
-	//FIXME query SocketCAN network stack
-	return 0;
+	uint8_t state = 0;
+	uint8_t txerr = 0;
+	uint8_t rxerr = 0;
+	uint32_t overruns = 0;
+
+	if (queryErrors(state, txerr, rxerr, overruns) != 0) {
+		return 0;
+	}
+
+	return static_cast<uavcan::uint64_t>(txerr) + rxerr + overruns;
 }
 
 uavcan::uint16_t CanIface::getNumFilters() const
@@ -291,6 +301,65 @@ int CanIface::getFD()
 	return _fd;
 }
 
+int CanIface::queryErrors(uint8_t &state, uint8_t &txerr, uint8_t &rxerr,
+			  uint32_t &rx_overruns) const
+{
+	if (_fd < 0) {
+		return -1;
+	}
+
+	struct ifreq ifr {};
+
+	snprintf(ifr.ifr_name, IFNAMSIZ, "can%" PRIu32, _index);
+
+	ifr.ifr_name[IFNAMSIZ - 1] = '\0';
+
+	if (ioctl(_fd, SIOCGCANERRORS, &ifr) < 0) {
+		return -1;
+	}
+
+	state = ifr.ifr_ifru.ifru_can_errors.state;
+	txerr = ifr.ifr_ifru.ifru_can_errors.txerr;
+	rxerr = ifr.ifr_ifru.ifru_can_errors.rxerr;
+	rx_overruns = ifr.ifr_ifru.ifru_can_errors.rx_overruns;
+	return 0;
+}
+
+int CanIface::setBitRate(uint32_t bitrate)
+{
+	if (_fd < 0 || bitrate == 0) {
+		return -1;
+	}
+
+	struct ifreq ifr {};
+
+	snprintf(ifr.ifr_name, IFNAMSIZ, "can%" PRIu32, _index);
+
+	ifr.ifr_name[IFNAMSIZ - 1] = '\0';
+
+	const uint16_t kbps = static_cast<uint16_t>(bitrate / 1000);
+
+	if (ioctl(_fd, SIOCGCANBITRATE, &ifr) == 0) {
+		if (ifr.ifr_ifru.ifru_can_data.arbi_bitrate == kbps) {
+			return 0;
+		}
+
+	} else {
+		ifr.ifr_ifru.ifru_can_data.arbi_samplep = 80;
+		ifr.ifr_ifru.ifru_can_data.data_samplep = 80;
+		ifr.ifr_ifru.ifru_can_data.data_bitrate = 0;
+	}
+
+	ifr.ifr_ifru.ifru_can_data.arbi_bitrate = kbps;
+
+	if (ioctl(_fd, SIOCSCANBITRATE, &ifr) < 0) {
+		PX4_ERR("SIOCSCANBITRATE can%" PRIu32 " %u kbit/s failed", _index, kbps);
+		return -1;
+	}
+
+	return 0;
+}
+
 uavcan::uint32_t CanDriver::detectBitRate(void (*idle_callback)())
 {
 	//FIXME
@@ -302,24 +371,47 @@ int CanDriver::init(uavcan::uint32_t bitrate)
 	for (int i = 0; i < UAVCAN_SOCKETCAN_NUM_IFACES; i++) {
 		pfds[i].fd     = if_[i].getFD();
 		pfds[i].events = POLLIN | POLLOUT;
-	}
 
-	/*
-	 * TODO add filter configuration ioctl
-	 */
+		if (bitrate > 0 && if_[i].getFD() >= 0) {
+			if_[i].setBitRate(bitrate);
+		}
+	}
 
 	return 0;
 }
 
 uavcan::uint32_t CanDriver::getRxQueueOverflowCount() const
 {
-	//FIXME query SocketCAN network stack
-	return 0;
+	uint32_t total = 0;
+
+	for (int i = 0; i < UAVCAN_SOCKETCAN_NUM_IFACES; i++) {
+		uint8_t state = 0;
+		uint8_t txerr = 0;
+		uint8_t rxerr = 0;
+		uint32_t overruns = 0;
+
+		if (if_[i].queryErrors(state, txerr, rxerr, overruns) == 0) {
+			total += overruns;
+		}
+	}
+
+	return total;
 }
 
 bool CanDriver::isInBusOffState() const
 {
-	//FIXME no interface available yet, maybe make a NuttX ioctl
+	for (int i = 0; i < UAVCAN_SOCKETCAN_NUM_IFACES; i++) {
+		uint8_t state = 0;
+		uint8_t txerr = 0;
+		uint8_t rxerr = 0;
+		uint32_t overruns = 0;
+
+		if (if_[i].queryErrors(state, txerr, rxerr, overruns) == 0 &&
+		    state == CAN_ERRSTATE_BUSOFF) {
+			return true;
+		}
+	}
+
 	return false;
 }
 
