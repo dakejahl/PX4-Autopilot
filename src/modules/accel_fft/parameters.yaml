@@ -1,0 +1,45 @@
+module_name: accel_fft
+parameters:
+- group: Sensors
+  definitions:
+    IMU_ACC_FFT_EN:
+      description:
+        short: IMU accel FFT enable
+      type: boolean
+      default: 0
+      reboot_required: true
+    IMU_ACC_FFT_MIN:
+      description:
+        short: IMU accel FFT minimum frequency
+      type: float
+      default: 30.0
+      min: 1
+      max: 1000
+      unit: Hz
+      reboot_required: true
+    IMU_ACC_FFT_MAX:
+      description:
+        short: IMU accel FFT maximum frequency
+      type: float
+      default: 150.0
+      min: 1
+      max: 1000
+      unit: Hz
+      reboot_required: true
+    IMU_ACC_FFT_LEN:
+      description:
+        short: IMU accel FFT length
+      type: enum
+      values:
+        256: '256'
+        512: '512'
+        1024: '1024'
+      default: 512
+      reboot_required: true
+    IMU_ACC_FFT_SNR:
+      description:
+        short: IMU accel FFT SNR
+      type: float
+      default: 10.0
+      min: 1
+      max: 30

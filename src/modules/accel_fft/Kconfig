@@ -1,0 +1,12 @@
+menuconfig MODULES_ACCEL_FFT
+	bool "accel_fft"
+	default n
+	---help---
+		Enable support for accel_fft
+
+menuconfig USER_ACCEL_FFT
+	bool "accel_fft running as userspace module"
+	default n
+	depends on BOARD_PROTECTED && MODULES_ACCEL_FFT
+	---help---
+		Put accel_fft in userspace memory
