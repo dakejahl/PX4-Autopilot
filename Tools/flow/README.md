@@ -1,5 +1,7 @@
 # Raw flow capture
 
+Branch and flight workflow: [WORKFLOW.md](WORKFLOW.md).
+
 `CONFIG_PAA3905_RAW_DEBUG=y` is enabled on this branch for `ark_can-flow-mr_default` and `ark_fmu-v6x_default`. Build and flash both. On the FC, enable `UAVCAN_SUB_FLOW` and normal logging (`SDLOG_PROFILE` includes Default; `SDLOG_MODE=1` also records disarmed bench tests). Verify `listener flow_raw`, `logger status`, and `uavcan status` before recording.
 
 | Topic/field | Meaning |
