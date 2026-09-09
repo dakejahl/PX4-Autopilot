@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 
 import numpy as np
-from compare_raw_flow import interpolate, fit_model, rotation, analyze
+from compare_raw_flow import interpolate, fit_model, rotation, analyze, merge_reads
 
 
 class RawFlowAnalysisTest(unittest.TestCase):
@@ -27,6 +27,23 @@ class RawFlowAnalysisTest(unittest.TestCase):
         np.testing.assert_allclose(fitted, model, atol=1e-8)
         with self.assertRaises(ValueError):
             fit_model(np.ones((1000, 2)), counts, np.ones(1000, dtype=bool))
+
+    def test_merge_reads_folds_stale_pairs(self):
+        raw = dict(timestamp_sample=np.array([100, 120, 140, 140.5, 160, 160.2, 180]) * 1e3,
+                   interval_us=np.array([0, 20000, 20000, 500, 20000, 200, 20000]),
+                   delta_x=np.array([0, 3, 0, -4, 0, 5, 1], dtype=np.int16),
+                   delta_y=np.array([0, 1, 0, 2, 0, 0, 0], dtype=np.int16),
+                   gyro_samples=np.array([0, 9, 9, 1, 9, 0, 9]),
+                   timestamp_sample_valid=np.array([1, 1, 1, 1, 1, 1, 1]),
+                   shutter=np.array([1, 2, 2, 3, 3, 4, 5]), frame_counter=np.arange(7),
+                   **{f'gyro_integral[{i}]': np.array([np.nan, .1, .2, .01, .3, np.nan, .4]) for i in range(3)})
+        merged = merge_reads(raw, 3000)
+        np.testing.assert_array_equal(merged["interval_us"], [0, 20000, 20500, 20200, 20000])
+        np.testing.assert_array_equal(merged["delta_x"], [0, 3, -4, 5, 1])
+        np.testing.assert_array_equal(merged["shutter"], [1, 2, 3, 4, 5])
+        np.testing.assert_array_equal(merged["gyro_samples"], [0, 9, 10, 0, 9])
+        np.testing.assert_allclose(merged["gyro_integral[0]"], [np.nan, .1, .21, np.nan, .4])
+        self.assertEqual(len(merged["timestamp_sample"]), 5)
 
     def test_quaternion_direction(self):
         q = np.array([[np.sqrt(.5), 0, 0, np.sqrt(.5)]])
@@ -66,7 +83,7 @@ class RawFlowAnalysisTest(unittest.TestCase):
                                    gnss_instance=0, range_instance=0, node_yaw_deg=180., raw_yaw_deg=0.,
                                    flow_minus_gnss=[0., 0., 0.], gnss_receive_time=False, gnss_delay_ms=0.,
                                    max_speed_error=.5, max_gnss_gap=.3, max_range_gap=.1,
-                                   include_ground=True, squal_min=1, scan_ms=15)
+                                   include_ground=True, squal_min=1, scan_ms=15, min_interval_ms=3.)
             analyze(args)
             result = json.loads((Path(temp)/'fit.json').read_text())
             self.assertLessEqual(abs(result['reference_shift_ms'] - 7), 1)

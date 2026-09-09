@@ -42,6 +42,31 @@ def rotation(q):
     ]).transpose(2, 0, 1)
 
 
+def merge_reads(raw, min_interval_us):
+    """Fold reads that followed the previous one within min_interval_us into that read.
+
+    The chip clears its delta accumulator on every Motion_Burst read, so a backup poll
+    landing just before the MOTION edge returns a zero frame and the real counts arrive
+    on the next read a few hundred microseconds later; summing both is exact."""
+    interval = np.asarray(raw["interval_us"], dtype=np.int64)
+    starts = np.ones(len(interval), dtype=bool)
+    starts[1:] = ~((interval[1:] > 0) & (interval[1:] < min_interval_us) & (interval[:-1] > 0))
+    group = np.cumsum(starts) - 1
+    last = np.flatnonzero(np.append(starts[1:], True))
+    merged = {name: np.asarray(values)[last] for name, values in raw.items()}
+    for name in ("delta_x", "delta_y", "interval_us"):
+        merged[name] = np.bincount(group, np.asarray(raw[name], dtype=float)).astype(np.asarray(raw[name]).dtype)
+    samples = np.asarray(raw["gyro_samples"], dtype=np.int64)
+    complete = np.bincount(group, samples == 0) == 0
+    merged["gyro_samples"] = np.where(complete, np.bincount(group, samples), 0).astype(samples.dtype)
+    for axis in range(3):
+        values = np.asarray(raw[f"gyro_integral[{axis}]"], dtype=float)
+        total = np.bincount(group, np.nan_to_num(values))
+        merged[f"gyro_integral[{axis}]"] = np.where(complete & (np.bincount(group, ~np.isfinite(values)) == 0), total, np.nan)
+    merged["timestamp_sample_valid"] = (np.bincount(group, ~np.asarray(raw["timestamp_sample_valid"], dtype=bool)) == 0)
+    return merged
+
+
 def fit_model(expected, counts, mask):
     x, y = expected[mask], counts[mask]
     if len(x) < 100 or np.linalg.matrix_rank(x) < 2:
@@ -66,8 +91,9 @@ def analyze(args):
             raise ValueError(f"Missing {name}[{instance}] in log")
         return data[name, instance]
 
-    raw, gnss = topic("flow_raw", args.instance), topic("sensor_gps", args.gnss_instance)
+    reads, gnss = topic("flow_raw", args.instance), topic("sensor_gps", args.gnss_instance)
     att, distance = topic("vehicle_attitude"), topic("distance_sensor", args.range_instance)
+    raw = merge_reads(reads, args.min_interval_ms * 1e3)
     origin = float(raw["timestamp_sample"][0])
 
     def seconds(values):
@@ -108,7 +134,11 @@ def analyze(args):
         translation = np.column_stack([-camera[:, 1], camera[:, 0]]) / depth[:, None]
         return translation, body, velocity, r, depth
 
-    base = (raw["timestamp_sample_valid"].astype(bool) & (dt > 0) & (dt < 0.05)
+    # The driver discards three reads after a reset; the chip's exposure has not settled either.
+    after_reset = np.zeros(len(dt), dtype=bool)
+    for start in np.flatnonzero(raw["interval_us"] == 0):
+        after_reset[start:start + 4] = True
+    base = (raw["timestamp_sample_valid"].astype(bool) & (dt > 0) & (dt < 0.05) & ~after_reset
             & (raw["gyro_samples"] > 0) & np.all(np.isfinite(gyro), axis=1)
             & ((raw["observation"] & 0x3f) == 0x3f) & ((raw["observation"] >> 6) < 3)
             & (raw["squal_raw"] >= args.squal_min))
@@ -163,10 +193,11 @@ def analyze(args):
     if np.count_nonzero(held) < 100:
         raise ValueError("Too few held-out frames with usable attitude geometry")
     summary = {
-        "frames": len(end), "used": int(common.sum()), "held_out": int(held.sum()),
+        "reads": len(reads["timestamp_sample"]), "frames": len(end), "used": int(common.sum()), "held_out": int(held.sum()),
         "timestamp_unmapped": int((~raw["timestamp_sample_valid"].astype(bool)).sum()),
         "gyro_incomplete": int((raw["gyro_samples"] == 0).sum()),
-        "counter_discontinuities": int((np.diff(raw["frame_counter"].astype(np.int64)) != 1).sum()),
+        "resets": int((raw["interval_us"] == 0).sum()),
+        "counter_discontinuities": int((np.diff(reads["frame_counter"].astype(np.int64)) != 1).sum()),
         "reference_shift_ms": float(shift_ms), "shift_at_search_boundary": bool(abs(shift_ms) == args.scan_ms),
         "counts_per_radian_matrix": model.tolist(), "radians_per_count_matrix": fitted.tolist(),
         "held_out_count_residual_rms": rms(residual[held]),
@@ -226,6 +257,7 @@ def main():
     parser.add_argument("--gnss-delay-ms", type=float, default=0., help="Subtract from selected GNSS timestamps")
     parser.add_argument("--scan-ms", type=int, default=30, help="Search GNSS/attitude/range reference shift, +/- milliseconds")
     parser.add_argument("--squal-min", type=int, default=1)
+    parser.add_argument("--min-interval-ms", type=float, default=3., help="Reads closer than this join the previous read")
     parser.add_argument("--max-speed-error", type=float, default=.5)
     parser.add_argument("--max-gnss-gap", type=float, default=.3)
     parser.add_argument("--max-range-gap", type=float, default=.1)
