@@ -624,5 +624,21 @@ bool LoggedTopics::initialize_logged_topics(SDLogProfileMask profile)
 		add_default_topics();
 	}
 
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+	add_topic_multi("paa3905_raw", 0, 2);
+	add_topic_multi("flow_raw", 0, 4);
+	add_topic_multi("sensor_optical_flow", 0, 2);
+	add_topic("vehicle_optical_flow");
+	add_topic("vehicle_optical_flow_vel");
+	add_optional_topic_multi("estimator_optical_flow_vel", 0);
+	add_topic_multi("sensor_gyro", 0, 4);
+	add_topic_multi("vehicle_imu", 0, 4);
+	add_topic_multi("sensor_gps", 0, 2);
+	add_topic_multi("distance_sensor", 0, 4);
+	add_topic("vehicle_attitude");
+	add_topic("vehicle_local_position");
+	add_topic_multi("can_interface_status", 0, 3);
+#endif
+
 	return _subscriptions.count > 0;
 }

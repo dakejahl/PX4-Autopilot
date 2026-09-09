@@ -488,7 +488,14 @@ void Sensors::InitializeVehicleOpticalFlow()
 	if (_vehicle_optical_flow == nullptr) {
 		uORB::Subscription sensor_optical_flow_sub{ORB_ID(sensor_optical_flow)};
 
-		if (sensor_optical_flow_sub.advertised()) {
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+		uORB::Subscription raw_flow_sub {ORB_ID(paa3905_raw)};
+		const bool flow_advertised = sensor_optical_flow_sub.advertised() || raw_flow_sub.advertised();
+#else
+		const bool flow_advertised = sensor_optical_flow_sub.advertised();
+#endif
+
+		if (flow_advertised) {
 			_vehicle_optical_flow = new VehicleOpticalFlow();
 
 			if (_vehicle_optical_flow) {
