@@ -127,6 +127,9 @@ bool PAA3905::Reset()
 	DataReadyInterruptDisable();
 	_drdy_timestamp_sample.store(0);
 	_timestamp_sample_last = 0;
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+	_raw_read_timestamp_last = 0;
+#endif
 	ScheduleClear();
 	ScheduleNow();
 	return true;
@@ -283,9 +286,33 @@ void PAA3905::RunImpl()
 
 			bool success = false;
 
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+			const hrt_abstime burst_timestamp = hrt_absolute_time();
+#endif
+
 			if (transfer((uint8_t *)&buffer, (uint8_t *)&buffer, sizeof(buffer)) == 0) {
 
 				hrt_store_absolute_time(&_last_read_time);
+
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+				// Preserve rejected and startup bursts so capture cannot conceal tracking loss.
+				paa3905_raw_s raw{};
+				raw.timestamp_sample = burst_timestamp;
+				raw.device_id = get_device_id();
+				raw.frame_counter = _raw_frame_counter++;
+				raw.interval_us = _raw_read_timestamp_last ? burst_timestamp - _raw_read_timestamp_last : 0;
+				raw.motion = buffer.data.Motion;
+				raw.observation = buffer.data.Observation;
+				raw.delta_x = combine(buffer.data.Delta_X_H, buffer.data.Delta_X_L);
+				raw.delta_y = combine(buffer.data.Delta_Y_H, buffer.data.Delta_Y_L);
+				raw.squal_raw = buffer.data.SQUAL;
+				raw.raw_data_sum = buffer.data.RawData_Sum;
+				raw.shutter = ((buffer.data.Shutter_Upper & 0x7f) << 16)
+					      | (buffer.data.Shutter_Middle << 8) | buffer.data.Shutter_Lower;
+				raw.timestamp = hrt_absolute_time();
+				_raw_pub.publish(raw);
+				_raw_read_timestamp_last = burst_timestamp;
+#endif
 
 				if (_discard_reading > 0) {
 					_discard_reading--;
@@ -538,6 +565,10 @@ void PAA3905::RunImpl()
 
 			} else {
 				perf_count(_bad_transfer_perf);
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+				// An interrupted SPI transaction may already have cleared the accumulator.
+				_raw_read_timestamp_last = 0;
+#endif
 			}
 
 			if (!success) {

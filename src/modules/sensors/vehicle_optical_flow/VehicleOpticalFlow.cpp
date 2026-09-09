@@ -103,9 +103,16 @@ void VehicleOpticalFlow::Run()
 
 	UpdateDistanceSensor();
 
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+	UpdateSensorGyro();
+	_raw_flow_capture.update();
+#else
+
 	if (!_delta_angle_available) {
 		UpdateSensorGyro();
 	}
+
+#endif
 
 	sensor_optical_flow_s sensor_optical_flow;
 
@@ -443,6 +450,9 @@ void VehicleOpticalFlow::UpdateSensorGyro()
 		sensor_gyro_s sensor_gyro;
 
 		if (_sensor_gyro_sub.copy(&sensor_gyro)) {
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+			_raw_flow_capture.addGyro(sensor_gyro, _sensor_gyro_sub.get_last_generation() == last_generation + 1);
+#endif
 
 			if (_sensor_gyro_sub.get_last_generation() != last_generation + 1) {
 				if (!sensor_gyro_lost_printed) {

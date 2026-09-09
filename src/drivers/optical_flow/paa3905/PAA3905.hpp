@@ -49,6 +49,9 @@
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/PublicationMulti.hpp>
 #include <uORB/topics/sensor_optical_flow.h>
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+#include <uORB/topics/paa3905_raw.h>
+#endif
 
 using namespace time_literals;
 using namespace PixArt_PAA3905;
@@ -98,6 +101,12 @@ private:
 	} _state{STATE::RESET};
 
 	uORB::PublicationMulti<sensor_optical_flow_s> _sensor_optical_flow_pub{ORB_ID(sensor_optical_flow)};
+
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+	uORB::PublicationMulti<paa3905_raw_s> _raw_pub {ORB_ID(paa3905_raw)};
+	hrt_abstime _raw_read_timestamp_last{0};
+	uint32_t _raw_frame_counter{0};
+#endif
 
 	const spi_drdy_gpio_t _drdy_gpio;
 

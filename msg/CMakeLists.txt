@@ -93,6 +93,7 @@ set(msg_files
 	FailureDetectorStatus.msg
 	FailureInjection.msg
 	FlightPhaseEstimation.msg
+	FlowRaw.msg
 	FollowTarget.msg
 	FollowTargetEstimator.msg
 	FollowTargetStatus.msg
@@ -166,6 +167,7 @@ set(msg_files
 	ParameterSetUsedRequest.msg
 	ParameterSetValueRequest.msg
 	ParameterSetValueResponse.msg
+	Paa3905Raw.msg
 	ParameterUpdate.msg
 	Ping.msg
 	PositionControllerLandingStatus.msg

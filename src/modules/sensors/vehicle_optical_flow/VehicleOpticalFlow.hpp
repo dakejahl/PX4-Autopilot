@@ -45,6 +45,9 @@
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/module_params.h>
 #include <px4_platform_common/px4_config.h>
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+#include "RawFlowCapture.hpp"
+#endif
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
@@ -78,6 +81,9 @@ protected:
 	int _distance_sensor_selected{-1}; // because we can have several distance sensor instances with different orientations
 
 private:
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+	RawFlowCapture _raw_flow_capture;
+#endif
 	void ClearAccumulatedData();
 	void UpdateSensorGyro();
 

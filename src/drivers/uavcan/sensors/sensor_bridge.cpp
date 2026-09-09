@@ -56,6 +56,9 @@
 #endif
 #if defined(CONFIG_UAVCAN_SENSOR_FLOW)
 #include "flow.hpp"
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+#include "flow_raw.hpp"
+#endif
 #endif
 #if defined(CONFIG_UAVCAN_SENSOR_FUEL_TANK_STATUS)
 #include "fuel_tank_status.hpp"
@@ -139,6 +142,9 @@ void IUavcanSensorBridge::make_all(uavcan::INode &node, List<IUavcanSensorBridge
 
 	if (uavcan_sub_flow != 0) {
 		list.add(new UavcanFlowBridge(node, node_info_publisher));
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+		list.add(new UavcanRawFlowBridge(node, node_info_publisher));
+#endif
 	}
 
 #endif
