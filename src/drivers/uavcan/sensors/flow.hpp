@@ -40,6 +40,7 @@
 #include <uORB/topics/sensor_optical_flow.h>
 
 #include <com/hex/equipment/flow/Measurement.hpp>
+#include <com/ark/equipment/flow/MeasurementAux.hpp>
 
 class UavcanFlowBridge : public UavcanSensorBridgeBase
 {
@@ -55,12 +56,32 @@ public:
 private:
 
 	void flow_sub_cb(const uavcan::ReceivedDataStructure<com::hex::equipment::flow::Measurement> &msg);
+	void flow_aux_sub_cb(const uavcan::ReceivedDataStructure<com::ark::equipment::flow::MeasurementAux> &msg);
 
 	typedef uavcan::MethodBinder < UavcanFlowBridge *,
 		void (UavcanFlowBridge::*)
 		(const uavcan::ReceivedDataStructure<com::hex::equipment::flow::Measurement> &) >
 		FlowCbBinder;
 
-	uavcan::Subscriber<com::hex::equipment::flow::Measurement, FlowCbBinder> _sub_flow;
+	typedef uavcan::MethodBinder < UavcanFlowBridge *,
+		void (UavcanFlowBridge::*)
+		(const uavcan::ReceivedDataStructure<com::ark::equipment::flow::MeasurementAux> &) >
+		FlowAuxCbBinder;
 
+	uavcan::Subscriber<com::hex::equipment::flow::Measurement, FlowCbBinder> _sub_flow;
+	uavcan::Subscriber<com::ark::equipment::flow::MeasurementAux, FlowAuxCbBinder> _sub_flow_aux;
+
+	struct AuxState {
+		int node_id{-1};
+		uint8_t mode{sensor_optical_flow_s::MODE_UNKNOWN};
+		uint32_t shutter{0};
+		uint16_t discard_count{0};
+		uint16_t mode_change_count{0};
+		bool motion{false};
+		bool challenging_surface{false};
+		bool chip_health_ok{false};
+	};
+	AuxState _aux_cache[DEFAULT_MAX_CHANNELS];
+
+	AuxState *aux_for_node(int node_id);
 };
