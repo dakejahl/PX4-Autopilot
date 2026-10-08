@@ -5,13 +5,35 @@ parameters:
     CP_DIST:
       description:
         short: Minimum distance the vehicle should keep to all obstacles
-        long: Only used in Position mode. Collision avoidance is disabled by setting
-          this parameter to a negative value
+        long: |-
+          Distance from the vehicle centre to the nearest obstacle surface. The speed towards
+          every obstacle is limited so the vehicle stops this far from it. Collision Prevention
+          does not steer: a command past an obstacle slides along it.
+
+          Only used in Position mode. Collision Prevention is disabled by setting this
+          parameter to a negative value.
       type: float
       default: -1.0
       min: -1
       max: 15
       unit: m
+    CP_DIST_V:
+      description:
+        short: Minimum distance the vehicle should keep above and below
+        long: |-
+          Gap between the top or bottom of the vehicle and an obstacle over or under it,
+          from the obstacle map. Climbing and descending slow down to stop short of it, and an
+          obstacle less than this far above or below the vehicle also counts horizontally, so
+          the vehicle flies over a fence only this far above it. Descending never slows below
+          MPC_LAND_SPEED, so the vehicle can land.
+
+          Only used in Position mode, with the obstacle map, while CP_DIST is positive.
+      type: float
+      default: 0.5
+      min: 0
+      max: 5
+      unit: m
+      decimal: 2
     CP_DELAY:
       description:
         short: Range sensor and position controller average delay
@@ -24,24 +46,3 @@ parameters:
       min: 0
       max: 1
       unit: s
-    CP_GUIDE_ANG:
-      description:
-        short: Collision prevention guidance angle
-        long: |-
-          Angle left/right from the commanded setpoint by which the collision prevention algorithm can choose to change the setpoint direction
-
-          Only used in Position mode.
-      type: float
-      default: 30.0
-      min: 0
-      max: 90
-      unit: deg
-    CP_GO_NO_DATA:
-      description:
-        short: Allow moving into directions without sensor data
-        long: |-
-          Boolean to allow moving into directions where there is no sensor data (outside FOV)
-
-          Only used in Position mode.
-      type: boolean
-      default: 0

@@ -5,22 +5,18 @@ It can be enabled for multicopter vehicles when using acceleration-based [Positi
 
 It can be enabled for multicopter vehicles in [Position mode](../flight_modes_mc/position.md) (with [MPC_POS_MODE](#MPC_POS_MODE) set to `Acceleration based`), and can use sensor data from an offboard companion computer, offboard rangefinders over MAVLink, a rangefinder attached to the flight controller, or any combination of the above.
 
-Collision prevention may restrict vehicle maximum speed if the sensor range isn't large enough!
-It also prevents motion in directions where no sensor data is available (i.e. if you have no rear-sensor data, you will not be able to fly backwards).
+Collision prevention limits the vehicle's speed to what it can stop from within the range its sensors see.
+In directions no sensor has seen, the pilot may still fly, but only as fast as if an obstacle stood just beyond [CP_DIST](#CP_DIST).
 
 :::tip
 If high flight speeds are critical, consider disabling collision prevention when not needed.
 :::
 
-:::tip
-Ensure that you have sensors/sensor data in all directions that you want to fly (when collision prevention is enabled).
-:::
-
 ## Overview
 
-The vehicle restricts the current velocity in order to slow down as it gets closer to obstacles and adapts the acceleration setpoint in order to disallow collision trajectories.
-In order to move away from (or parallel to) an obstacle, the user must command the vehicle to move toward a setpoint that does not bring the vehicle closer to the obstacle.
-The algorithm will make minor adjustments to the setpoint direction if it is determined that a “better” setpoint exists within a fixed margin on either side of the requested setpoint.
+The vehicle keeps [CP_DIST](#CP_DIST) from every obstacle its sensors have seen.
+Collision Prevention never steers or yaws: a command straight into an obstacle stops short of it, and a command past it slides along it, but only into space the sensors have seen.
+An obstacle already inside `CP_DIST` is backed away from.
 
 Users are notified through _QGroundControl_ while _Collision Prevention_ is actively controlling velocity setpoints.
 
@@ -63,34 +59,39 @@ Other sensors may be enabled, but this requires modification of driver code to s
 
 Configure collision prevention by [setting the following parameters](../advanced_config/parameters.md) in _QGroundControl_:
 
-| Parameter                                                                                          | Description                                                                                                                                                                                                                                                                                     |
-| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <a id="CP_DIST"></a>[CP_DIST](../advanced_config/parameter_reference.md#CP_DIST)                   | Set the minimum allowed distance (the closest distance that the vehicle can approach the obstacle). Set negative to disable _collision prevention_. <br>> **Warning** This value is the distance to the sensors, not the outside of your vehicle or propellers. Be sure to leave a safe margin! |
-| <a id="CP_DELAY"></a>[CP_DELAY](../advanced_config/parameter_reference.md#CP_DELAY)                | Set the sensor and velocity setpoint tracking delay. See [Delay Tuning](#delay_tuning) below.                                                                                                                                                                                                   |
-| <a id="CP_GUIDE_ANG"></a>[CP_GUIDE_ANG](../advanced_config/parameter_reference.md#CP_GUIDE_ANG)    | Set the angle (to both sides of the commanded direction) within which the vehicle may deviate if it finds fewer obstacles in that direction. See [Guidance Tuning](#angle_change_tuning) below.                                                                                                 |
-| <a id="CP_GO_NO_DATA"></a>[CP_GO_NO_DATA](../advanced_config/parameter_reference.md#CP_GO_NO_DATA) | Set to 1 to allow the vehicle to move in directions where there is no sensor coverage (default is 0/`False`).                                                                                                                                                                                   |
-| <a id="MPC_POS_MODE"></a>[MPC_POS_MODE](../advanced_config/parameter_reference.md#MPC_POS_MODE)    | Must be set to `Acceleration based`.                                                                                                                                                                                                                                                            |
+| Parameter                                                                                       | Description                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <a id="CP_DIST"></a>[CP_DIST](../advanced_config/parameter_reference.md#CP_DIST)                | Set the minimum allowed distance (the closest distance that the vehicle can approach the obstacle). Set negative to disable _collision prevention_. <br>> **Warning** This value is the distance to the sensors, not the outside of your vehicle or propellers. Be sure to leave a safe margin! |
+| <a id="CP_DIST_V"></a>[CP_DIST_V](../advanced_config/parameter_reference.md#CP_DIST_V)          | Set the gap to keep between the top or bottom of the vehicle and an obstacle over or under it. Only used with the obstacle map. See [Above and Below](#above_below).                                                                                                                            |
+| <a id="CP_DELAY"></a>[CP_DELAY](../advanced_config/parameter_reference.md#CP_DELAY)             | Set the sensor and velocity setpoint tracking delay. See [Delay Tuning](#delay_tuning) below.                                                                                                                                                                                                   |
+| <a id="MPC_POS_MODE"></a>[MPC_POS_MODE](../advanced_config/parameter_reference.md#MPC_POS_MODE) | Must be set to `Acceleration based`.                                                                                                                                                                                                                                                            |
 
 ## Algorithm Description
 
-The data from all sensors are fused into an internal representation of 36 sectors around the vehicle, each containing either the sensor data and information about when it was last observed, or an indication that no data for the sector was available.
-When the vehicle is commanded to move in a particular direction, all sectors in the hemisphere of that direction are checked to see if the movement will bring the vehicle closer to any obstacles.
-If so, the vehicle velocity is restricted.
+The data from all sensors are fused into 72 sectors of 5 degrees around the vehicle, each holding the nearest obstacle, the sensor's range if nothing is in range, or no data.
 
-This velocity restriction takes into account both the inner velocity loop tuned by [MPC_XY_P](../advanced_config/parameter_reference.md#MPC_XY_P), as well as the [jerk-optimal velocity controller](../config_mc/mc_jerk_limited_type_trajectory.md) via [MPC_JERK_MAX](../advanced_config/parameter_reference.md#MPC_JERK_MAX) and [MPC_ACC_HOR](../advanced_config/parameter_reference.md#MPC_ACC_HOR).
-The velocity is restricted such that the vehicle will stop in time to maintain the distance specified in [CP_DIST](#CP_DIST).
-The range of the sensors for each sector is also taken into account, limiting the velocity via the same mechanism.
-
-::: info
-If there is no sensor data in a particular direction, velocity in that direction is restricted to 0 (preventing the vehicle from crashing into unseen objects).
-If you wish to move freely into directions without sensor coverage, this can be enabled by setting [CP_GO_NO_DATA](#CP_GO_NO_DATA) to 1.
-:::
+Each obstacle limits the speed towards its nearest point, the sector closer than its neighbours, to what the vehicle can stop from before [CP_DIST](#CP_DIST).
+Flying along a wall keeps the distance to it, so the wall does not slow it; flying at it does.
+Along the velocity and the stick direction the speed is also limited to what the vehicle can stop from within the range the sensors have seen clear, or, where they have not looked, within `CP_DIST`.
+The commanded acceleration is changed as little as these limits allow.
+If that turns it from space the sensors have seen towards space they have not, the vehicle stops instead of sliding there.
+This takes into account [MPC_JERK_MAX](../advanced_config/parameter_reference.md#MPC_JERK_MAX), [MPC_ACC_HOR](../advanced_config/parameter_reference.md#MPC_ACC_HOR) and [MPC_XY_VEL_P_ACC](../advanced_config/parameter_reference.md#MPC_XY_VEL_P_ACC).
 
 Delay, both in the vehicle tracking velocity setpoints and in receiving sensor data from external sources, is conservatively estimated via the [CP_DELAY](#CP_DELAY) parameter.
 This should be [tuned](#delay_tuning) to the specific vehicle.
 
-If the sectors adjacent to the commanded sectors are 'better' by a significant margin, the direction of the requested input can be modified by up to the angle specified in [CP_GUIDE_ANG](#CP_GUIDE_ANG).
-This helps to fine-tune user input to 'guide' the vehicle around obstacles rather than getting stuck against them.
+### Above and Below {#above_below}
+
+With the `obstacle_map` module, Collision Prevention also keeps [CP_DIST_V](#CP_DIST_V) between the top or bottom of the vehicle and what is over or under it.
+The map moves the vehicle's body, a cylinder of [OMAP_VEH_RAD](../advanced_config/parameter_reference.md#OMAP_VEH_RAD) and [OMAP_VEH_HGT](../advanced_config/parameter_reference.md#OMAP_VEH_HGT), up, down and along its motion, and finds where it would touch an obstacle.
+Climbing and descending slow down to stop short of it, and an obstacle in the path brakes the motion towards it.
+Descending never slows below [MPC_LAND_SPEED](../advanced_config/parameter_reference.md#MPC_LAND_SPEED), so the vehicle can land.
+Space above or below that no sensor has seen can be climbed or descended into, at a speed the vehicle can stop from within `CP_DIST_V`.
+
+An obstacle less than `CP_DIST_V` above or below the body counts horizontally, so the vehicle climbs until a fence is that far below it before flying over.
+The ground or a ceiling directly over or under the vehicle does not count horizontally.
+
+A forward-facing sensor sees what is over or under the vehicle only while it is still ahead: not a ceiling the vehicle flies under while pitched forward, and nothing over where it took off.
 
 ### Range Data Loss
 
@@ -99,13 +100,7 @@ This will force the velocity setpoints in xy to zero.
 After 5 seconds of not receiving any data, the vehicle will switch into [HOLD mode](../flight_modes_mc/hold.md).
 If you want the vehicle to be able to move again, you will need to disable Collision Prevention by either setting the parameter [CP_DIST](#CP_DIST) to a negative value, or switching to a mode other than [Position mode](../flight_modes_mc/position.md) (e.g. to _Altitude mode_ or _Stabilized mode_).
 
-If you have multiple sensors connected and you lose connection to one of them, you will still be able to fly inside the field of view (FOV) of the reporting sensors.
-The data of the faulty sensor will expire and the region covered by this sensor will be treated as uncovered, meaning you will not be able to move there.
-
-:::warning
-Be careful when enabling [CP_GO_NO_DATA=1](#CP_GO_NO_DATA), which allows the vehicle to fly outside the area with sensor coverage.
-If you lose connection to one of multiple sensors, the area covered by the faulty sensor is also treated as uncovered and you will be able to move there without constraint.
-:::
+If you have multiple sensors connected and you lose connection to one of them, the data of the faulty sensor expires and its region is treated as unseen: you can still fly there, at the reduced speed.
 
 ### CP_DELAY Delay Tuning {#delay_tuning}
 
@@ -123,50 +118,10 @@ The tracking delay is typically between 0.1 and 0.5 seconds, depending on vehicl
 If vehicle speed oscillates as it approaches the obstacle (i.e. it slows down, speeds up, slows down) the delay is set too high.
 :::
 
-### CP_GUIDE_ANG Guidance Tuning {#angle_change_tuning}
+### Sensor Coverage
 
-Depending on the vehicle, type of environment and pilot skill different amounts of guidance may be desired.
-Setting the [CP_GUIDE_ANG](#CP_GUIDE_ANG) parameter to 0 will disable the guidance, resulting in the vehicle only moving exactly in the directions commanded.
-Increasing this parameter will let the vehicle choose optimal directions to avoid obstacles, making it easier to fly through tight gaps and to keep the minimum distance exactly while going around objects.
-
-If this parameter is too small the vehicle may feel "stuck" when close to obstacles, because only movement away from obstacles at minimum distance are allowed.
-If the parameter is too large the vehicle may feel like it slides away from obstacles in directions not commanded by the operator.
-From testing, 30 degrees is a good balance, although different vehicles may have different requirements.
-
-::: info
-The guidance feature will never direct the vehicle in a direction without sensor data.
-If the vehicle feels stuck with only a single distance sensor pointing forwards, this is probably because the guidance cannot safely adapt the direction due to lack of information.
-:::
-
-## Algorithm Description
-
-The data from all sensors are fused into an internal representation of 72 sectors around the vehicle, each containing either the sensor data and information about when it was last observed, or an indication that no data for the sector was available.
-When the vehicle is commanded to move in a particular direction, all sectors in the hemisphere of that direction are checked to see if the movement will bring the vehicle closer than allowed to any obstacles. If so, the vehicle velocity is restricted.
-
-The Algorithm then can be split into two parts, the constraining of the acceleration setpoint coming from the operator, and the compensation of the current velocity of the vehicle.
-
-::: info
-If there is no sensor data in a particular direction, movement in that direction is restricted to 0 (preventing the vehicle from crashing into unseen objects).
-If you wish to move freely into directions without sensor coverage, this can be enabled by setting [CP_GO_NO_DATA](#CP_GO_NO_DATA) to 1.
-:::
-
-### Acceleration Constraining
-
-For this we split out the acceleration setpoint into two components, one parallel to the closest distance to the obstacle and one normal to it. Then we scale each of these components according to the figure below.
-
-![Scalefactor](../../assets/computer_vision/collision_prevention/scalefactor.png)
-
- <!-- the code for this figure is at the end of this file -->
-
-### Velocity compensation
-
-This velocity restriction takes into account the [jerk-optimal velocity controller](../config_mc/mc_jerk_limited_type_trajectory.md) via [MPC_JERK_MAX](../advanced_config/parameter_reference.md#MPC_JERK_MAX) and [MPC_ACC_HOR](../advanced_config/parameter_reference.md#MPC_ACC_HOR). Whereby <!--this is only partially valid anymore... check -->
-The current velocity is compared with the maximum allowed velocity so that we are still able to break based on the maximal allowed jerk, acceleration and delay. from this we are able to use the proportional gain of the acceleration controller([MPC_XY_VEL_P_ACC](../advanced_config/parameter_reference.md#MPC_XY_VEL_P_ACC)) to transform it into an acceleration.
-
-### Delay
-
-The delay associated with collision prevention, both in the vehicle tracking velocity setpoints and in receiving sensor data from external sources, is conservatively estimated via the [CP_DELAY](#CP_DELAY) parameter.
-This should be [tuned](#delay_tuning) to the specific vehicle.
+Collision Prevention only knows what its sensors have seen.
+A pilot can fly towards space no sensor covers, and does whenever the vehicle moves sideways or backwards with a single forward-facing sensor: keep the nose where the vehicle goes, or add sensors to the sides.
 
 ## Companion Setup {#companion}
 
@@ -324,32 +279,3 @@ the quaternion `q` is only used if the `orientation` is set to `ROTATION_CUSTOM`
 Companion computers update the `obstacle_distance` topic using ROS 2 or the [OBSTACLE_DISTANCE](https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE) MAVLink message.
 
 <!-- to edit the image, open it in inkscape -->
-<!-- Code to generate the scalefactor plot
-import numpy as np
-import matplotlib.pyplot as plt
-obstacle_dist = -5
-cp_dist = 0
-scale_dist = 10
-x_values_1 = np.linspace(obstacle_dist, cp_dist, 100)  # Segment 1: obstacle to cp_dist
-x_values_2 = np.linspace(cp_dist, scale_dist, 100)  # Segment 2: cp_dist to scale_dist
-x_values_3 = np.linspace(scale_dist, 15, 100)  # Segment 3: scale_dist onwards
-def acceleration_setpoint_1(x):
-  return -1 + (x - obstacle_dist) / (cp_dist - obstacle_dist)
-def acceleration_setpoint_2(x):
-  return ((x - cp_dist) / (scale_dist - cp_dist))**2
-def acceleration_setpoint_3(x):
-  return 1
-y_values_1 = [acceleration_setpoint_1(x) for x in x_values_1]
-y_values_2 = [acceleration_setpoint_2(x) for x in x_values_2]
-y_values_3 = [acceleration_setpoint_3(x) for x in x_values_3]
-plt.figure(figsize=(15, 5))
-plt.plot(x_values_1, y_values_1, color='red', label="Below Zero", linewidth=4)
-plt.plot(x_values_2, y_values_2, color='orange', label="Above Zero", linewidth=4)
-plt.plot(x_values_3, y_values_3, color='green', label="Above Scale Distance", linewidth=4)
-plt.xlabel("Distance")
-plt.yticks([-1, 0, 1], ['-1', '0', '1'])  # Set ticks at -1, 0, and 1
-plt.ylabel("Scalefactor")  # Change y-axis label to "Scale"
-plt.title("Manual Acceleration Setpoint Scaling")
-plt.xticks([obstacle_dist, cp_dist, scale_dist], ['Obstacle', 'CP_DIST', 'scale_distance = MPC_VEL_MANUAL / MPC_XY_P'])
-plt.grid(True)
-plt.show() -->

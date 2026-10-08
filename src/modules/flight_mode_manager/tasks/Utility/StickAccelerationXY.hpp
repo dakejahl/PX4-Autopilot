@@ -67,6 +67,9 @@ public:
 
 	// Assuming the velocity constraint resets in every loop and update constraint if new value is lower
 	void setVelocityConstraint(float vel);
+
+	/** Climb and descent speed limits from Collision Prevention, false without any */
+	bool collisionPreventionVerticalLimits(float &up, float &down) const { return _collision_prevention.verticalSpeedLimits(up, down); }
 	float getVelocityConstraint() { return _velocity_slew_rate_xy.getState(); };
 
 private:

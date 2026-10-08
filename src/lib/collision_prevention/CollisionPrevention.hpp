@@ -36,8 +36,10 @@
  * @author Tanja Baumann <tanja@auterion.com>
  * @author Claudio Chies <claudio@chies.com>
  *
- * CollisionPrevention controller.
- *
+ * Collision Prevention: limits the horizontal acceleration setpoint so the vehicle keeps CP_DIST from
+ * the obstacles in obstacle_distance and distance_sensor, and the vertical speed so it keeps
+ * CP_DIST_V from what the obstacle map holds above and below. It never steers: a command into an
+ * obstacle stops short of it, a command past it slides along it.
  */
 
 #pragma once
@@ -56,9 +58,13 @@
 #include <uORB/topics/collision_constraints.h>
 #include <uORB/topics/distance_sensor.h>
 #include <uORB/topics/mavlink_log.h>
+#include <uORB/topics/obstacle_clearance.h>
 #include <uORB/topics/obstacle_distance.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_local_position.h>
+
+#include "AccelerationLimits.hpp"
 
 using namespace time_literals;
 
@@ -80,6 +86,13 @@ public:
 	 */
 	void modifySetpoint(matrix::Vector2f &setpoint_accel, const matrix::Vector2f &setpoint_vel);
 
+	/**
+	 * Climb and descent speeds the obstacle map's clearance above, below and along the path
+	 * allows, as of the last modifySetpoint().
+	 * @return false when it limits neither
+	 */
+	bool verticalSpeedLimits(float &up, float &down) const;
+
 	static constexpr int BIN_COUNT =
 		sizeof(obstacle_distance_s::distances) / sizeof(obstacle_distance_s::distances[0]); // 72
 	static constexpr int BIN_SIZE = 360 / BIN_COUNT; // cannot be lower than 5 degrees, should divide 360 evenly
@@ -95,7 +108,6 @@ protected:
 	void _calculateConstrainedSetpoint(matrix::Vector2f &setpoint_accel, const matrix::Vector2f &setpoint_vel);
 
 	obstacle_distance_s _obstacle_map_body_frame{};
-	bool _data_fov[BIN_COUNT] {};
 	uint64_t _data_timestamps[BIN_COUNT] {};
 	uint16_t _data_maxranges[BIN_COUNT] {}; /**< in cm */
 
@@ -108,42 +120,6 @@ protected:
 	void _addObstacleSensorData(const obstacle_distance_s &obstacle, const float vehicle_yaw);
 
 	/**
-	 * Computes an adaption to the setpoint direction to guide towards free space
-	 * @param setpoint_dir, setpoint direction before collision prevention intervention
-	 * @param setpoint_index, index of the setpoint in the internal obstacle map
-	 * @param vehicle_yaw_angle_rad, vehicle orientation
-	 */
-	void _adaptSetpointDirection(matrix::Vector2f &setpoint_dir, int &setpoint_index, float vehicle_yaw_angle_rad);
-
-	/**
-	 * Constrain the acceleration setpoint based on the distance to the obstacle
-	 * The Scaling of the acceleration setpoint is linear below the min_dist_to_keep and quadratic until the scale_distance above
-	 *           +1          ________ _ _
-	 * ┌─┐      │           //
-	 * │X│      │          //
-	 * │X│      │         //
-	 * │X│      │       ///
-	 * │X│      │     //
-	 * │X│      │/////
-	 * │X│──────┼─────────────┬─────────────
-	 * │X│     /│             scale_distance
-	 * │X│    / │
-	 * │X│   /  │
-	 * │X│  /   │
-	 * │X│ /    │
-	 * └─┘/     │
-	 *           -1
-	 */
-	matrix::Vector2f _constrainAccelerationSetpoint(const float &setpoint_length);
-
-	void _getVelocityCompensationAcceleration(const float vehicle_yaw_angle_rad, const matrix::Vector2f &setpoint_vel,
-			const hrt_abstime now, float &vel_comp_accel, matrix::Vector2f &vel_comp_accel_dir);
-
-	float _getObstacleDistance(const matrix::Vector2f &direction);
-
-	float _getScale(const float &reference_distance);
-
-	/**
 	 * Determines whether a new sensor measurement is used
 	 * @param map_index, index of the bin in the internal map the measurement belongs in
 	 * @param sensor_range, max range of the sensor in meters
@@ -151,10 +127,11 @@ protected:
 	 */
 	bool _enterData(int map_index, float sensor_range, float sensor_reading);
 
-	bool _checkSetpointDirectionFeasability();
+	/** Vertical speed limits and horizontal path limits from obstacle_clearance */
+	void _updateClearance(hrt_abstime now);
 
-	void _transformSetpoint(const matrix::Vector2f &setpoint);
-
+	/** The internal map as obstacles per sector in the heading frame */
+	void _polarObstacles(collision_prevention::PolarObstacles &obstacles) const;
 
 	//Timing functions. Necessary to mock time in the tests
 	virtual hrt_abstime getTime();
@@ -165,17 +142,25 @@ private:
 	bool _was_active{false};		/**< states if the collision prevention interferes with the user input */
 	bool _obstacle_data_present{false};	/**< states if obstacle data is present */
 
-	int _setpoint_index{};			/**< index of the setpoint*/
-	matrix::Vector2f _setpoint_dir{};		/**< direction of the setpoint*/
-
-	float _closest_dist{};			/**< closest distance to an obstacle  */
-	matrix::Vector2f _closest_dist_dir{NAN, NAN};	/**< direction of the closest obstacle  */
-
 	float _min_dist_to_keep{};
+
+	static constexpr float PUSH_TIME = 1.f; ///< [s] an obstacle inside CP_DIST is backed away from at the depth per this
 
 	orb_advert_t _mavlink_log_pub{nullptr};	 	/**< Mavlink log uORB handle */
 
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
+	collision_prevention::PolarObstacles _obstacles{};
+	collision_prevention::LimitWorkspace _limit_workspace{};
+
+	matrix::Vector2f _velocity_estimate{NAN, NAN};
+	float _vertical_velocity_estimate{NAN}; ///< [m/s] down
+
+	float _speed_limit_up{INFINITY};	/**< [m/s] from the clearance above and along the path */
+	float _speed_limit_down{INFINITY};
+	static constexpr int MAX_PATH_LIMITS = collision_prevention::LimitWorkspace::kMaxPathLimits;
+	collision_prevention::PathLimit _path_limits[MAX_PATH_LIMITS] {};	/**< local frame */
+	int _path_limit_count{0};
 	matrix::Quatf _vehicle_attitude{};
 	float _vehicle_yaw{0.f};
 
@@ -185,6 +170,7 @@ private:
 
 	uORB::SubscriptionData<obstacle_distance_s> _sub_obstacle_distance{ORB_ID(obstacle_distance)}; /**< obstacle distances received form a range sensor */
 	uORB::SubscriptionMultiArray<distance_sensor_s> _distance_sensor_subs{ORB_ID::distance_sensor};
+	uORB::SubscriptionData<obstacle_clearance_s> _sub_obstacle_clearance{ORB_ID(obstacle_clearance)};
 
 	static constexpr uint64_t RANGE_STREAM_TIMEOUT_US{500_ms};
 	static constexpr uint64_t TIMEOUT_HOLD_US{5_s};
@@ -194,24 +180,17 @@ private:
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CP_DIST>) _param_cp_dist, 		/**< collision prevention keep minimum distance */
+		(ParamFloat<px4::params::CP_DIST_V>) _param_cp_dist_v,		/**< distance kept above and below */
 		(ParamFloat<px4::params::CP_DELAY>) _param_cp_delay, 		/**< delay of the range measurement data*/
-		(ParamFloat<px4::params::CP_GUIDE_ANG>) _param_cp_guide_ang, 	/**< collision prevention change setpoint angle */
-		(ParamBool<px4::params::CP_GO_NO_DATA>) _param_cp_go_no_data, 	/**< movement allowed where no data*/
-		(ParamFloat<px4::params::MPC_XY_P>) _param_mpc_xy_p, 		/**< p gain from position controller*/
 		(ParamFloat<px4::params::MPC_JERK_MAX>) _param_mpc_jerk_max, 	/**< vehicle maximum jerk*/
 		(ParamFloat<px4::params::MPC_ACC_HOR>) _param_mpc_acc_hor, 	/**< vehicle maximum horizontal acceleration*/
+		(ParamFloat<px4::params::MPC_ACC_UP_MAX>) _param_mpc_acc_up_max,
+		(ParamFloat<px4::params::MPC_ACC_DOWN_MAX>) _param_mpc_acc_down_max,
+		(ParamFloat<px4::params::MPC_LAND_SPEED>) _param_mpc_land_speed,
 		(ParamFloat<px4::params::MPC_XY_VEL_P_ACC>) _param_mpc_xy_vel_p_acc, /**< p gain from velocity controller*/
-		(ParamFloat<px4::params::MPC_VEL_MANUAL>) _param_mpc_vel_manual   /**< maximum velocity in manual flight mode*/
+		(ParamFloat<px4::params::MPC_MAN_Y_MAX>) _param_mpc_man_y_max	/**< maximum manual yaw rate*/
 	)
 
-	/**
-	 * Computes collision free setpoints
-	 * @param setpoint, setpoint before collision prevention intervention
-	 * @param curr_pos, current vehicle position
-	 * @param curr_vel, current vehicle velocity
-	 */
-	void _calculateConstrainedSetpoint(matrix::Vector2f &setpoint, const matrix::Vector2f &curr_pos,
-					   const matrix::Vector2f &curr_vel);
 
 	/**
 	 * Publishes collision_constraints message
