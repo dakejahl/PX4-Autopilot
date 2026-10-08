@@ -182,6 +182,8 @@ set(msg_files
 	QshellReq.msg
 	QshellRetval.msg
 	RadioStatus.msg
+	RangeImage.msg
+	RangeImageInfo.msg
 	RangingBeacon.msg
 	RateCtrlStatus.msg
 	RcChannels.msg
