@@ -391,6 +391,10 @@ void LoggedTopics::add_vision_and_avoidance_topics()
 	add_topic_multi("distance_sensor");
 	add_topic("obstacle_distance_fused");
 	add_topic("obstacle_distance");
+	add_topic("obstacle_clearance");
+	add_optional_topic("obstacle_map_status");
+	add_optional_topic("range_image");
+	add_optional_topic("range_image_info");
 	add_topic("vehicle_mocap_odometry", 30);
 	add_topic("vehicle_visual_odometry", 30);
 }

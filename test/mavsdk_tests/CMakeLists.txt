@@ -32,6 +32,10 @@ if(MAVSDK_FOUND)
         test_multicopter_rtl.cpp
         test_multicopter_offboard.cpp
         test_multicopter_manual.cpp
+        test_multicopter_collision_prevention.cpp
+        test_multicopter_obstacle_course.cpp
+        # the simulated world, so the tests judge against the obstacles SIH raycasts
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../src/lib/obstacle_sim/obstacle_sim.cpp
         test_multicopter_rtl_with_geofence.cpp
         test_sih_xvert_transition.cpp
         test_vtol_mission.cpp
@@ -50,7 +54,7 @@ if(MAVSDK_FOUND)
         ${CMAKE_THREAD_LIBS_INIT}
     )
 
-    target_include_directories(mavsdk_tests PUBLIC ${CMAKE_BINARY_DIR}/..)
+    target_include_directories(mavsdk_tests PUBLIC ${CMAKE_BINARY_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
 
     target_compile_options(mavsdk_tests
         PRIVATE

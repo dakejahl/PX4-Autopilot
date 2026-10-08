@@ -66,7 +66,21 @@ bool FlightTaskManualAcceleration::update()
 {
 	const vehicle_local_position_s vehicle_local_pos = _sub_vehicle_local_position.get();
 	setMaxDistanceToGround(vehicle_local_pos.hagl_max_xy);
+
+	// Collision Prevention's climb and descent limits, from its last cycle, on top of any a derived task set
+	const float velocity_constraint_up = _velocity_constraint_up;
+	const float velocity_constraint_down = _velocity_constraint_down;
+	float collision_prevention_up = INFINITY;
+	float collision_prevention_down = INFINITY;
+
+	if (_stick_acceleration_xy.collisionPreventionVerticalLimits(collision_prevention_up, collision_prevention_down)) {
+		_velocity_constraint_up = fminf(velocity_constraint_up, collision_prevention_up);
+		_velocity_constraint_down = fminf(velocity_constraint_down, collision_prevention_down);
+	}
+
 	bool ret = FlightTaskManualAltitudeSmoothVel::update();
+	_velocity_constraint_up = velocity_constraint_up;
+	_velocity_constraint_down = velocity_constraint_down;
 
 	float max_hagl_ratio = 0.0f;
 

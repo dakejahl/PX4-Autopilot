@@ -48,6 +48,7 @@
 
 #include <drivers/drv_pwm_output.h>         // to get PWM flags
 #include <lib/drivers/device/Device.hpp>
+#include <lib/range_image/RangeImageGeometry.hpp>
 
 using namespace math;
 using namespace matrix;
@@ -79,6 +80,7 @@ void Sih::run()
 	_airspeed_time = task_start;
 	_dist_snsr_time = task_start;
 	_ranging_beacon_time = task_start;
+	_range_image_time = task_start;
 	_vehicle = static_cast<VehicleType>(constrain(_sih_vtype.get(),
 					    static_cast<int32_t>(VehicleType::First),
 					    static_cast<int32_t>(VehicleType::Last)));
@@ -280,6 +282,20 @@ void Sih::sensor_step()
 		send_ranging_beacon(now);
 	}
 
+	if (_sih_rimg_en.get()) {
+		if (_range_image_info_pending || now - _range_image_info_time >= 1_s) {
+			_range_image_info_pending = false;
+			_range_image_info_time = now;
+			_range_image_info.timestamp = hrt_absolute_time();
+			_range_image_info_pub.publish(_range_image_info);
+		}
+
+		if (now - _range_image_time >= (hrt_abstime)(1e6f / _sih_rimg_rate.get())) {
+			_range_image_time = now;
+			send_range_image(now);
+		}
+	}
+
 	publish_ground_truth(now);
 
 	perf_end(_loop_perf);
@@ -363,6 +379,16 @@ void Sih::parameters_updated()
 	_px4_rangefinder.set_max_distance(_distance_snsr_max);
 
 	_T_TAU = _sih_thrust_tau.get();
+
+	obstacle_sim::WorldConfig world{};
+	world.type = static_cast<obstacle_sim::WorldType>(_sih_wld_type.get());
+	world.seed = _sih_wld_seed.get();
+	world.cell_size = _sih_wld_spacing.get();
+	world.density = _sih_wld_density.get();
+	world.clear_radius = _sih_wld_clear.get();
+	_world.configure(world);
+
+	update_range_image_info();
 
 	_v_wind_N = Vector3f(_sih_wind_n.get(), _sih_wind_e.get(), 0.f);
 }
@@ -853,6 +879,148 @@ void Sih::send_ranging_beacon(const hrt_abstime &time_now_us)
 
 		// cycle through the beacons
 		_ranging_beacon_idx = (_ranging_beacon_idx + 1) % NUM_RANGING_BEACONS;
+	}
+}
+
+// DRV_DIST_DEVTYPE_SIM on the simulation bus, address 1 so it differs from the rangefinder
+static constexpr uint32_t RANGE_IMAGE_DEVICE_ID = 10092804;
+// above the vehicle origin, which rests on the ground when landed
+static constexpr float RANGE_IMAGE_MOUNT_UP = 0.1f;
+static constexpr float RANGE_IMAGE_RANGE_MIN = 0.05f;
+// VL53L9CX in precision mode, datasheet DS14879 rev 9: temporal noise under 1 mm to 2 m and 0.07 % beyond,
+// zone to zone offset spread 3.5 to 5.5 mm. It states no glitch or dropout rates, these are guesses.
+static constexpr float RANGE_IMAGE_NOISE_MIN = 0.001f;
+static constexpr float RANGE_IMAGE_NOISE_RELATIVE = 0.0007f;
+static constexpr float RANGE_IMAGE_ZONE_OFFSET = 0.0045f;
+static constexpr float RANGE_IMAGE_GLITCH_PROBABILITY = 0.001f;
+static constexpr float RANGE_IMAGE_DROPOUT_PROBABILITY = 0.001f;
+
+void Sih::update_range_image_info()
+{
+	range_image_info_s info{};
+	info.device_id = RANGE_IMAGE_DEVICE_ID;
+	info.sensor_type = range_image_info_s::SENSOR_TYPE_MULTIZONE_TOF;
+	info.num_rows = math::constrain(_sih_rimg_rows.get(), (int32_t)1, (int32_t)128);
+	info.num_cols = math::constrain(_sih_rimg_cols.get(), (int32_t)1, (int32_t)256);
+
+	// a frame goes out in one burst, so it has to fit the range_image queue
+	constexpr uint32_t max_zones = range_image_s::ORB_QUEUE_LENGTH * (sizeof(range_image_s::ranges) / sizeof(
+					       range_image_s::ranges[0]));
+
+	if ((uint32_t)info.num_rows * info.num_cols > max_zones) {
+		info.num_cols = max_zones / info.num_rows;
+		PX4_WARN("range image limited to %u x %u zones", info.num_rows, info.num_cols);
+	}
+
+	// angular rather than pinhole: the VL53L9CX lens has barrel distortion, its zone pitch grows towards the edges
+	info.projection = range_image_info_s::PROJECTION_ANGULAR;
+	info.range_type = range_image_info_s::RANGE_TYPE_RADIAL;
+	info.zone_order = range_image_info_s::ZONE_ORDER_ROW_MAJOR;
+	info.x_step = _sih_rimg_hfov.get() / info.num_cols;
+	info.x_start = -0.5f * _sih_rimg_hfov.get() + 0.5f * info.x_step;
+	// row 0 on top
+	info.y_step = -_sih_rimg_vfov.get() / info.num_rows;
+	info.y_start = 0.5f * _sih_rimg_vfov.get() + 0.5f * info.y_step;
+	info.q_body_sensor[0] = 1.f;
+	info.position_body[2] = -RANGE_IMAGE_MOUNT_UP;
+	info.range_lsb_mm = math::constrain((int)ceilf(_sih_rimg_max.get() * 1000.f / range_image_s::RANGE_MAX_COUNT), 1, 255);
+	info.range_min = RANGE_IMAGE_RANGE_MIN;
+	info.range_max = _sih_rimg_max.get();
+	// only these follow from parameters, the rest is fixed
+	const range_image_info_s &previous = _range_image_info;
+	const bool changed = info.num_rows != previous.num_rows || info.num_cols != previous.num_cols
+			     || info.range_lsb_mm != previous.range_lsb_mm
+			     || fabsf(info.x_step - previous.x_step) > FLT_EPSILON || fabsf(info.y_step - previous.y_step) > FLT_EPSILON
+			     || fabsf(info.range_max - previous.range_max) > FLT_EPSILON;
+
+	if (changed) {
+		info.config_id = previous.config_id + 1;
+		_range_image_info = info;
+		// describe the new configuration before the next frame uses it
+		_range_image_info_pending = true;
+	}
+}
+
+float Sih::range_image_zone(const float origin[3], const Dcmf &R_N2S, uint16_t row, uint16_t col) const
+{
+	// a zone reports its closest return, so sample it with four rays and keep the nearest
+	static constexpr float sub[2] {-0.25f, 0.25f};
+	const range_image_info_s &info = _range_image_info;
+	float range = INFINITY;
+
+	for (float sub_row : sub) {
+		for (float sub_col : sub) {
+			const float azimuth = math::radians(info.x_start + (col + sub_col) * info.x_step);
+			const float elevation = math::radians(info.y_start + (row + sub_row) * info.y_step);
+			const Vector3f direction_S(cosf(elevation) * cosf(azimuth), cosf(elevation) * sinf(azimuth), -sinf(elevation));
+			float direction_N[3];
+			(R_N2S * direction_S).copyTo(direction_N);
+			range = fminf(range, _world.raycast(origin, direction_N, info.range_max));
+		}
+	}
+
+	return range;
+}
+
+void Sih::send_range_image(const hrt_abstime &time_now_us)
+{
+	const range_image_info_s &info = _range_image_info;
+	const Dcmf R_N2S(_q);
+	float origin_N[3];
+	(_lpos + _q.rotateVector(Vector3f(info.position_body))).copyTo(origin_N);
+	const float lsb = info.range_lsb_mm * 1e-3f;
+	const uint32_t zones = (uint32_t)info.num_rows * info.num_cols;
+	constexpr uint32_t tile_size = sizeof(range_image_s::ranges) / sizeof(range_image_s::ranges[0]);
+
+	range_image_s tile{};
+	tile.timestamp_sample = time_now_us;
+	tile.device_id = info.device_id;
+	tile.config_id = info.config_id;
+	tile.frame_seq = _range_image_frame_seq++;
+
+	for (uint32_t zone = 0; zone < zones; zone++) {
+		const uint32_t k = zone % tile_size;
+
+		if (k == 0) {
+			tile.first_zone = zone;
+		}
+
+		const float range = range_image_zone(origin_N, R_N2S, zone / info.num_cols, zone % info.num_cols);
+		const float uniform = (float)rand() / (float)RAND_MAX;
+		uint16_t count;
+
+		if (uniform < RANGE_IMAGE_DROPOUT_PROBABILITY) {
+			count = range_image_s::RANGE_INVALID;
+
+		} else if (uniform < RANGE_IMAGE_DROPOUT_PROBABILITY + RANGE_IMAGE_GLITCH_PROBABILITY) {
+			const float glitch = info.range_min + (float)rand() / (float)RAND_MAX * (info.range_max - info.range_min);
+			count = (uint16_t)math::constrain((int)lroundf(glitch / lsb), 1, (int)range_image_s::RANGE_MAX_COUNT);
+
+		} else if (!PX4_ISFINITE(range)) {
+			count = range_image_s::RANGE_NO_RETURN;
+
+		} else if (range < info.range_min) {
+			count = range_image_s::RANGE_BELOW_MIN;
+
+		} else {
+			// a fixed offset per zone from a hash of its index, then temporal noise
+			uint32_t h = (zone + 1) * 0x9e3779b1u;
+			h ^= h >> 15;
+			h *= 0x85ebca6bu;
+			h ^= h >> 13;
+			const float zone_offset = ((float)(h & 0xFFFF) / 65535.f - 0.5f) * sqrtf(12.f) * RANGE_IMAGE_ZONE_OFFSET;
+			const float sigma = fmaxf(RANGE_IMAGE_NOISE_MIN, RANGE_IMAGE_NOISE_RELATIVE * range);
+			const float measured = range + zone_offset + generate_wgn() * sigma;
+			count = (uint16_t)math::constrain((int)lroundf(measured / lsb), 1, (int)range_image_s::RANGE_MAX_COUNT);
+		}
+
+		tile.ranges[k] = count;
+
+		if (k == tile_size - 1 || zone == zones - 1) {
+			tile.num_ranges = k + 1;
+			tile.timestamp = hrt_absolute_time();
+			_range_image_pub.publish(tile);
+		}
 	}
 }
 

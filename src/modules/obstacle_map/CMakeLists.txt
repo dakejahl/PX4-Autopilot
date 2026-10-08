@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2018 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2026 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,16 +31,22 @@
 #
 ############################################################################
 
-px4_add_library(CollisionPrevention
-	CollisionPrevention.cpp
-	ObstacleMath.cpp
-	AccelerationLimits.cpp
+px4_add_library(obstacle_grid
+	ObstacleGrid.cpp
 )
-set_property(GLOBAL APPEND PROPERTY PX4_MODULE_CONFIG_FILES ${CMAKE_CURRENT_SOURCE_DIR}/collisionprevention_params.yaml)
-target_compile_options(CollisionPrevention PRIVATE -Wno-cast-align) # TODO: fix and enable
-target_include_directories(CollisionPrevention PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(CollisionPrevention PRIVATE mathlib)
+target_link_libraries(obstacle_grid PUBLIC range_image)
 
-px4_add_functional_gtest(SRC CollisionPreventionTest.cpp LINKLIBS CollisionPrevention)
-px4_add_unit_gtest(SRC ObstacleMathTest.cpp LINKLIBS CollisionPrevention)
-px4_add_unit_gtest(SRC AccelerationLimitsTest.cpp LINKLIBS CollisionPrevention)
+px4_add_module(
+	MODULE modules__obstacle_map
+	MAIN obstacle_map
+	SRCS
+		ObstacleMap.cpp
+		ObstacleMap.hpp
+	MODULE_CONFIG
+		module.yaml
+	DEPENDS
+		obstacle_grid
+		px4_work_queue
+	)
+
+px4_add_unit_gtest(SRC ObstacleGridTest.cpp LINKLIBS obstacle_grid)

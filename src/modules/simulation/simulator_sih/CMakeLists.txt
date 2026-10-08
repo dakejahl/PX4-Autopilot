@@ -49,6 +49,8 @@ px4_add_module(
 		drivers_rangefinder
 		failure_injection
 		geo
+		obstacle_sim
+		range_image
 	)
 
 if(PX4_PLATFORM MATCHES "posix")

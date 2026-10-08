@@ -65,11 +65,6 @@ public:
 	{
 		_addObstacleSensorData(obstacle, vehicle_yaw);
 	}
-	void test_adaptSetpointDirection(Vector2f &setpoint_dir, int &setpoint_index,
-					 float vehicle_yaw_angle_rad)
-	{
-		_adaptSetpointDirection(setpoint_dir, setpoint_index, vehicle_yaw_angle_rad);
-	}
 	bool test_enterData(int map_index, float sensor_range, float sensor_reading)
 	{
 		return _enterData(map_index, sensor_range, sensor_reading);
@@ -144,9 +139,6 @@ TEST_F(CollisionPreventionTest, testBehaviorOnWithObstacleMessage)
 	param_t param1 = param_handle(px4::params::CP_DIST);
 	float value1 = 10; // try to keep 10m distance
 	param_set(param1, &value1);
-	param_t param2 = param_handle(px4::params::CP_GUIDE_ANG);
-	float value2 = 0; // dont guide sideways
-	param_set(param2, &value2);
 	cp.paramsChanged();
 
 	// AND: an obstacle message
@@ -186,10 +178,12 @@ TEST_F(CollisionPreventionTest, testBehaviorOnWithObstacleMessage)
 	// case 2: the acceleration setpoint should be lower
 	EXPECT_FLOAT_EQ(cp.getObstacleMap().min_distance, 100);
 	EXPECT_FLOAT_EQ(cp.getObstacleMap().max_distance, 10000);
+	// the obstacles span 0 to 45 deg, so away from them is back and to the left
+	const Vector2f obstacles(cosf(math::radians(22.5f)), sinf(math::radians(22.5f)));
 	EXPECT_GT(0.f, modified_setpoint1(0)) << modified_setpoint1(0);
-	EXPECT_EQ(0.f, fabsf(modified_setpoint1(1))) << modified_setpoint1(1);
+	EXPECT_GT(0.f, modified_setpoint1.dot(obstacles)) << modified_setpoint1(1);
 	EXPECT_GT(0.f, modified_setpoint2(0))  << original_setpoint2(0);
-	EXPECT_EQ(0.f, fabsf(modified_setpoint2(1))) << modified_setpoint2(1);
+	EXPECT_GT(0.f, modified_setpoint2.dot(obstacles)) << modified_setpoint2(1);
 }
 
 TEST_F(CollisionPreventionTest, testBehaviorOnWithDistanceMessage)
@@ -250,9 +244,9 @@ TEST_F(CollisionPreventionTest, testBehaviorOnWithDistanceMessage)
 	EXPECT_FLOAT_EQ(cp.getObstacleMap().max_distance, 10000);
 
 	EXPECT_GT(0.f, modified_setpoint1(0)) << modified_setpoint1(0);
-	EXPECT_EQ(0.f, fabsf(modified_setpoint1(1))) << modified_setpoint1(1);
+	EXPECT_LT(fabsf(modified_setpoint1(1)), 0.05f * fabsf(modified_setpoint1(0))) << modified_setpoint1(1);
 	EXPECT_GT(0.f, modified_setpoint2(0))  << original_setpoint2(0);
-	EXPECT_EQ(0.f, fabsf(modified_setpoint2(1))) << modified_setpoint2(1);
+	EXPECT_LT(fabsf(modified_setpoint2(1)), 0.05f * fabsf(modified_setpoint2(0))) << modified_setpoint2(1);
 }
 
 TEST_F(CollisionPreventionTest, testPurgeOldData)
@@ -317,23 +311,24 @@ TEST_F(CollisionPreventionTest, testPurgeOldData)
 		message_lost_data.timestamp = mocked_time;
 		orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message_lost_data);
 
-		//at iteration 8 change the CP_GO_NO_DATA to True
-		if (i == 8) {
-			param_t param_allow = param_handle(px4::params::CP_GO_NO_DATA);
-			float value_allow = 1;
-			param_set(param_allow, &value_allow);
-			cp.paramsChanged();
-		}
+		// THEN: the stick goes through while the bins are fresh; once they are forgotten the
+		// direction is still the pilot's, but 2 m/s is more than the vehicle can stop from within
+		// CP_DIST (1 m) of space no sensor reports, so it brakes
+		EXPECT_NEAR(modified_setpoint(1), 0.f, 1e-4f);
 
 		if (i < 6) {
-			// THEN: If the data is new enough, the velocity setpoint should stay the same as the input
-			// Note: direction will change slightly due to guidance
 			EXPECT_FLOAT_EQ(original_setpoint.norm(), modified_setpoint.norm());
 
 		} else {
-			// THEN: If the data is expired, the velocity setpoint should be cut down to zero because there is no data
-			//(even if CP_GO_NO_DATA is set to true, because we once had data in those bins and now lost the sensor)
-			EXPECT_FLOAT_EQ(0.f, modified_setpoint.norm()) << modified_setpoint(0) << "," << modified_setpoint(1);
+			EXPECT_LT(modified_setpoint(0), 0.f);
+		}
+
+		// AND: bins not refreshed for half a second are forgotten
+		if (i >= 6) {
+			EXPECT_EQ(cp.getObstacleMap().distances[0], UINT16_MAX);
+
+		} else {
+			EXPECT_EQ(cp.getObstacleMap().distances[0], 10001);
 		}
 	}
 
@@ -445,19 +440,148 @@ TEST_F(CollisionPreventionTest, noBias)
 	EXPECT_FLOAT_EQ(original_setpoint.normalized()(1), modified_setpoint.normalized()(1));
 }
 
-TEST_F(CollisionPreventionTest, outsideFOV)
+TEST_F(CollisionPreventionTest, obstacleAheadWhileClosestIsBehind)
 {
-	// GIVEN: a simple setup condition
+	// GIVEN: a vehicle facing north at 2 m/s towards an obstacle 2.9 m ahead, with a closer one behind it
 	TestCollisionPrevention cp;
+	Vector2f original_setpoint(10, 0);
 	Vector2f curr_vel(2, 0);
+	vehicle_attitude_s attitude{};
+	attitude.timestamp = hrt_absolute_time();
+	attitude.q[0] = 1.0f;
 
-	// AND: a parameter handle
 	param_t param = param_handle(px4::params::CP_DIST);
-	float value = 5; // try to keep 5m distance
+	float value = 1.5f;
 	param_set(param, &value);
 	cp.paramsChanged();
 
-	// AND: an obstacle message
+	obstacle_distance_s message{};
+	message.frame = message.MAV_FRAME_BODY_FRD;
+	message.min_distance = 10;
+	message.max_distance = 465;
+	message.increment = 360.f / bin_count;
+	message.timestamp = hrt_absolute_time();
+
+	for (uint i = 0; i < bin_count; i++) {
+		message.distances[i] = 466;
+	}
+
+	message.distances[0] = 290;
+	message.distances[bin_count / 2] = 160;
+
+	// WHEN: the pilot pushes full forward stick
+	orb_advert_t obstacle_distance_pub = orb_advertise(ORB_ID(obstacle_distance), &message);
+	orb_advert_t vehicle_attitude_pub = orb_advertise(ORB_ID(vehicle_attitude), &attitude);
+	Vector2f modified_setpoint = original_setpoint;
+	cp.modifySetpoint(modified_setpoint, curr_vel);
+	orb_unadvertise(obstacle_distance_pub);
+	orb_unadvertise(vehicle_attitude_pub);
+
+	// THEN: the obstacle ahead limits the acceleration, although the closest one is behind
+	EXPECT_LT(modified_setpoint(0), 1.f);
+}
+
+TEST_F(CollisionPreventionTest, noAccelerationTowardsObstacleInsideDistance)
+{
+	// GIVEN: a vehicle facing north with an obstacle 30 deg right and one behind it on the left, inside CP_DIST
+	TestCollisionPrevention cp;
+	Vector2f original_setpoint(10, 0);
+	Vector2f curr_vel(0, 0);
+	vehicle_attitude_s attitude{};
+	attitude.timestamp = hrt_absolute_time();
+	attitude.q[0] = 1.0f;
+
+	param_t param = param_handle(px4::params::CP_DIST);
+	float value = 1.5f;
+	param_set(param, &value);
+	cp.paramsChanged();
+
+	obstacle_distance_s message{};
+	message.frame = message.MAV_FRAME_BODY_FRD;
+	message.min_distance = 10;
+	message.max_distance = 465;
+	message.increment = 360.f / bin_count;
+	message.timestamp = hrt_absolute_time();
+
+	for (uint i = 0; i < bin_count; i++) {
+		message.distances[i] = 466;
+	}
+
+	const int ahead_bin = 30 / bin_size;
+	const int close_bin = (360 - 110) / bin_size;
+	message.distances[ahead_bin] = 200;
+	message.distances[close_bin] = 100;
+
+	// WHEN: the pilot pushes the stick forward, which slides it left past the obstacle ahead
+	orb_advert_t obstacle_distance_pub = orb_advertise(ORB_ID(obstacle_distance), &message);
+	orb_advert_t vehicle_attitude_pub = orb_advertise(ORB_ID(vehicle_attitude), &attitude);
+	Vector2f modified_setpoint = original_setpoint;
+	cp.modifySetpoint(modified_setpoint, curr_vel);
+	orb_unadvertise(obstacle_distance_pub);
+	orb_unadvertise(vehicle_attitude_pub);
+
+	// THEN: nothing of the setpoint points towards the obstacle that is already too close
+	const float close_angle = math::radians((float)(close_bin * bin_size));
+	EXPECT_LE(modified_setpoint.dot(Vector2f(cosf(close_angle), sinf(close_angle))), 1e-5f);
+}
+
+TEST_F(CollisionPreventionTest, noAccelerationTowardsEitherWallOfACorridor)
+{
+	// GIVEN: a vehicle facing north between two walls 1 m away, inside CP_DIST, slightly ahead on each side
+	TestCollisionPrevention cp;
+	Vector2f original_setpoint(10, 0);
+	Vector2f curr_vel(0, 0);
+	vehicle_attitude_s attitude{};
+	attitude.timestamp = hrt_absolute_time();
+	attitude.q[0] = 1.0f;
+
+	param_t param = param_handle(px4::params::CP_DIST);
+	float value = 1.5f;
+	param_set(param, &value);
+	cp.paramsChanged();
+
+	obstacle_distance_s message{};
+	message.frame = message.MAV_FRAME_BODY_FRD;
+	message.min_distance = 10;
+	message.max_distance = 465;
+	message.increment = 360.f / bin_count;
+	message.timestamp = hrt_absolute_time();
+
+	for (uint i = 0; i < bin_count; i++) {
+		message.distances[i] = 466;
+	}
+
+	const int right_bin = 80 / bin_size;
+	const int left_bin = 280 / bin_size;
+	message.distances[right_bin] = 100;
+	message.distances[left_bin] = 100;
+
+	// WHEN: the pilot pushes the stick forward
+	orb_advert_t obstacle_distance_pub = orb_advertise(ORB_ID(obstacle_distance), &message);
+	orb_advert_t vehicle_attitude_pub = orb_advertise(ORB_ID(vehicle_attitude), &attitude);
+	Vector2f modified_setpoint = original_setpoint;
+	cp.modifySetpoint(modified_setpoint, curr_vel);
+	orb_unadvertise(obstacle_distance_pub);
+	orb_unadvertise(vehicle_attitude_pub);
+
+	// THEN: the setpoint points towards neither wall
+	for (int bin : {right_bin, left_bin}) {
+		const float angle = math::radians((float)(bin * bin_size));
+		EXPECT_LE(modified_setpoint.dot(Vector2f(cosf(angle), sinf(angle))), 1e-5f);
+	}
+}
+
+TEST_F(CollisionPreventionTest, pilotMayFlyWhereNoSensorLooks)
+{
+	// GIVEN: a sensor that covers 45 to 225 deg, with a wall 3 m away there, and CP_DIST 2 m
+	TestCollisionPrevention cp;
+	Vector2f curr_vel(0, 0);
+
+	param_t param = param_handle(px4::params::CP_DIST);
+	float value = 2;
+	param_set(param, &value);
+	cp.paramsChanged();
+
 	obstacle_distance_s message;
 	memset(&message, 0xDEAD, sizeof(message));
 	message.frame = message.MAV_FRAME_GLOBAL; //north aligned
@@ -466,43 +590,85 @@ TEST_F(CollisionPreventionTest, outsideFOV)
 	int distances_array_size = sizeof(message.distances) / sizeof(message.distances[0]);
 	message.increment = 360.f / distances_array_size;
 
-	//fov from 45deg to 225deg
 	for (int i = 0; i < distances_array_size; i++) {
-		float angle = i * message.increment;
-
-		if (angle > 45.f && angle < 225.f) {
-			message.distances[i] = 700;
-
-		} else {
-			message.distances[i] = UINT16_MAX;
-		}
+		const float angle = i * message.increment;
+		message.distances[i] = (angle > 45.f && angle < 225.f) ? 300 : UINT16_MAX;
 	}
 
-	// WHEN: we publish the message and modify the setpoint for different demanded setpoints
 	orb_advert_t obstacle_distance_pub = orb_advertise(ORB_ID(obstacle_distance), &message);
 
+	// WHEN: the stick points into the wall, then north-west where no sensor looks
+	message.timestamp = hrt_absolute_time();
+	orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message);
+	Vector2f towards = {0.f, 10.f};
+	cp.modifySetpoint(towards, curr_vel);
+
+	message.timestamp = hrt_absolute_time();
+	orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message);
+	const Vector2f north_west = {7.f, -7.f};
+	Vector2f away = north_west;
+	cp.modifySetpoint(away, curr_vel);
+
+	// AND: the wall is at CP_DIST
 	for (int i = 0; i < distances_array_size; i++) {
-		float angle_deg = (float)i * message.increment;
-		float angle_rad = math::radians(angle_deg);
-		Vector2f original_setpoint = {10.f * cosf(angle_rad), 10.f * sinf(angle_rad)};
-		Vector2f modified_setpoint = original_setpoint;
-		message.timestamp = hrt_absolute_time();
-		orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message);
-		cp.modifySetpoint(modified_setpoint, curr_vel);
-
-		//THEN: if the resulting setpoint demands velocities bigger zero, it must lie inside the FOV
-		float setpoint_length = modified_setpoint.norm();
-
-		if (setpoint_length > 0.f) {
-			Vector2f setpoint_dir = modified_setpoint / setpoint_length;
-			float sp_angle_body_frame = atan2(setpoint_dir(1), setpoint_dir(0));
-			float sp_angle_deg = math::degrees(wrap_2pi(sp_angle_body_frame));
-			EXPECT_GE(sp_angle_deg, 45.f);
-			EXPECT_LE(sp_angle_deg, 225.f);
-		}
+		const float angle = i * message.increment;
+		message.distances[i] = (angle > 45.f && angle < 225.f) ? 200 : UINT16_MAX;
 	}
 
+	message.timestamp = hrt_absolute_time();
+	orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message);
+	Vector2f at_distance = {0.f, 10.f};
+	cp.modifySetpoint(at_distance, curr_vel);
 	orb_unadvertise(obstacle_distance_pub);
+
+	// THEN: towards the wall only as fast as the vehicle can stop at CP_DIST, and not at all once
+	// there; the unobserved direction is the pilot's call, at a speed the vehicle can stop from
+	// within CP_DIST
+	EXPECT_GT(towards(1), 0.f);
+	EXPECT_LT(towards(1), 10.f);
+	EXPECT_LE(at_distance(1), 1e-3f);
+	EXPECT_GT(away.norm(), 0.f);
+	EXPECT_NEAR(away.normalized()(0), north_west.normalized()(0), 1e-4f);
+	EXPECT_NEAR(away.normalized()(1), north_west.normalized()(1), 1e-4f);
+}
+
+TEST_F(CollisionPreventionTest, pilotMayFlySidewaysIntoUnseenSpaceWithSmallDistance)
+{
+	// GIVEN: a forward sensor seeing nothing in range, CP_DIST smaller than the margin a direction needs to open
+	TestCollisionPrevention cp;
+	param_t param = param_handle(px4::params::CP_DIST);
+	float value = 0.8f;
+	param_set(param, &value);
+	cp.paramsChanged();
+
+	obstacle_distance_s message{};
+	message.frame = message.MAV_FRAME_BODY_FRD;
+	message.min_distance = 10;
+	message.max_distance = 465;
+	message.increment = 360.f / bin_count;
+
+	for (uint i = 0; i < bin_count; i++) {
+		message.distances[i] = (i < 6 || i > bin_count - 6) ? 466 : UINT16_MAX;
+	}
+
+	orb_advert_t obstacle_distance_pub = orb_advertise(ORB_ID(obstacle_distance), &message);
+
+	// WHEN: the pilot pushes the stick to the side, from rest and then at walking pace
+	Vector2f from_rest = {0.f, 10.f};
+	message.timestamp = hrt_absolute_time();
+	orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message);
+	cp.modifySetpoint(from_rest, Vector2f(0.f, 0.f));
+
+	Vector2f moving = {0.f, 10.f};
+	message.timestamp = hrt_absolute_time();
+	orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &message);
+	cp.modifySetpoint(moving, Vector2f(0.f, 0.3f));
+	orb_unadvertise(obstacle_distance_pub);
+
+	// THEN: the vehicle moves sideways, slowly
+	EXPECT_GT(from_rest(1), 0.f);
+	EXPECT_GT(moving(1), 0.f);
+	EXPECT_LT(moving(1), 10.f);
 }
 
 TEST_F(CollisionPreventionTest, goNoData)
@@ -542,18 +708,7 @@ TEST_F(CollisionPreventionTest, goNoData)
 	Vector2f original_setpoint = {-5, 0};
 	Vector2f modified_setpoint = original_setpoint;
 
-	//THEN: the modified setpoint should be zero acceleration
-	cp.modifySetpoint(modified_setpoint, curr_vel);
-	EXPECT_FLOAT_EQ(modified_setpoint.norm(), 0.f);
-
-	//WHEN: we change the parameter CP_GO_NO_DATA to allow flying ouside the FOV
-	param_t param_allow = param_handle(px4::params::CP_GO_NO_DATA);
-	float value_allow = 1;
-	param_set(param_allow, &value_allow);
-	cp.paramsChanged();
-
-	//THEN: When all bins contain UINT_16MAX the setpoint should be zero even if CP_GO_NO_DATA=1
-	modified_setpoint = original_setpoint;
+	//THEN: without any sensor data the modified setpoint should be zero acceleration
 	cp.modifySetpoint(modified_setpoint, curr_vel);
 	EXPECT_FLOAT_EQ(modified_setpoint.norm(), 0.f);
 
@@ -1130,98 +1285,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	}
 }
 
-TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
-{
-	// GIVEN: a vehicle attitude and obstacle distance message
-	TestCollisionPrevention cp;
-	obstacle_distance_s obstacle_msg {};
-	obstacle_msg.frame = obstacle_msg.MAV_FRAME_GLOBAL; //north aligned
-	obstacle_msg.increment = 5.f;
-	obstacle_msg.min_distance = 20;
-	obstacle_msg.max_distance = 2000;
-	obstacle_msg.angle_offset = 0.f;
-
-	const float vehicle_yaw = 0.f;
-
-	//obstacle at 0-30 deg world frame, distance 5 meters
-	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
-
-	for (int i = 0; i <= 6 ; i++) {
-		obstacle_msg.distances[i] = 500;
-	}
-
-	obstacle_msg.distances[2] = 1000;
-
-	//define setpoint
-	Vector2f setpoint_dir(1, 0);
-	float sp_angle_body_frame = atan2f(setpoint_dir(1), setpoint_dir(0)) - vehicle_yaw;
-	float sp_angle_with_offset_deg = wrap(math::degrees(sp_angle_body_frame) - cp.getObstacleMap().angle_offset,
-					      0.f, 360.f);
-	int sp_index = floor(sp_angle_with_offset_deg / cp.getObstacleMap().increment);
-
-	//set parameter
-	param_t param = param_handle(px4::params::CP_DIST);
-	float value = 3; // try to keep 10m away from obstacles
-	param_set(param, &value);
-	cp.paramsChanged();
-
-	//WHEN: we add distance sensor data
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_yaw);
-	cp.test_adaptSetpointDirection(setpoint_dir, sp_index, vehicle_yaw);
-
-	//THEN: the setpoint direction should be modified correctly
-	EXPECT_EQ(sp_index, 2);
-	EXPECT_FLOAT_EQ(setpoint_dir(0), 0.98480773f);
-	EXPECT_FLOAT_EQ(setpoint_dir(1), 0.17364818f);
-}
-
-TEST_F(CollisionPreventionTest, adaptSetpointDirection_flat_minimum)
-{
-	// GIVEN: a vehicle attitude and obstacle distance message
-	TestCollisionPrevention cp;
-	obstacle_distance_s obstacle_msg {};
-	obstacle_msg.frame = obstacle_msg.MAV_FRAME_GLOBAL; //north aligned
-	obstacle_msg.increment = 5.f;
-	obstacle_msg.min_distance = 20;
-	obstacle_msg.max_distance = 2000;
-	obstacle_msg.angle_offset = 0.f;
-
-	const float vehicle_yaw = 0.f;
-
-	//obstacle at 0-30 deg world frame, distance 5 meters
-	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
-
-	for (int i = 0; i < 7 ; i++) {
-		obstacle_msg.distances[i] = 500;
-	}
-
-	obstacle_msg.distances[1] = 1000;
-	obstacle_msg.distances[2] = 1000;
-	obstacle_msg.distances[3] = 1000;
-
-	//define setpoint
-	Vector2f setpoint_dir(1, 0);
-	float sp_angle_body_frame = atan2f(setpoint_dir(1), setpoint_dir(0)) - vehicle_yaw;
-	float sp_angle_with_offset_deg = wrap(math::degrees(sp_angle_body_frame) - cp.getObstacleMap().angle_offset,
-					      0.f, 360.f);
-	int sp_index = floor(sp_angle_with_offset_deg / cp.getObstacleMap().increment);
-
-	//set parameter
-	param_t param = param_handle(px4::params::CP_DIST);
-	float value = 3; // try to keep 10m away from obstacles
-	param_set(param, &value);
-	cp.paramsChanged();
-
-	//WHEN: we add distance sensor data
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_yaw);
-	cp.test_adaptSetpointDirection(setpoint_dir, sp_index, vehicle_yaw);
-
-	//THEN: the setpoint direction should be modified correctly
-	EXPECT_EQ(sp_index, 2);
-	EXPECT_FLOAT_EQ(setpoint_dir(0), 0.98480773f);
-	EXPECT_FLOAT_EQ(setpoint_dir(1), 0.17364818f);
-}
-
 TEST_F(CollisionPreventionTest, overlappingSensors)
 {
 	// GIVEN: a simple setup condition
@@ -1369,4 +1432,187 @@ TEST_F(CollisionPreventionTest, enterData)
 	EXPECT_TRUE(cp.test_enterData(16, 20.f, 21.f)); //same range, reading out of range
 	EXPECT_TRUE(cp.test_enterData(16, 30.f, 1.5f)); //longer range, reading in range
 	EXPECT_TRUE(cp.test_enterData(16, 30.f, 31.f)); //longer range, reading out of range
+}
+
+// clear all round to the map's 4.65 m, so only obstacle_clearance limits anything
+static obstacle_distance_s clearSurroundings()
+{
+	obstacle_distance_s message{};
+	message.frame = message.MAV_FRAME_BODY_FRD;
+	message.min_distance = 10;
+	message.max_distance = 465;
+	message.increment = 360.f / bin_count;
+
+	for (uint i = 0; i < bin_count; i++) {
+		message.distances[i] = 466;
+	}
+
+	return message;
+}
+
+// swept up and down to contact at up and down [m], all observed, and nowhere else
+static obstacle_clearance_s clearanceAboveAndBelow(float up, float down)
+{
+	obstacle_clearance_s clearance{};
+	clearance.body_radius = 0.3f;
+	clearance.max_distance = 4.65f;
+
+	for (int i = 0; i < obstacle_clearance_s::SWEEP_COUNT; i++) {
+		clearance.contact[i] = NAN;
+		clearance.observed[i] = NAN;
+	}
+
+	clearance.direction_down[obstacle_clearance_s::SWEEP_UP] = -1.f;
+	clearance.contact[obstacle_clearance_s::SWEEP_UP] = up;
+	clearance.observed[obstacle_clearance_s::SWEEP_UP] = PX4_ISFINITE(up) ? up : 2.25f;
+	clearance.contact_face[obstacle_clearance_s::SWEEP_UP] = obstacle_clearance_s::FACE_TOP;
+	clearance.direction_down[obstacle_clearance_s::SWEEP_DOWN] = 1.f;
+	clearance.contact[obstacle_clearance_s::SWEEP_DOWN] = down;
+	clearance.observed[obstacle_clearance_s::SWEEP_DOWN] = PX4_ISFINITE(down) ? down : 2.25f;
+	clearance.contact_face[obstacle_clearance_s::SWEEP_DOWN] = obstacle_clearance_s::FACE_BOTTOM;
+	return clearance;
+}
+
+class ClearanceTest : public CollisionPreventionTest
+{
+public:
+	void SetUp() override
+	{
+		CollisionPreventionTest::SetUp();
+		float value = 1.5f;
+		param_set(param_handle(px4::params::CP_DIST), &value);
+		cp.paramsChanged();
+		obstacles = clearSurroundings();
+		obstacle_distance_pub = orb_advertise(ORB_ID(obstacle_distance), &obstacles);
+		obstacle_clearance_s none{};
+		clearance_pub = orb_advertise(ORB_ID(obstacle_clearance), &none);
+	}
+
+	void TearDown() override
+	{
+		orb_unadvertise(obstacle_distance_pub);
+		orb_unadvertise(clearance_pub);
+	}
+
+	// one Collision Prevention cycle with fresh data, returns the limited acceleration
+	Vector2f cycle(obstacle_clearance_s clearance, const Vector2f &acceleration, const Vector2f &velocity)
+	{
+		obstacles.timestamp = hrt_absolute_time();
+		orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &obstacles);
+		clearance.timestamp = hrt_absolute_time();
+		orb_publish(ORB_ID(obstacle_clearance), clearance_pub, &clearance);
+		Vector2f limited = acceleration;
+		cp.is_active();
+		cp.modifySetpoint(limited, velocity);
+		return limited;
+	}
+
+	TestCollisionPrevention cp;
+	obstacle_distance_s obstacles{};
+	orb_advert_t obstacle_distance_pub{nullptr};
+	orb_advert_t clearance_pub{nullptr};
+};
+
+TEST_F(ClearanceTest, climbSlowsToStopShortOfACeiling)
+{
+	float up = NAN;
+	float down = NAN;
+
+	// WHEN: a ceiling 2 m over the top of the vehicle, then 0.5 m, as far as CP_DIST_V
+	cycle(clearanceAboveAndBelow(2.f, INFINITY), Vector2f(), Vector2f());
+	ASSERT_TRUE(cp.verticalSpeedLimits(up, down));
+	const float far = up;
+	cycle(clearanceAboveAndBelow(0.5f, INFINITY), Vector2f(), Vector2f());
+	ASSERT_TRUE(cp.verticalSpeedLimits(up, down));
+
+	// THEN: the climb slows down to nothing
+	EXPECT_GT(far, 1.f);
+	EXPECT_FLOAT_EQ(up, 0.f);
+}
+
+TEST_F(ClearanceTest, descentNeverSlowsBelowLandingSpeed)
+{
+	float up = NAN;
+	float down = NAN;
+	float land_speed = NAN;
+	param_get(param_handle(px4::params::MPC_LAND_SPEED), &land_speed);
+
+	// WHEN: the ground is 0.1 m under the bottom of the vehicle
+	cycle(clearanceAboveAndBelow(INFINITY, 0.1f), Vector2f(), Vector2f());
+	ASSERT_TRUE(cp.verticalSpeedLimits(up, down));
+
+	// THEN: the vehicle can still come down to land
+	EXPECT_FLOAT_EQ(down, land_speed);
+}
+
+TEST_F(ClearanceTest, unseenSpaceAboveCapsTheClimb)
+{
+	// WHEN: nothing over the vehicle was ever observed
+	obstacle_clearance_s clearance = clearanceAboveAndBelow(INFINITY, INFINITY);
+	clearance.observed[obstacle_clearance_s::SWEEP_UP] = 0.f;
+	cycle(clearance, Vector2f(), Vector2f());
+
+	// THEN: it climbs, only as fast as it can stop within CP_DIST_V
+	float up = NAN;
+	float down = NAN;
+	ASSERT_TRUE(cp.verticalSpeedLimits(up, down));
+	EXPECT_GT(up, 0.2f);
+	EXPECT_LT(up, 2.5f);
+}
+
+TEST_F(ClearanceTest, somethingInThePathBrakesTheVehicleTowardsIt)
+{
+	// WHEN: flying north at 0.5 m/s, the body would touch something 0.5 m along its setpoint, though
+	// no sector holds it
+	obstacle_clearance_s clearance = clearanceAboveAndBelow(INFINITY, INFINITY);
+	clearance.direction_north[obstacle_clearance_s::SWEEP_SETPOINT] = 1.f;
+	clearance.contact[obstacle_clearance_s::SWEEP_SETPOINT] = 0.5f;
+	clearance.observed[obstacle_clearance_s::SWEEP_SETPOINT] = 0.5f;
+	clearance.contact_face[obstacle_clearance_s::SWEEP_SETPOINT] = obstacle_clearance_s::FACE_SIDE;
+
+	const Vector2f free_run = cycle(clearanceAboveAndBelow(INFINITY, INFINITY), Vector2f(10.f, 0.f), Vector2f(0.5f, 0.f));
+	const Vector2f limited = cycle(clearance, Vector2f(10.f, 0.f), Vector2f(0.5f, 0.f));
+
+	// THEN: the stick accelerates without it, and brakes with it
+	EXPECT_GT(free_run(0), 3.f);
+	EXPECT_LT(limited(0), 0.f);
+}
+
+TEST_F(ClearanceTest, aCeilingAheadStopsTheClimbButNotTheFlight)
+{
+	// WHEN: climbing forward at 45 degrees, the top of the body would reach a ceiling 0.7 m along
+	// the way, less than CP_DIST_V above it
+	const Vector2f free_run = cycle(clearanceAboveAndBelow(INFINITY, INFINITY), Vector2f(10.f, 0.f), Vector2f(1.f, 0.f));
+	obstacle_clearance_s clearance = clearanceAboveAndBelow(INFINITY, INFINITY);
+	clearance.direction_north[obstacle_clearance_s::SWEEP_SETPOINT] = M_SQRT1_2_F;
+	clearance.direction_down[obstacle_clearance_s::SWEEP_SETPOINT] = -M_SQRT1_2_F;
+	clearance.contact[obstacle_clearance_s::SWEEP_SETPOINT] = 0.7f;
+	clearance.observed[obstacle_clearance_s::SWEEP_SETPOINT] = 0.7f;
+	clearance.contact_face[obstacle_clearance_s::SWEEP_SETPOINT] = obstacle_clearance_s::FACE_TOP;
+	const Vector2f limited = cycle(clearance, Vector2f(10.f, 0.f), Vector2f(1.f, 0.f));
+
+	// THEN: the climb stops, forward flight goes on under it
+	float up = NAN;
+	float down = NAN;
+	ASSERT_TRUE(cp.verticalSpeedLimits(up, down));
+	EXPECT_FLOAT_EQ(up, 0.f);
+	EXPECT_FLOAT_EQ(limited(0), free_run(0));
+}
+
+TEST_F(ClearanceTest, staleClearanceLimitsNothing)
+{
+	// WHEN: the last clearance is a second old
+	obstacle_clearance_s clearance = clearanceAboveAndBelow(0.1f, 0.1f);
+	clearance.timestamp = hrt_absolute_time() - 1_s;
+	orb_publish(ORB_ID(obstacle_clearance), clearance_pub, &clearance);
+	obstacles.timestamp = hrt_absolute_time();
+	orb_publish(ORB_ID(obstacle_distance), obstacle_distance_pub, &obstacles);
+	Vector2f acceleration(0.f, 0.f);
+	cp.is_active();
+	cp.modifySetpoint(acceleration, Vector2f());
+
+	// THEN: no vertical limits
+	float up = NAN;
+	float down = NAN;
+	EXPECT_FALSE(cp.verticalSpeedLimits(up, down));
 }

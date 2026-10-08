@@ -254,6 +254,119 @@ parameters:
       type: float
       default: -1.0
       unit: m
+    SIH_WLD_TYPE:
+      description:
+        short: Obstacle world
+        long: |-
+          Obstacles around home that the simulated range image sensor sees. The
+          vehicle does not collide with them. Trees are vertical trunks scattered
+          from SIH_WLD_SEED, one per square cell of SIH_WLD_SPACING at most, with
+          none within SIH_WLD_CLEAR of home. Course is a fixed line north of home:
+          a 1.5 m fence 8 m out, then a roof 4 m up from 14 m to 30 m out.
+      type: enum
+      values:
+        0: None
+        1: Trees
+        2: Course
+      default: 0
+    SIH_WLD_SEED:
+      description:
+        short: Obstacle world seed
+        long: The same seed gives the same obstacles on every boot.
+      type: int32
+      default: 0
+    SIH_WLD_SPACING:
+      description:
+        short: Obstacle world cell size
+        long: Side of the square cell that holds at most one tree.
+      type: float
+      default: 5.0
+      unit: m
+      min: 1.5
+      max: 100.0
+      decimal: 1
+      increment: 0.5
+    SIH_WLD_DENSITY:
+      description:
+        short: Obstacle world density
+        long: Probability that a cell holds a tree.
+      type: float
+      default: 0.5
+      min: 0.0
+      max: 1.0
+      decimal: 2
+      increment: 0.05
+    SIH_WLD_CLEAR:
+      description:
+        short: Obstacle world clear radius
+        long: No obstacle surface lies within this distance of home.
+      type: float
+      default: 4.0
+      unit: m
+      min: 0.0
+      max: 1000.0
+      decimal: 1
+      increment: 0.5
+    SIH_RIMG_EN:
+      description:
+        short: Simulated range image sensor
+        long: |-
+          Publishes range_image and range_image_info from a forward-facing
+          multizone time-of-flight sensor that sees the ground and the
+          SIH_WLD_TYPE obstacles. The defaults model an ST VL53L9CX binned 2x2.
+      type: boolean
+      default: 0
+    SIH_RIMG_ROWS:
+      description:
+        short: Range image rows
+      type: int32
+      default: 21
+      min: 1
+      max: 128
+    SIH_RIMG_COLS:
+      description:
+        short: Range image columns
+      type: int32
+      default: 27
+      min: 1
+      max: 256
+    SIH_RIMG_HFOV:
+      description:
+        short: Range image horizontal field of view
+      type: float
+      default: 55.0
+      unit: deg
+      min: 1.0
+      max: 360.0
+      decimal: 1
+    SIH_RIMG_VFOV:
+      description:
+        short: Range image vertical field of view
+      type: float
+      default: 42.0
+      unit: deg
+      min: 1.0
+      max: 180.0
+      decimal: 1
+    SIH_RIMG_MAX:
+      description:
+        short: Range image maximum range
+        long: Zones with nothing closer read no return.
+      type: float
+      default: 8.0
+      unit: m
+      min: 0.5
+      max: 100.0
+      decimal: 1
+    SIH_RIMG_RATE:
+      description:
+        short: Range image frame rate
+      type: float
+      default: 10.0
+      unit: Hz
+      min: 1.0
+      max: 100.0
+      decimal: 1
     SIH_T_TAU:
       description:
         short: thruster time constant tau

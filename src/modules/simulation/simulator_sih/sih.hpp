@@ -68,6 +68,7 @@
 #include <lib/drivers/rangefinder/PX4Rangefinder.hpp>
 #include <lib/geo/geo.h>
 #include <lib/lat_lon_alt/lat_lon_alt.hpp>
+#include <lib/obstacle_sim/obstacle_sim.h>
 #include <lib/perf/perf_counter.h>
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
@@ -79,6 +80,8 @@
 #include <uORB/topics/failure_injection.h>
 #include <uORB/topics/esc_status.h>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/range_image.h>
+#include <uORB/topics/range_image_info.h>
 #include <uORB/topics/vehicle_angular_velocity.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_global_position.h>
@@ -136,6 +139,8 @@ private:
 	uORB::Publication<airspeed_s>         _airspeed_pub{ORB_ID(airspeed)};
 	uORB::Publication<ranging_beacon_s>   _ranging_beacon_pub{ORB_ID(ranging_beacon)};
 	uORB::Publication<esc_status_s>       _esc_status_pub{ORB_ID(esc_status)};
+	uORB::Publication<range_image_s>      _range_image_pub{ORB_ID(range_image)};
+	uORB::Publication<range_image_info_s> _range_image_info_pub{ORB_ID(range_image_info)};
 
 	// groundtruth
 	uORB::Publication<vehicle_angular_velocity_s> _angular_velocity_ground_truth_pub{ORB_ID(vehicle_angular_velocity_groundtruth)};
@@ -204,6 +209,9 @@ private:
 	void send_airspeed(const hrt_abstime &time_now_us);
 	void send_dist_snsr(const hrt_abstime &time_now_us);
 	void send_ranging_beacon(const hrt_abstime &time_now_us);
+	void update_range_image_info();
+	void send_range_image(const hrt_abstime &time_now_us);
+	float range_image_zone(const float origin[3], const matrix::Dcmf &R_N2S, uint16_t row, uint16_t col) const;
 	void publish_ground_truth(const hrt_abstime &time_now_us);
 	void generate_fw_aerodynamics(const float roll_cmd, const float pitch_cmd, const float yaw_cmd, const float thrust_for_prowash);
 	void generate_ts_aerodynamics();
@@ -233,6 +241,12 @@ private:
 	hrt_abstime _dist_snsr_time{0};
 	hrt_abstime _ranging_beacon_time{0};
 	uint8_t _ranging_beacon_idx{0};
+	hrt_abstime _range_image_time{0};
+	hrt_abstime _range_image_info_time{0};
+	bool _range_image_info_pending{true};
+	uint8_t _range_image_frame_seq{0};
+	range_image_info_s _range_image_info{};
+	obstacle_sim::World _world{};
 
 	bool _grounded{true}; // whether the vehicle is on the ground
 
@@ -355,6 +369,18 @@ private:
 		(ParamInt<px4::params::SIH_VEHICLE_TYPE>) _sih_vtype,
 		(ParamFloat<px4::params::SIH_WIND_N>) _sih_wind_n,
 		(ParamFloat<px4::params::SIH_WIND_E>) _sih_wind_e,
-		(ParamFloat<px4::params::SIH_RNGBC_NOISE>) _sih_ranging_beacon_noise
+		(ParamFloat<px4::params::SIH_RNGBC_NOISE>) _sih_ranging_beacon_noise,
+		(ParamInt<px4::params::SIH_WLD_TYPE>) _sih_wld_type,
+		(ParamInt<px4::params::SIH_WLD_SEED>) _sih_wld_seed,
+		(ParamFloat<px4::params::SIH_WLD_SPACING>) _sih_wld_spacing,
+		(ParamFloat<px4::params::SIH_WLD_DENSITY>) _sih_wld_density,
+		(ParamFloat<px4::params::SIH_WLD_CLEAR>) _sih_wld_clear,
+		(ParamBool<px4::params::SIH_RIMG_EN>) _sih_rimg_en,
+		(ParamInt<px4::params::SIH_RIMG_ROWS>) _sih_rimg_rows,
+		(ParamInt<px4::params::SIH_RIMG_COLS>) _sih_rimg_cols,
+		(ParamFloat<px4::params::SIH_RIMG_HFOV>) _sih_rimg_hfov,
+		(ParamFloat<px4::params::SIH_RIMG_VFOV>) _sih_rimg_vfov,
+		(ParamFloat<px4::params::SIH_RIMG_MAX>) _sih_rimg_max,
+		(ParamFloat<px4::params::SIH_RIMG_RATE>) _sih_rimg_rate
 	)
 };
