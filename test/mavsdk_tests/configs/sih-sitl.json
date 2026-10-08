@@ -28,6 +28,29 @@
             }
         },
         {
+            "model": "quadx",
+            "test_filter": "[collision_prevention]",
+            "timeout_min": 10,
+            "env": {
+                "PX4_PARAM_SIH_WLD_TYPE": 1,
+                "PX4_PARAM_SIH_WLD_SEED": 0,
+                "PX4_PARAM_SIH_RIMG_EN": 1,
+                "PX4_PARAM_OMAP_EN": 1,
+                "PX4_PARAM_CP_DIST": 1.5
+            }
+        },
+        {
+            "model": "quadx",
+            "test_filter": "[obstacle_course]",
+            "timeout_min": 10,
+            "env": {
+                "PX4_PARAM_SIH_WLD_TYPE": 2,
+                "PX4_PARAM_SIH_RIMG_EN": 1,
+                "PX4_PARAM_OMAP_EN": 1,
+                "PX4_PARAM_CP_DIST": 1.5
+            }
+        },
+        {
             "model": "hex",
             "test_filter": "[motor_failure_injection]",
             "timeout_min": 15
