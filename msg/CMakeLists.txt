@@ -151,7 +151,9 @@ set(msg_files
 	NeuralControl.msg
 	NfsUp.msg
 	NormalizedUnsignedSetpoint.msg
+	ObstacleClearance.msg
 	ObstacleDistance.msg
+	ObstacleMapStatus.msg
 	OffboardControlMode.msg
 	OnboardComputerStatus.msg
 	OpenDroneIdArmStatus.msg

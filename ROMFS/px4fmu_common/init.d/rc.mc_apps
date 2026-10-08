@@ -42,6 +42,14 @@ flight_mode_manager start
 mc_pos_control start
 
 #
+# Start the obstacle map, which feeds Collision Prevention from range images.
+#
+if param compare -s OMAP_EN 1
+then
+	obstacle_map start
+fi
+
+#
 # Start Multicopter Land Detector.
 #
 land_detector start multicopter

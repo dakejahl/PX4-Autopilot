@@ -1,0 +1,99 @@
+module_name: obstacle_map
+parameters:
+  - group: Obstacle Map
+    definitions:
+      OMAP_EN:
+        description:
+          short: Obstacle map
+          long: |-
+            Builds a persistent 3D occupancy map from range images and publishes the nearest
+            obstacle in each direction around the vehicle as obstacle_distance, which Collision
+            Prevention uses.
+        type: boolean
+        default: 0
+        reboot_required: true
+      OMAP_VOX_SIZE:
+        description:
+          short: Voxel size
+          long: |-
+            Edge length of one voxel. The map holds a fixed number of voxels, so its extent
+            scales with this. Changing it clears the map.
+        type: float
+        default: 0.15
+        min: 0.05
+        max: 1.0
+        unit: m
+        decimal: 2
+        increment: 0.05
+      OMAP_VEH_RAD:
+        description:
+          short: Vehicle radius
+          long: |-
+            Horizontal radius of the vehicle. Occupied voxels within it above or below the
+            vehicle set the vertical clearance.
+        type: float
+        default: 0.3
+        min: 0.05
+        max: 5.0
+        unit: m
+        decimal: 2
+        increment: 0.05
+      OMAP_VEH_HGT:
+        description:
+          short: Vehicle height
+          long: |-
+            Height of the band centred on the vehicle that horizontal obstacle distances are
+            taken from. Voxels above or below it, such as the ground, are not obstacles.
+        type: float
+        default: 0.5
+        min: 0.1
+        max: 5.0
+        unit: m
+        decimal: 2
+        increment: 0.05
+      OMAP_HIT:
+        description:
+          short: Log-odds added per return
+          long: Added to the voxel a return ends in.
+        type: int32
+        default: 2
+        min: 1
+        max: 7
+      OMAP_MISS:
+        description:
+          short: Log-odds removed per pass
+          long: |-
+            Removed from each voxel a ray passes through. Keep it below OMAP_HIT so rays
+            grazing a surface do not erase it.
+        type: int32
+        default: 1
+        min: 0
+        max: 7
+      OMAP_OCC_THR:
+        description:
+          short: Occupied threshold
+          long: A voxel at or above this log-odds value is an obstacle.
+        type: int32
+        default: 3
+        min: 1
+        max: 7
+      OMAP_FREE_THR:
+        description:
+          short: Free threshold
+          long: |-
+            A voxel at or below this log-odds value is free. Voxels between the free and
+            occupied thresholds are unknown.
+        type: int32
+        default: -2
+        min: -8
+        max: -1
+      OMAP_LO_MIN:
+        description:
+          short: Lowest log-odds value
+          long: |-
+            Misses never take a voxel below this, so an obstacle that appears in free space
+            becomes occupied after a bounded number of returns. Lowered to OMAP_FREE_THR if above it.
+        type: int32
+        default: -4
+        min: -8
+        max: -1

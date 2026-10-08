@@ -1,0 +1,17 @@
+menuconfig MODULES_OBSTACLE_MAP
+	bool "obstacle_map"
+	default n
+	---help---
+		Persistent 3D obstacle map built from range images. Publishes obstacle_distance for Collision Prevention.
+
+config OBSTACLE_MAP_SIZE_XY
+	int "Voxels along north and along east, a power of two"
+	default 64
+	depends on MODULES_OBSTACLE_MAP
+	---help---
+		The map holds SIZE_XY x SIZE_XY x SIZE_Z voxels at half a byte each, 64 KB at the defaults.
+
+config OBSTACLE_MAP_SIZE_Z
+	int "Voxels along down, a power of two"
+	default 32
+	depends on MODULES_OBSTACLE_MAP
