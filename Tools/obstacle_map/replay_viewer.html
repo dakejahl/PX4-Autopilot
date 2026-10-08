@@ -1,0 +1,491 @@
+<title>Obstacle Map Replay</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+/* Layout: the scene fills the screen; a summary card floats top left, the timeline is a bar along the bottom. */
+:root {
+  --bg: #e9eee8;          /* overcast forest floor */
+  --panel: rgba(250, 252, 248, 0.92);
+  --line: #c6cfc3;
+  --ink: #1d2620;
+  --muted: #5b6a5f;
+  --ground: #dde4da;
+  --grid: #c3cdbf;
+  --trunk: #6f5b47;       /* simulated trunks, drawn faint */
+  --voxel-low: #b8620f;   /* occupied voxels, by height */
+  --voxel-high: #e9b04a;
+  --path: #24405e;        /* estimated flight path */
+  --setpoint: #0f8a7a;    /* setpoints */
+  --warn: #c2392b;        /* what Collision Prevention was given */
+  --steer: #7a3db8;       /* what Collision Prevention made of the stick */
+  --fov: #24405e;
+  --font-ui: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1411; --panel: rgba(20, 28, 24, 0.92); --line: #2c3a32; --ink: #e3ebe4; --muted: #93a598;
+    --ground: #141c18; --grid: #24302a; --trunk: #a88e72; --voxel-low: #d9791c; --voxel-high: #f6c867;
+    --path: #8fb8e6; --setpoint: #3fc9b5; --warn: #f0675a; --steer: #c39bf0; --fov: #8fb8e6; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1411; --panel: rgba(20, 28, 24, 0.92); --line: #2c3a32; --ink: #e3ebe4; --muted: #93a598;
+  --ground: #141c18; --grid: #24302a; --trunk: #a88e72; --voxel-low: #d9791c; --voxel-high: #f6c867;
+  --path: #8fb8e6; --setpoint: #3fc9b5; --warn: #f0675a; --steer: #c39bf0; --fov: #8fb8e6; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; overflow: hidden; }
+#scene { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+.card {
+  position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 16px; width: min(320px, calc(100% - 32px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
+  display: grid; gap: 10px; backdrop-filter: blur(6px);
+}
+.card h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: 0.01em; text-wrap: balance; }
+.card .file { font-family: var(--font-data); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+.stats dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; align-self: baseline; }
+.stats dd { margin: 0; font-family: var(--font-data); font-size: 13px; font-variant-numeric: tabular-nums; align-self: baseline; }
+.stats button { font: inherit; color: var(--warn); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 1px; }
+.legend i.box { width: 9px; height: 9px; }
+.legend i.dash { background: repeating-linear-gradient(90deg, var(--setpoint) 0 4px, transparent 4px 7px) !important; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.toggles label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel); border-top: 1px solid var(--line); display: grid; gap: 6px; backdrop-filter: blur(6px);
+}
+.controls { display: flex; align-items: center; gap: 12px; }
+.controls button, .controls select {
+  font: 500 13px var(--font-ui); color: var(--ink); background: transparent; border: 1px solid var(--line);
+  border-radius: 4px; padding: 5px 10px; cursor: pointer; min-width: 64px;
+}
+.controls button:focus-visible, .controls select:focus-visible, #time:focus-visible, .stats button:focus-visible { outline: 2px solid var(--setpoint); outline-offset: 2px; }
+#time { flex: 1; min-width: 0; accent-color: var(--path); }
+.readout { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--font-data); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 500; }
+.empty { position: fixed; inset: 0; display: grid; place-items: center; padding-inline: 16px; color: var(--muted); text-align: center; }
+@media (max-width: 560px) {
+  .card { gap: 8px; padding: 10px 12px; }
+  .legend { display: none; }
+  .readout span.wide { display: none; }
+}
+</style>
+
+<canvas id="scene" aria-label="3D replay of the flight and the obstacle map"></canvas>
+
+<section class="card" aria-label="Flight summary">
+  <div>
+    <h1>Obstacle Map Replay</h1>
+    <div class="file" id="file"></div>
+  </div>
+  <dl class="stats" id="stats"></dl>
+  <div class="legend">
+    <span><i style="background: var(--path)"></i>Estimated path</span>
+    <span><i class="dash"></i>Position setpoint</span>
+    <span><i style="background: var(--setpoint)"></i>Velocity setpoint, 1 s</span>
+    <span><i style="background: var(--muted)"></i>Stick command</span>
+    <span><i style="background: var(--steer)"></i>Collision Prevention output</span>
+    <span><i class="box" style="background: var(--voxel-low)"></i>Occupied voxel</span>
+    <span><i style="background: var(--warn)"></i>Collision Prevention input</span>
+    <span><i class="box" style="background: var(--trunk); opacity: 0.45"></i>Simulated obstacle</span>
+  </div>
+  <div class="toggles">
+    <label><input type="checkbox" id="follow" checked> Follow vehicle</label>
+    <label><input type="checkbox" id="showTrees" checked> Obstacles</label>
+    <label><input type="checkbox" id="showBins" checked> CP input</label>
+  </div>
+</section>
+
+<div class="bar">
+  <div class="controls">
+    <button id="play" type="button">Play</button>
+    <input id="time" type="range" min="0" max="1" step="0.05" value="0" aria-label="Time in flight">
+    <select id="rate" aria-label="Playback speed">
+      <option value="1">1×</option>
+      <option value="2">2×</option>
+      <option value="4" selected>4×</option>
+      <option value="8">8×</option>
+    </select>
+  </div>
+  <div class="readout" id="readout"></div>
+</div>
+
+<div class="empty" id="empty" hidden>No scene data in this page. Generate it with Tools/obstacle_map/replay.py.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const SCENE = /*SCENE_JSON*/null;
+
+(function () {
+  if (!SCENE || typeof THREE === 'undefined') {
+    document.getElementById('empty').hidden = false;
+    return;
+  }
+
+  // PX4 local NED to three.js: x east, y up, z south
+  const toScene = (p) => new THREE.Vector3(p[1], -p[2], -p[0]);
+
+  const css = () => getComputedStyle(document.documentElement);
+  const token = (name) => new THREE.Color(css().getPropertyValue(name).trim());
+
+  const canvas = document.getElementById('scene');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.maxPolarAngle = Math.PI * 0.495;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445544, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  sun.position.set(30, 60, 20);
+  scene.add(sun);
+
+  const track = SCENE.track;
+  const duration = track.t.length ? track.t[track.t.length - 1] : 0;
+  const voxel = SCENE.voxel_size;
+
+  // extent of the flight, for the ground and the first camera view
+  const box = new THREE.Box3();
+  track.p.forEach((p) => box.expandByPoint(toScene(p)));
+  const center = box.getCenter(new THREE.Vector3());
+  const size = Math.max(20, box.getSize(new THREE.Vector3()).length());
+
+  // ground and grid
+  const groundMaterial = new THREE.MeshBasicMaterial();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(size * 3, size * 3), groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(center.x, -0.01, center.z);
+  scene.add(ground);
+  const gridSize = Math.ceil(size * 3 / 10) * 10;
+  let grid = null;
+
+  // simulated trunks
+  const trees = SCENE.trees || [];
+  const trunkMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.28, depthWrite: false});
+  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 18), trunkMaterial, Math.max(1, trees.length));
+  const m = new THREE.Matrix4();
+  trees.forEach((t, i) => {
+    m.compose(new THREE.Vector3(t[1], t[3] / 2, -t[0]), new THREE.Quaternion(), new THREE.Vector3(t[2], t[3], t[2]));
+    trunks.setMatrixAt(i, m);
+  });
+  trunks.count = trees.length;
+  scene.add(trunks);
+
+  // simulated boxes, local NED corners, fainter so a roof does not hide what flies under it
+  const boxMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.12, depthWrite: false});
+  const boxes = new THREE.Group();
+  (SCENE.boxes || []).forEach((b) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(b[4] - b[1], b[5] - b[2], b[3] - b[0]), boxMaterial);
+    mesh.position.copy(toScene([(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2]));
+    boxes.add(mesh);
+  });
+  scene.add(boxes);
+
+  // flight path: the whole flight faint, the flown part solid
+  const pathPoints = track.p.map(toScene);
+  const pathGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+  const pathFaint = new THREE.Line(pathGeometry, new THREE.LineBasicMaterial({transparent: true, opacity: 0.22}));
+  const pathFlown = new THREE.Line(pathGeometry.clone(), new THREE.LineBasicMaterial());
+  scene.add(pathFaint, pathFlown);
+
+  // position setpoints, where the controller had one
+  const setpointGroup = new THREE.Group();
+  const setpointMaterial = new THREE.LineDashedMaterial({dashSize: 0.4, gapSize: 0.25});
+  if (SCENE.setpoint) {
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) {
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(run), setpointMaterial);
+        line.computeLineDistances();
+        setpointGroup.add(line);
+      }
+      run = [];
+    };
+    SCENE.setpoint.p.forEach((p) => (p[0] === null || p[1] === null || p[2] === null) ? flush() : run.push(toScene(p)));
+    flush();
+  }
+  scene.add(setpointGroup);
+
+  // vehicle, the sensor's horizontal field of view and the velocity setpoint
+  const vehicle = new THREE.Group();
+  const bodyMaterial = new THREE.MeshLambertMaterial();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 16), bodyMaterial);
+  body.rotation.x = -Math.PI / 2;   // nose along -z, which is north at zero yaw
+  vehicle.add(body);
+  const fovMaterial = new THREE.MeshBasicMaterial({transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false});
+  const fovReach = 4.65;
+  const fov = new THREE.Mesh(new THREE.CircleGeometry(fovReach, 24, Math.PI / 2 - THREE.MathUtils.degToRad(27.5), THREE.MathUtils.degToRad(55)), fovMaterial);
+  fov.rotation.x = -Math.PI / 2;
+  vehicle.add(fov);
+  scene.add(vehicle);
+  const velocityMaterial = new THREE.LineBasicMaterial();
+  const velocityLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), velocityMaterial);
+  scene.add(velocityLine);
+
+  // the pilot's acceleration command and what Collision Prevention made of it, as directions 1.5 m long
+  const commandMaterial = new THREE.LineBasicMaterial({transparent: true, opacity: 0.7});
+  const outputMaterial = new THREE.LineBasicMaterial();
+  const commandLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), commandMaterial);
+  const outputLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), outputMaterial);
+  scene.add(commandLine, outputLine);
+  const ARROW_LENGTH = 1.5;
+  const setArrow = (line, position, a) => {
+    const attr = line.geometry.attributes.position;
+    attr.setXYZ(0, position.x, position.y, position.z);
+    const length = Math.hypot(a[0], a[1]);
+    const end = length > 0.05 ? position.clone().add(new THREE.Vector3(a[1] / length, 0, -a[0] / length).multiplyScalar(ARROW_LENGTH)) : position;
+    attr.setXYZ(1, end.x, end.y, end.z);
+    attr.needsUpdate = true;
+  };
+
+  // Collision Prevention input: a filled wedge out to the obstacle in each sector that holds one
+  const bins = SCENE.obstacle_distance;
+  const binMaterial = new THREE.MeshBasicMaterial({transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false});
+  const binPositions = new Float32Array(72 * 3 * 3);
+  const binGeometry = new THREE.BufferGeometry();
+  binGeometry.setAttribute('position', new THREE.BufferAttribute(binPositions, 3));
+  const binLines = new THREE.Mesh(binGeometry, binMaterial);
+  binLines.frustumCulled = false;
+  scene.add(binLines);
+
+  // occupied voxels, replayed from the additions and removals of each keyframe
+  const frames = SCENE.frames;
+  let capacity = 1;
+  {
+    const live = new Set();
+    frames.forEach((f) => {
+      f.add.forEach((v) => live.add(v.join(',')));
+      f.del.forEach((v) => live.delete(v.join(',')));
+      capacity = Math.max(capacity, live.size);
+    });
+  }
+  const voxelMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(voxel * 0.9, voxel * 0.9, voxel * 0.9),
+                                            new THREE.MeshLambertMaterial(), capacity);
+  // colours exist from the start, so the shader is built with them
+  voxelMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+  voxelMesh.count = 0;
+  scene.add(voxelMesh);
+  const frameTimes = frames.map((f) => f.t);
+  const liveVoxels = new Map();
+  let appliedFrame = -1;
+  let lowColor, highColor;
+
+  function voxelColor(v) {
+    const height = -(v[2] + 0.5) * voxel;
+    return lowColor.clone().lerp(highColor, Math.min(1, Math.max(0, height / 4)));
+  }
+
+  function applyFrames(index) {
+    if (index < appliedFrame || index < 0) {
+      liveVoxels.clear();
+      appliedFrame = -1;
+    }
+    for (let k = appliedFrame + 1; k <= index; k++) {
+      frames[k].add.forEach((v) => liveVoxels.set(v.join(','), v));
+      frames[k].del.forEach((v) => liveVoxels.delete(v.join(',')));
+    }
+    appliedFrame = index;
+    let i = 0;
+    for (const v of liveVoxels.values()) {
+      m.makeTranslation((v[1] + 0.5) * voxel, -(v[2] + 0.5) * voxel, -(v[0] + 0.5) * voxel);
+      voxelMesh.setMatrixAt(i, m);
+      voxelMesh.setColorAt(i, voxelColor(v));
+      i++;
+    }
+    voxelMesh.count = i;
+    voxelMesh.instanceMatrix.needsUpdate = true;
+    if (voxelMesh.instanceColor) voxelMesh.instanceColor.needsUpdate = true;
+  }
+
+  function applyTheme() {
+    scene.background = token('--bg');
+    groundMaterial.color = token('--ground');
+    if (grid) scene.remove(grid);
+    grid = new THREE.GridHelper(gridSize, gridSize / 2, token('--grid'), token('--grid'));
+    grid.position.set(Math.round(center.x), 0, Math.round(center.z));
+    scene.add(grid);
+    trunkMaterial.color = token('--trunk');
+    boxMaterial.color = token('--trunk');
+    pathFaint.material.color = token('--path');
+    pathFlown.material.color = token('--path');
+    setpointMaterial.color = token('--setpoint');
+    velocityMaterial.color = token('--setpoint');
+    bodyMaterial.color = token('--path');
+    fovMaterial.color = token('--fov');
+    binMaterial.color = token('--warn');
+    commandMaterial.color = token('--muted');
+    outputMaterial.color = token('--steer');
+    lowColor = token('--voxel-low');
+    highColor = token('--voxel-high');
+    const keep = appliedFrame;
+    appliedFrame = -1;
+    liveVoxels.clear();
+    if (keep >= 0) applyFrames(keep);
+  }
+
+  // index of the last sample at or before t
+  function at(times, t) {
+    let lo = 0, hi = times.length - 1;
+    if (hi < 0 || t < times[0]) return 0;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (times[mid] <= t) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  const readout = document.getElementById('readout');
+  const slider = document.getElementById('time');
+  slider.max = duration.toFixed(2);
+  let now = 0;
+
+  function show(t) {
+    now = Math.min(Math.max(t, 0), duration);
+    slider.value = now;
+    const i = at(track.t, now);
+    pathFlown.geometry.setDrawRange(0, i + 1);
+    const position = pathPoints[i];
+    vehicle.position.copy(position);
+    vehicle.rotation.y = -track.yaw[i];
+
+    if (frames.length) applyFrames(now < frameTimes[0] ? -1 : at(frameTimes, now));
+
+    let speedText = '–';
+    if (SCENE.setpoint) {
+      const v = SCENE.setpoint.v[at(SCENE.setpoint.t, now)];
+      const attr = velocityLine.geometry.attributes.position;
+      attr.setXYZ(0, position.x, position.y, position.z);
+      if (v[0] !== null && v[1] !== null) {
+        const end = toScene([v[0], v[1], v[2] === null ? 0 : v[2]]).add(position);
+        attr.setXYZ(1, end.x, end.y, end.z);
+        speedText = Math.hypot(v[0], v[1]).toFixed(1) + ' m/s';
+      } else {
+        attr.setXYZ(1, position.x, position.y, position.z);
+      }
+      attr.needsUpdate = true;
+    }
+
+    if (SCENE.constraints) {
+      const c = at(SCENE.constraints.t, now);
+      setArrow(commandLine, position, SCENE.constraints.original[c]);
+      setArrow(outputLine, position, SCENE.constraints.adapted[c]);
+    }
+
+    let nearestBin = Infinity;
+    if (bins) {
+      const d = bins.d[at(bins.t, now)];
+      const yaw = track.yaw[i];
+      for (let b = 0; b < 72; b++) {
+        const range = d[b] / 100;
+        const isObstacle = d[b] > 0 && d[b] <= bins.max;
+        if (isObstacle) nearestBin = Math.min(nearestBin, range);
+        const r = isObstacle ? range : 0;
+        binPositions.set([position.x, position.y, position.z], b * 9);
+        for (let s = 0; s < 2; s++) {
+          const a = yaw + THREE.MathUtils.degToRad(b * 5 + (s ? 2.5 : -2.5));
+          binPositions.set([position.x + r * Math.sin(a), position.y, position.z - r * Math.cos(a)], b * 9 + (s + 1) * 3);
+        }
+      }
+      binGeometry.attributes.position.needsUpdate = true;
+    }
+
+    const parts = [`<span><b>${now.toFixed(1)}</b> / ${duration.toFixed(1)} s</span>`,
+                   `<span>setpoint <b>${speedText}</b></span>`,
+                   `<span>voxels <b>${voxelMesh.count}</b></span>`,
+                   `<span class="wide">nearest CP obstacle <b>${isFinite(nearestBin) ? nearestBin.toFixed(2) + ' m' : 'none'}</b></span>`];
+    if (SCENE.truth && SCENE.truth.clearance) {
+      const c = SCENE.truth.clearance[at(SCENE.truth.t, now)];
+      parts.push(`<span>true clearance <b>${c === null ? '> 20 m' : c.toFixed(2) + ' m'}</b></span>`);
+    }
+    readout.innerHTML = parts.join('');
+
+    if (document.getElementById('follow').checked) {
+      const shift = position.clone().sub(controls.target);
+      controls.target.add(shift);
+      camera.position.add(shift);
+    }
+  }
+
+  // summary: closest true approach to a trunk, with a jump to it
+  const stats = document.getElementById('stats');
+  const rows = [['Flight', `${duration.toFixed(1)} s`], ['Voxel', `${(voxel * 100).toFixed(0)} cm`]];
+  if (SCENE.cp_dist > 0) rows.push(['CP_DIST', `${SCENE.cp_dist.toFixed(2)} m`]);
+  let closestTime = null;
+  if (SCENE.truth && SCENE.truth.clearance) {
+    let best = Infinity;
+    SCENE.truth.clearance.forEach((c, k) => {
+      if (c !== null && c < best) { best = c; closestTime = SCENE.truth.t[k]; }
+    });
+    if (closestTime !== null) rows.push([SCENE.boxes && SCENE.boxes.length ? 'Closest obstacle' : 'Closest trunk', `<button type="button" id="jump">${best.toFixed(2)} m at ${closestTime.toFixed(1)} s</button>`]);
+  }
+  if (trees.length || !(SCENE.boxes && SCENE.boxes.length)) rows.push(['Trunks', `${trees.length}`]);
+  if (SCENE.boxes && SCENE.boxes.length) rows.push(['Boxes', `${SCENE.boxes.length}`]);
+  stats.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  document.getElementById('file').textContent = SCENE.title || '';
+
+  let playing = false;
+  let last = performance.now();
+  const playButton = document.getElementById('play');
+  const setPlaying = (on) => { playing = on; playButton.textContent = on ? 'Pause' : 'Play'; };
+  playButton.addEventListener('click', () => {
+    if (!playing && now >= duration) show(0);
+    setPlaying(!playing);
+  });
+  slider.addEventListener('input', () => { setPlaying(false); show(parseFloat(slider.value)); });
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playButton.click(); }
+  });
+  const jump = document.getElementById('jump');
+  if (jump) jump.addEventListener('click', () => { setPlaying(false); show(closestTime - 2); });
+  document.getElementById('showTrees').addEventListener('change', (e) => { trunks.visible = e.target.checked; boxes.visible = e.target.checked; });
+  document.getElementById('showBins').addEventListener('change', (e) => { binLines.visible = e.target.checked; });
+
+  function resize() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  if (media.addEventListener) media.addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+
+  applyTheme();
+  resize();
+  const start = pathPoints.length ? pathPoints[0] : center;
+  controls.target.copy(start);
+  camera.position.set(start.x - 9, start.y + 10, start.z + 12);
+  // open on the closest approach, the moment the replay exists to show
+  show(closestTime !== null ? Math.max(0, closestTime - 1) : Math.min(duration, 20));
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function loop(t) {
+    const dt = (t - last) / 1000;
+    last = t;
+    if (playing) {
+      const next = now + dt * parseFloat(document.getElementById('rate').value);
+      show(next);
+      if (next >= duration) setPlaying(false);
+    }
+    controls.enableDamping = !reduceMotion;
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
