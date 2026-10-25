@@ -3,3 +3,11 @@ menuconfig DRIVERS_OPTICAL_FLOW_PAA3905
 	default n
 	---help---
 		Enable support for PixArt paa3905
+
+config PAA3905_RAW_DEBUG
+	bool "Capture raw PAA3905 flow and synchronized gyro"
+	default n
+	depends on (DRIVERS_OPTICAL_FLOW_PAA3905 && SENSORS_VEHICLE_OPTICAL_FLOW) || DRIVERS_UAVCAN
+	---help---
+		Publish every burst before rejection, integrate raw gyro over its window,
+		and transport/log diagnostic data. Adds traffic to DroneCAN and ULog.

@@ -45,6 +45,9 @@
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/module_params.h>
 #include <px4_platform_common/px4_config.h>
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+#include "RawFlowCapture.hpp"
+#endif
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
@@ -78,6 +81,9 @@ protected:
 	int _distance_sensor_selected{-1}; // because we can have several distance sensor instances with different orientations
 
 private:
+#if defined(CONFIG_PAA3905_RAW_DEBUG)
+	RawFlowCapture _raw_flow_capture;
+#endif
 	void ClearAccumulatedData();
 	void UpdateSensorGyro();
 
@@ -115,6 +121,7 @@ private:
 	matrix::Vector2f _flow_integral{};
 	matrix::Vector3f _delta_angle{};
 	uint32_t _integration_timespan_us{};
+	uint32_t _rejected_timespan_us{};
 	float _distance_sum{NAN};
 	uint8_t _distance_sum_count{0};
 	uint16_t _quality_sum{0};
@@ -135,7 +142,9 @@ private:
 		float data{};
 	};
 
-	RingBuffer<gyroSample, 32> _gyro_buffer{};
+	// A polled zero-motion flow sample ends one frame period before the poll and spans up to the
+	// backup interval, so at 1 kHz the integration window can start ~47 ms before the sample arrives.
+	RingBuffer<gyroSample, 64> _gyro_buffer{};
 	RingBuffer<rangeSample, 5> _range_buffer{};
 
 	DEFINE_PARAMETERS(

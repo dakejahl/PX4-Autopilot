@@ -100,6 +100,7 @@ target_include_directories(uavcan_${UAVCAN_DRIVER}_driver PUBLIC
 
 # generated DSDL
 set(DSDLC_INPUTS
+	"${PX4_SOURCE_DIR}/src/drivers/uavcan/dsdl/ark"
 	"${DSDLC_DIR}/ardupilot"
 	"${DSDLC_DIR}/com"
 	"${DSDLC_DIR}/cuav"

@@ -1,0 +1,19 @@
+# Experimental capture type; ID 20090 must be reserved on the test bus.
+# Register counts precede all software rotation/scaling and quality rejection.
+uint32 frame_counter
+uint8 motion
+uint8 observation
+int16 delta_x
+int16 delta_y
+uint8 squal_raw
+uint8 raw_data_sum
+uint24 shutter
+uint32 interval_us
+# Integral of uncalibrated sensor_gyro in source board FRD, over the burst interval.
+# NaN and zero samples mean incomplete coverage, never zero angular motion.
+float16[3] gyro_integral
+uint8 gyro_samples
+uint64 node_timestamp_us
+# Shared DroneCAN clock at acquisition, zero until synchronized.
+uint64 bus_timestamp_us
+uint32 gyro_device_id
