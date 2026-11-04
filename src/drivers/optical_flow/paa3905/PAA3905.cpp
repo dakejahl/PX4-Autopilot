@@ -39,11 +39,9 @@ static constexpr int16_t combine(uint8_t msb, uint8_t lsb)
 }
 
 // SQUAL is the chip's feature count divided by 4, on the same scale in every
-// mode. The datasheet discards a frame below the mode's SQUAL threshold while
-// the shutter is at its limit. Raw-capture flights against GNSS showed the chip
-// reporting noise below a raw SQUAL of about 60 in every mode, including bright
-// light, where the datasheet rule never fires. A frame is rejected by either rule.
-static constexpr uint8_t SQUAL_TRACKING_FLOOR = 60;
+// mode. Only the datasheet's false-motion frames are discarded. Every other frame
+// goes out with its raw SQUAL, so the flight controller owns the quality gate.
+// Flights against GNSS showed tracking noise below a SQUAL of about 60.
 
 static constexpr bool datasheet_false_motion(Mode mode, uint8_t squal, uint32_t shutter)
 {
@@ -371,7 +369,7 @@ void PAA3905::RunImpl()
 						  && (shutter > 0)
 						  && (_discard_reading == 0);
 
-				if ((buffer.data.SQUAL < SQUAL_TRACKING_FLOOR) || datasheet_false_motion(_mode, buffer.data.SQUAL, shutter)) {
+				if (datasheet_false_motion(_mode, buffer.data.SQUAL, shutter)) {
 					data_valid = false;
 					perf_count(_false_motion_perf);
 				}
