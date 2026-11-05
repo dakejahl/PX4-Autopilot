@@ -39,9 +39,9 @@ parameters:
           is at EKF2_OF_QMAX or above.
       type: float
       default: 0.15
-      min: 0.05
+      min: 0.01
       unit: rad/s
-      decimal: 2
+      decimal: 3
     EKF2_OF_N_MAX:
       description:
         short: Optical flow maximum noise

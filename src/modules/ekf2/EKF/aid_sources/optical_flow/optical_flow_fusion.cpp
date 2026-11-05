@@ -159,7 +159,8 @@ Vector2f Ekf::predictFlow(const Vector3f &flow_gyro) const
 float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample) const
 {
 	// calculate the observation noise variance - scaling noise linearly across flow quality range
-	const float R_LOS_best = fmaxf(_params.ekf2_of_n_min, 0.05f);
+	// longer flow windows average out more noise, so the best-case noise may sit well below the worst case
+	const float R_LOS_best = fmaxf(_params.ekf2_of_n_min, 0.01f);
 	const float R_LOS_worst = fmaxf(_params.ekf2_of_n_max, 0.05f);
 
 	// weighting is 0 at EKF2_OF_QMIN and saturates at 1 from EKF2_OF_QMAX up
