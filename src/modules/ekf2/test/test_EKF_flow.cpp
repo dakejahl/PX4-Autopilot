@@ -540,3 +540,19 @@ TEST_F(EkfFlowTest, flowNoiseScalesWithCompensatedFlow)
 	const float expected = quality_noise * quality_noise + 0.2f * 0.2f;
 	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], expected, 1e-4f);
 }
+
+TEST_F(EkfFlowTest, minimumNoiseBelowFivePercent)
+{
+	// GIVEN: flow fusion at the best quality
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+
+	// WHEN: the minimum noise is set for long flow windows
+	_ekf->getParamHandle()->ekf2_of_n_min = 0.02f;
+	_sensor_simulator.runSeconds(5.f);
+
+	// THEN: the observation noise follows it below the old 0.05 rad/s floor
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], 0.02f * 0.02f, 1e-6f);
+}
