@@ -61,6 +61,30 @@ parameters:
       default: 1
       min: 0
       max: 255
+    EKF2_OF_ROT_SCL:
+      description:
+        short: Optical flow rotation scale
+        long: The flow sensor's reading of body rotation divided by the gyro's.
+          Motion compensation subtracts this times the gyro rate, so a sensor
+          that over-reads rotation leaves no false translation. 1 assumes the
+          sensor and gyro agree.
+      type: float
+      default: 1.0
+      min: 0.5
+      max: 1.5
+      decimal: 2
+    EKF2_OF_N_RATE:
+      description:
+        short: Optical flow noise per unit body rate
+        long: Observation noise added in quadrature to the quality-based noise,
+          in proportion to the body angular rate about X and Y. Rotation the
+          compensation misses grows with rate, so this lowers trust in flow
+          during manoeuvres. 0 disables.
+      type: float
+      default: 0.0
+      min: 0.0
+      max: 2.0
+      decimal: 2
     EKF2_OF_QMAX:
       description:
         short: Optical flow quality at minimum noise

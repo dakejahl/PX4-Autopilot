@@ -168,7 +168,10 @@ float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample) const
 	const float weighting = math::constrain((static_cast<float>(flow_sample.quality) - qmin) / (qmax - qmin), 0.f, 1.f);
 
 	// take the weighted average of the observation noise for the best and wort flow quality
-	const float R_LOS = sq(R_LOS_best * weighting + R_LOS_worst * (1.f - weighting));
+	const float quality_noise = R_LOS_best * weighting + R_LOS_worst * (1.f - weighting);
 
-	return R_LOS;
+	// rotation the compensation misses scales with body rate, so it adds noise during manoeuvres
+	const float rate_noise = _params.ekf2_of_n_rate * Vector2f(flow_sample.gyro_rate.xy()).norm();
+
+	return sq(quality_noise) + sq(rate_noise);
 }
