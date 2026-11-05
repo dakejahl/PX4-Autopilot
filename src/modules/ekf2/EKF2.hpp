@@ -709,6 +709,8 @@ private:
 		_param_ekf2_of_rot_scl, ///< flow sensor rotation reading divided by the gyro's
 		(ParamExtFloat<px4::params::EKF2_OF_N_RATE>)
 		_param_ekf2_of_n_rate, ///< optical flow noise added per unit body rate about X and Y
+		(ParamExtFloat<px4::params::EKF2_OF_N_FLOW>)
+		_param_ekf2_of_n_flow, ///< optical flow noise added as a fraction of the compensated flow rate
 		(ParamExtFloat<px4::params::EKF2_OF_GATE>)
 		_param_ekf2_of_gate, ///< optical flow fusion innovation consistency gate size (STD)
 		(ParamExtFloat<px4::params::EKF2_OF_POS_X>)
