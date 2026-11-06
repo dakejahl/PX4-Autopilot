@@ -89,9 +89,12 @@ parameters:
       description:
         short: Optical flow noise per unit flow rate
         long: Observation noise added in quadrature, as a fraction of the
-          motion-compensated flow rate. A sensor that under-reads motion on poor
-          texture makes an error proportional to the flow itself, which is large
-          near the ground and small at altitude. 0 disables.
+          larger of the motion-compensated flow rate and the rate predicted from
+          the estimated velocity and height. A sensor that under-reads motion on
+          poor texture makes an error proportional to the flow itself, which is
+          large near the ground and small at altitude. Taking the larger keeps a
+          reading that drops to zero while the vehicle moves from being trusted
+          most. 0 disables.
       type: float
       default: 0.0
       min: 0.0

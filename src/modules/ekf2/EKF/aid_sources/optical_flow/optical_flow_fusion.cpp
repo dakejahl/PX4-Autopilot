@@ -174,10 +174,12 @@ float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample) const
 	// rotation the compensation misses scales with body rate, so it adds noise during manoeuvres
 	const float rate_noise = _params.ekf2_of_n_rate * Vector2f(flow_sample.gyro_rate.xy()).norm();
 
-	// a sensor that under-reads motion makes an error proportional to the flow itself
+	// a sensor that under-reads motion makes an error proportional to the flow itself. The larger of the measured and
+	// predicted flow sets it, so a reading that collapses to zero while the vehicle moves doesn't earn the most trust.
 	const Vector3f gyro_corrected = flow_sample.gyro_rate - _flow_gyro_bias;
 	const Vector2f flow_compensated = flow_sample.flow_rate - _params.ekf2_of_rot_scl * Vector2f(gyro_corrected.xy());
-	const float flow_noise = _params.ekf2_of_n_flow * flow_compensated.norm();
+	const float flow_rate = fmaxf(flow_compensated.norm(), predictFlow(gyro_corrected).norm());
+	const float flow_noise = _params.ekf2_of_n_flow * flow_rate;
 
 	return sq(quality_noise) + sq(rate_noise) + sq(flow_noise);
 }
