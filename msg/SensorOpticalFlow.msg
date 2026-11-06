@@ -15,6 +15,8 @@ uint32 integration_timespan_us # (microseconds) accumulation timespan in microse
 
 uint8 quality                  # quality, 0: bad quality, 255: maximum quality
 
+bool challenging_surface       # the sensor flags the surface as hard to track (PAA3905 Motion bit 0)
+
 uint32 error_count
 
 float32 max_flow_rate          # (radians/s) Magnitude of maximum angular which the optical flow sensor can measure reliably

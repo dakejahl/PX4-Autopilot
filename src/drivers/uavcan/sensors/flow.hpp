@@ -63,4 +63,6 @@ private:
 
 	uavcan::Subscriber<com::hex::equipment::flow::Measurement, FlowCbBinder> _sub_flow;
 
+	int32_t _challenging_surface_mode{0}; // UAVCAN_FLOW_CHAL
+
 };

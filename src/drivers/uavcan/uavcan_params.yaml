@@ -200,6 +200,23 @@ parameters:
       type: boolean
       default: 0
       reboot_required: true
+    UAVCAN_FLOW_CHAL:
+      description:
+        short: optical flow challenging-surface bit
+        long: |-
+          ARK flow nodes built to pack it carry the PAA3905 challenging-surface flag in bit 0 of the quality byte.
+          Other nodes send raw quality there, so enable this only when every flow node on the bus packs the bit.
+          Decode strips the bit from quality and logs the flag in sensor_optical_flow.
+          Decode and drop also reports flagged samples at quality 0, which keeps them out of fusion.
+      type: enum
+      values:
+        0: Disabled
+        1: Decode
+        2: Decode and drop flagged samples
+      default: 0
+      min: 0
+      max: 2
+      reboot_required: true
     UAVCAN_SUB_FUEL:
       description:
         short: subscription fuel tank
