@@ -103,7 +103,7 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 		// correct for gyro bias errors in the data used to do the motion compensation
 		// Note the sign convention used: A positive LOS rate is a RH rotation of the scene about that axis.
 		const Vector3f flow_gyro_corrected = flow_sample.gyro_rate - _flow_gyro_bias;
-		const Vector2f flow_compensated = flow_sample.flow_rate - flow_gyro_corrected.xy();
+		const Vector2f flow_compensated = flow_sample.flow_rate - _params.ekf2_of_rot_scl * Vector2f(flow_gyro_corrected.xy());
 
 		// calculate the optical flow observation variance
 		const float R_LOS = calcOptFlowMeasVar(flow_sample);

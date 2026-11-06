@@ -494,6 +494,9 @@ struct parameters {
 	int32_t ekf2_of_qmin{1};                ///< minimum acceptable quality integer from  the flow sensor
 	int32_t ekf2_of_qmin_gnd{0};            ///< minimum acceptable quality integer from  the flow sensor when on ground
 	int32_t ekf2_of_qmax{255};              ///< quality at which observation noise reaches ekf2_of_n_min
+	float ekf2_of_rot_scl{1.f};             ///< flow sensor rotation reading divided by the gyro's
+	float ekf2_of_n_rate{0.f};              ///< optical flow noise added per unit body rate about X and Y (rad/s per rad/s)
+	float ekf2_of_n_flow{0.f};              ///< optical flow noise added as a fraction of the compensated flow rate
 	float ekf2_of_gate{3.0f};               ///< optical flow fusion innovation consistency gate size (STD)
 
 	Vector3f flow_pos_body{};               ///< xyz position of range sensor focal point in body frame (m)

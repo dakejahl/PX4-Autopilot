@@ -39,9 +39,9 @@ parameters:
           is at EKF2_OF_QMAX or above.
       type: float
       default: 0.15
-      min: 0.05
+      min: 0.01
       unit: rad/s
-      decimal: 2
+      decimal: 3
     EKF2_OF_N_MAX:
       description:
         short: Optical flow maximum noise
@@ -61,6 +61,45 @@ parameters:
       default: 1
       min: 0
       max: 255
+    EKF2_OF_ROT_SCL:
+      description:
+        short: Optical flow rotation scale
+        long: The flow sensor's reading of body rotation divided by the gyro's.
+          Motion compensation subtracts this times the gyro rate, so a sensor
+          that over-reads rotation leaves no false translation. 1 assumes the
+          sensor and gyro agree.
+      type: float
+      default: 1.0
+      min: 0.5
+      max: 1.5
+      decimal: 2
+    EKF2_OF_N_RATE:
+      description:
+        short: Optical flow noise per unit body rate
+        long: Observation noise added in quadrature to the quality-based noise,
+          in proportion to the body angular rate about X and Y. Rotation the
+          compensation misses grows with rate, so this lowers trust in flow
+          during manoeuvres. 0 disables.
+      type: float
+      default: 0.0
+      min: 0.0
+      max: 2.0
+      decimal: 2
+    EKF2_OF_N_FLOW:
+      description:
+        short: Optical flow noise per unit flow rate
+        long: Observation noise added in quadrature, as a fraction of the
+          larger of the motion-compensated flow rate and the rate predicted from
+          the estimated velocity and height. A sensor that under-reads motion on
+          poor texture makes an error proportional to the flow itself, which is
+          large near the ground and small at altitude. Taking the larger keeps a
+          reading that drops to zero while the vehicle moves from being trusted
+          most. 0 disables.
+      type: float
+      default: 0.0
+      min: 0.0
+      max: 2.0
+      decimal: 2
     EKF2_OF_QMAX:
       description:
         short: Optical flow quality at minimum noise

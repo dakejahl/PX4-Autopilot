@@ -459,3 +459,100 @@ TEST_F(EkfFlowTest, restartAfterRejectedFramesUsesGoodFlowOnly)
 	EXPECT_NEAR(estimated_horz_velocity(0), simulated_horz_velocity(0), 0.05f);
 	EXPECT_NEAR(estimated_horz_velocity(1), simulated_horz_velocity(1), 0.05f);
 }
+
+TEST_F(EkfFlowTest, rotationScaleRemovesSensorRotationGain)
+{
+	// GIVEN: flow fusion 5 m above ground with a sensor that reads body rotation 15 % high
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+
+	const float sensor_rotation_gain = 1.15f;
+	const Vector3f body_rate(0.3f, -0.2f, 0.f);
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.gyro_rate = -body_rate; // see the definition of flowSample for the sign
+	flow_sample.flow_rate = sensor_rotation_gain * Vector2f(flow_sample.gyro_rate.xy());
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator._imu.setGyroData(body_rate);
+
+	// WHEN: the compensation assumes the sensor and gyro agree
+	_sensor_simulator.runSeconds(0.2f);
+	const Vector2f leak = _ekf->getFlowCompensated();
+
+	// AND WHEN: it uses the sensor's rotation gain
+	_ekf->getParamHandle()->ekf2_of_rot_scl = sensor_rotation_gain;
+	_sensor_simulator.runSeconds(0.2f);
+
+	// THEN: the 15 % excess reads as translation only in the first case
+	EXPECT_NEAR(leak(0), 0.15f * flow_sample.gyro_rate(0), 0.01f);
+	EXPECT_NEAR(leak(1), 0.15f * flow_sample.gyro_rate(1), 0.01f);
+	EXPECT_NEAR(_ekf->getFlowCompensated()(0), 0.f, 0.005f);
+	EXPECT_NEAR(_ekf->getFlowCompensated()(1), 0.f, 0.005f);
+}
+
+TEST_F(EkfFlowTest, rateNoiseAddsInQuadrature)
+{
+	// GIVEN: flow fusion with a fixed quality-based noise
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+	ASSERT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], quality_noise * quality_noise, 1e-6f);
+
+	// WHEN: the vehicle rotates at 0.5 rad/s about X and Y with a rate noise of 0.2 per rad/s
+	_ekf->getParamHandle()->ekf2_of_n_rate = 0.2f;
+	const Vector3f body_rate(0.3f, 0.4f, 0.f);
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.gyro_rate = -body_rate;
+	flow_sample.flow_rate = Vector2f(flow_sample.gyro_rate.xy());
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator._imu.setGyroData(body_rate);
+	_sensor_simulator.runSeconds(0.2f);
+
+	// THEN: the observation variance gains (0.2 * 0.5)^2
+	const float expected = quality_noise * quality_noise + 0.1f * 0.1f;
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], expected, 1e-5f);
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[1], expected, 1e-5f);
+}
+
+TEST_F(EkfFlowTest, flowNoiseScalesWithCompensatedFlow)
+{
+	// GIVEN: flow fusion 5 m above ground at a fixed quality-based noise
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+
+	// WHEN: the sensor reports 0.5 rad/s of translational flow with a flow noise of 0.4 per rad/s
+	_ekf->getParamHandle()->ekf2_of_n_flow = 0.4f;
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.flow_rate = Vector2f(0.3f, 0.4f);
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator.runSeconds(0.2f);
+
+	// THEN: the observation variance gains (0.4 * 0.5)^2
+	const float expected = quality_noise * quality_noise + 0.2f * 0.2f;
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], expected, 1e-4f);
+}
+
+TEST_F(EkfFlowTest, minimumNoiseBelowFivePercent)
+{
+	// GIVEN: flow fusion at the best quality
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+
+	// WHEN: the minimum noise is set for long flow windows
+	_ekf->getParamHandle()->ekf2_of_n_min = 0.02f;
+	_sensor_simulator.runSeconds(5.f);
+
+	// THEN: the observation noise follows it below the old 0.05 rad/s floor
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], 0.02f * 0.02f, 1e-6f);
+}
