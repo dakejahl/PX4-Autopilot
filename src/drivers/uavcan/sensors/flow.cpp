@@ -34,6 +34,7 @@
 #include "flow.hpp"
 
 #include <drivers/drv_hrt.h>
+#include <parameters/param.h>
 
 const char *const UavcanFlowBridge::NAME = "flow";
 
@@ -47,6 +48,8 @@ UavcanFlowBridge::UavcanFlowBridge(uavcan::INode &node, NodeInfoPublisher *node_
 int
 UavcanFlowBridge::init()
 {
+	param_get(param_find("UAVCAN_FLOW_CHAL"), &_challenging_surface_mode);
+
 	int res = _sub_flow.start(FlowCbBinder(this, &UavcanFlowBridge::flow_sub_cb));
 
 	if (res < 0) {
@@ -69,7 +72,18 @@ void UavcanFlowBridge::flow_sub_cb(const uavcan::ReceivedDataStructure<com::hex:
 
 	flow.integration_timespan_us = 1.e6f * msg.integration_interval; // s -> us
 
-	flow.quality = msg.quality;
+	if (_challenging_surface_mode > 0) {
+		// Only nodes built to pack set bit 0. Others send raw quality there, so decoding is opt-in.
+		flow.challenging_surface = msg.quality & 1u;
+		flow.quality = msg.quality & static_cast<uint8_t>(~1u);
+
+		if (_challenging_surface_mode == 2 && flow.challenging_surface) {
+			flow.quality = 0;
+		}
+
+	} else {
+		flow.quality = msg.quality;
+	}
 
 	if (PX4_ISFINITE(msg.rate_gyro_integral[0]) && PX4_ISFINITE(msg.rate_gyro_integral[1])) {
 		flow.delta_angle[0] = msg.rate_gyro_integral[0];
