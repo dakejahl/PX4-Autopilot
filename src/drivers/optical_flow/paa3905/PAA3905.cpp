@@ -38,41 +38,21 @@ static constexpr int16_t combine(uint8_t msb, uint8_t lsb)
 	return (msb << 8u) | lsb;
 }
 
-// SQUAL below which the datasheet treats a motion report as noise, per
-// operating mode (shared with the false-motion discard, which also requires
-// the shutter condition).
-static constexpr uint8_t SQUAL_THRESHOLD_BRIGHT          = 0x19;
-static constexpr uint8_t SQUAL_THRESHOLD_LOW_LIGHT       = 0x46;
-static constexpr uint8_t SQUAL_THRESHOLD_SUPER_LOW_LIGHT = 0x55;
+// SQUAL is the chip's feature count divided by 4, on the same scale in every
+// mode. Only the datasheet's false-motion frames are discarded. Every other frame
+// goes out with its raw SQUAL, so the flight controller owns the quality gate.
 
-static constexpr uint8_t squal_threshold(Mode mode)
+static constexpr bool datasheet_false_motion(Mode mode, uint8_t squal, uint32_t shutter)
 {
 	switch (mode) {
-	case Mode::Bright:        return SQUAL_THRESHOLD_BRIGHT;
+	case Mode::Bright:        return (squal < 0x19) && (shutter >= 0x00FF80);
 
-	case Mode::LowLight:      return SQUAL_THRESHOLD_LOW_LIGHT;
+	case Mode::LowLight:      return (squal < 0x46) && (shutter >= 0x00FF80);
 
-	case Mode::SuperLowLight: return SQUAL_THRESHOLD_SUPER_LOW_LIGHT;
+	case Mode::SuperLowLight: return (squal < 0x55) && (shutter >= 0x025998);
 	}
 
-	return SQUAL_THRESHOLD_SUPER_LOW_LIGHT;
-}
-
-// sensor_optical_flow.quality promises 0 = worst, 255 = best, and EKF2 scales
-// the flow noise linearly with it. Raw SQUAL is mode dependent (the chip's own
-// floor is 25/70/85 across the three modes) and the DroneCAN flow message
-// drops the mode, so the same raw value would mean "solid" in bright light and
-// "one count above noise" in super low light. Map the mode floor to 0 and raw
-// 255 to 255.
-static uint8_t normalize_squal(uint8_t squal, Mode mode)
-{
-	const uint8_t threshold = squal_threshold(mode);
-
-	if (squal <= threshold) {
-		return 0;
-	}
-
-	return static_cast<uint8_t>(((squal - threshold) * 255u) / (255u - threshold));
+	return false;
 }
 
 PAA3905::PAA3905(const I2CSPIDriverConfig &config) :
@@ -234,8 +214,8 @@ void PAA3905::RunImpl()
 			if (DataReadyInterruptConfigure()) {
 				_motion_interrupt_enabled = true;
 
-				// backup schedule as a watchdog timeout
-				ScheduleDelayed(1_s);
+				// the MOTION edge may already have passed while the interrupt was disabled
+				ScheduleDelayed(kBackupScheduleIntervalUs);
 
 			} else {
 				_motion_interrupt_enabled = false;
@@ -259,6 +239,7 @@ void PAA3905::RunImpl()
 
 	case STATE::READ: {
 			hrt_abstime timestamp_sample = now;
+			bool frame_end_known = false;
 
 			if (_motion_interrupt_enabled) {
 				// scheduled from interrupt if _drdy_timestamp_sample was set as expected
@@ -266,6 +247,7 @@ void PAA3905::RunImpl()
 
 				if (now < drdy_timestamp_sample + _scheduled_interval_us) {
 					timestamp_sample = drdy_timestamp_sample;
+					frame_end_known = true;
 
 				} else {
 					perf_count(_no_motion_interrupt_perf);
@@ -293,7 +275,7 @@ void PAA3905::RunImpl()
 
 				if (buffer.data.RawData_Sum > 0x98) {
 					perf_count(_bad_register_perf);
-					PX4_ERR("invalid RawData_Sum > 0x98");
+					PX4_DEBUG("invalid RawData_Sum > 0x98");
 				}
 
 				// Bit [5:0] check if chip is working correctly
@@ -361,7 +343,6 @@ void PAA3905::RunImpl()
 
 				// publish sensor_optical_flow
 				sensor_optical_flow_s sensor_optical_flow{};
-				sensor_optical_flow.timestamp_sample = timestamp_sample;
 				sensor_optical_flow.device_id = get_device_id();
 
 				sensor_optical_flow.error_count = perf_event_count(_bad_register_perf) + perf_event_count(_bad_transfer_perf);
@@ -370,12 +351,6 @@ void PAA3905::RunImpl()
 				sensor_optical_flow.max_flow_rate = 7.4f;           // Datasheet: 7.4 rad/s
 				sensor_optical_flow.min_ground_distance = 0.08f;    // Datasheet: 80mm
 				sensor_optical_flow.max_ground_distance = INFINITY; // Datasheet: infinity
-
-				// check SQUAL & Shutter values
-				// To suppress false motion reports, discard Delta X and Delta Y values if the SQUAL and Shutter values meet the condition
-				// Bright Mode,          SQUAL < 0x19, Shutter ≥ 0x00FF80
-				// Low Light Mode,       SQUAL < 0x46, Shutter ≥ 0x00FF80
-				// Super Low Light Mode, SQUAL < 0x55, Shutter ≥ 0x025998
 
 				// 23-bit Shutter register
 				const uint8_t shutter_lower = buffer.data.Shutter_Lower;
@@ -392,17 +367,15 @@ void PAA3905::RunImpl()
 						  && (shutter > 0)
 						  && (_discard_reading == 0);
 
+				if (datasheet_false_motion(_mode, buffer.data.SQUAL, shutter)) {
+					data_valid = false;
+					perf_count(_false_motion_perf);
+				}
+
 				switch (_mode) {
 				case Mode::Bright:
 					sensor_optical_flow.integration_timespan_us = SAMPLE_INTERVAL_MODE_0;
 					sensor_optical_flow.mode = sensor_optical_flow_s::MODE_BRIGHT;
-
-					// quality < 25 (0x19) and shutter >= 0x00FF80
-					if ((buffer.data.SQUAL < SQUAL_THRESHOLD_BRIGHT) && (shutter >= 0x00FF80)) {
-						// false motion report, discarding
-						data_valid = false;
-						perf_count(_false_motion_perf);
-					}
 
 					break;
 
@@ -410,36 +383,13 @@ void PAA3905::RunImpl()
 					sensor_optical_flow.integration_timespan_us = SAMPLE_INTERVAL_MODE_1;
 					sensor_optical_flow.mode = sensor_optical_flow_s::MODE_LOWLIGHT;
 
-					// quality < 70 (0x46) and shutter >= 0x00FF80
-					if ((buffer.data.SQUAL < SQUAL_THRESHOLD_LOW_LIGHT) && (shutter >= 0x00FF80)) {
-						// false motion report, discarding
-						data_valid = false;
-						perf_count(_false_motion_perf);
-					}
-
 					break;
 
 				case Mode::SuperLowLight:
 					sensor_optical_flow.integration_timespan_us = SAMPLE_INTERVAL_MODE_2;
 					sensor_optical_flow.mode = sensor_optical_flow_s::MODE_SUPER_LOWLIGHT;
 
-					// quality < 85 (0x55) and shutter >= 0x025998
-					if ((buffer.data.SQUAL < SQUAL_THRESHOLD_SUPER_LOW_LIGHT) && (shutter >= 0x025998)) {
-						// false motion report, discarding
-						data_valid = false;
-						perf_count(_false_motion_perf);
-					}
-
 					break;
-				}
-
-				// override the per-mode default with the actual interval between burst reads
-				// (the chip accumulates delta_x/delta_y until Motion_Burst is read), so the
-				// gyro integration window downstream lines up with what the chip actually saw.
-				if (_timestamp_sample_last != 0 && timestamp_sample > _timestamp_sample_last) {
-					const hrt_abstime dt = timestamp_sample - _timestamp_sample_last;
-					sensor_optical_flow.integration_timespan_us = math::constrain(static_cast<uint32_t>(dt),
-							static_cast<uint32_t>(1_ms), static_cast<uint32_t>(200_ms));
 				}
 
 				// motion in burst transfer
@@ -448,6 +398,41 @@ void PAA3905::RunImpl()
 				const int16_t delta_x_raw = combine(buffer.data.Delta_X_H, buffer.data.Delta_X_L);
 				const int16_t delta_y_raw = combine(buffer.data.Delta_Y_H, buffer.data.Delta_Y_L);
 
+				// The accumulator is cleared by every read, so a zero delta with the previous
+				// read's shutter and quality means the chip has not finished a new frame yet.
+				const bool stale_read = (delta_x_raw == 0) && (delta_y_raw == 0) && (shutter == _shutter_prev)
+							&& (buffer.data.RawData_Sum == _raw_data_sum_prev) && (buffer.data.SQUAL == _quality_prev);
+
+				// A poll cannot tell where the chip's last frame ended, and whatever the chip is
+				// integrating now will be reported by the next read. Without motion a poll therefore
+				// only vouches for the time up to one frame period ago, so that next frame keeps
+				// its full window instead of starting at the poll.
+				const uint32_t frame_period_us = (_mode == Mode::SuperLowLight) ? SAMPLE_INTERVAL_MODE_2 : SAMPLE_INTERVAL_MODE_1;
+				hrt_abstime frame_end = timestamp_sample;
+
+				if (!frame_end_known && !motion_reported) {
+					frame_end = (timestamp_sample > frame_period_us) ? (timestamp_sample - frame_period_us) : 0;
+				}
+
+				const bool frame_consumed = (frame_end > _timestamp_sample_last);
+				sensor_optical_flow.timestamp_sample = frame_end;
+
+				// override the per-mode default with the actual interval between consumed frames
+				// (the chip accumulates delta_x/delta_y until Motion_Burst is read), so the
+				// gyro integration window downstream lines up with what the chip actually saw.
+				if (_timestamp_sample_last != 0 && frame_consumed) {
+					const hrt_abstime dt = frame_end - _timestamp_sample_last;
+					sensor_optical_flow.integration_timespan_us = math::constrain(static_cast<uint32_t>(dt),
+							static_cast<uint32_t>(1_ms), static_cast<uint32_t>(200_ms));
+				}
+
+				// Poor optical quality does not indicate a sensor fault, but an all-zero burst is not a live frame.
+				const bool dead_burst = (shutter == 0) && (buffer.data.SQUAL == 0) && (buffer.data.RawData_Sum == 0);
+
+				bool published = false;
+
+				// A rejected frame isn't published. A flight controller that takes quality-0 flow lets it reset its
+				// velocity toward zero after a dark stretch.
 				if (data_valid) {
 
 					const bool zero_flow = (delta_x_raw == 0) && (delta_y_raw == 0);
@@ -469,7 +454,7 @@ void PAA3905::RunImpl()
 						sensor_optical_flow.pixel_flow[0] = pixel_flow_rotated(0) * SCALE;
 						sensor_optical_flow.pixel_flow[1] = pixel_flow_rotated(1) * SCALE;
 
-						sensor_optical_flow.quality = normalize_squal(buffer.data.SQUAL, _mode);
+						sensor_optical_flow.quality = buffer.data.SQUAL;
 
 						publish = true;
 
@@ -477,64 +462,57 @@ void PAA3905::RunImpl()
 
 					} else if (zero_flow && (timestamp_sample > _last_motion)) {
 						// no motion, but burst read looks valid and we should have seen new data by now if there was any motion
-						const bool burst_read_changed = (delta_x_raw != _delta_x_raw_prev) || (delta_y_raw != _delta_y_raw_prev)
-										|| (shutter != _shutter_prev)
-										|| (buffer.data.RawData_Sum != _raw_data_sum_prev)
-										|| (buffer.data.SQUAL != _quality_prev);
-
-						if (burst_read_changed) {
+						if (!stale_read && frame_consumed) {
 
 							sensor_optical_flow.pixel_flow[0] = 0;
 							sensor_optical_flow.pixel_flow[1] = 0;
 
-							sensor_optical_flow.quality = normalize_squal(buffer.data.SQUAL, _mode);
+							sensor_optical_flow.quality = buffer.data.SQUAL;
 
 							publish = true;
 						}
 					}
 
 					// only publish when there's valid data or on timeout
-					if (publish || (hrt_elapsed_time(&_last_publish) >= kBackupScheduleIntervalUs)) {
+					if (publish || (frame_consumed && (hrt_elapsed_time(&_last_publish) >= kBackupScheduleIntervalUs))) {
+
+						if (!publish) {
+							// heartbeat with no new frame: zero flow at this read's SQUAL
+							sensor_optical_flow.quality = buffer.data.SQUAL;
+						}
 
 						sensor_optical_flow.timestamp = hrt_absolute_time();
 						_sensor_optical_flow_pub.publish(sensor_optical_flow);
 
 						_last_publish = sensor_optical_flow.timestamp_sample;
+						published = true;
 					}
 
-					// backup schedule if we're reliant on the motion interrupt and there's very little flow
+					// backup schedule if we're reliant on the motion interrupt and there's very little flow. The first poll
+					// after an interrupt comes a quarter period past the next frame, clear of its MOTION edge.
 					if (_motion_interrupt_enabled && little_to_no_flow) {
-						switch (_mode) {
-						case Mode::Bright:
-							ScheduleDelayed(SAMPLE_INTERVAL_MODE_0);
-							break;
-
-						case Mode::LowLight:
-							ScheduleDelayed(SAMPLE_INTERVAL_MODE_1);
-							break;
-
-						case Mode::SuperLowLight:
-							ScheduleDelayed(SAMPLE_INTERVAL_MODE_2);
-							break;
-						}
+						ScheduleDelayed(frame_period_us + frame_period_us / 4);
 					}
 
-					success = true;
-
-					if (_failure_count > 0) {
-						_failure_count--;
-					}
 				}
 
-				_delta_x_raw_prev = delta_x_raw;
-				_delta_y_raw_prev = delta_y_raw;
+				success = (buffer.data.RawData_Sum <= 0x98) && !dead_burst;
+
+				if (success && _failure_count > 0) {
+					_failure_count--;
+				}
+
 				_shutter_prev = shutter;
 				_raw_data_sum_prev = buffer.data.RawData_Sum;
 				_quality_prev = buffer.data.SQUAL;
 
-				// chip clears its delta accumulator on every Motion_Burst read,
-				// regardless of whether we publish, so track every successful read.
-				_timestamp_sample_last = timestamp_sample;
+				// chip clears its delta accumulator on every Motion_Burst read, regardless of whether
+				// we publish, so track every read that consumed a frame. A stale read consumed nothing:
+				// its window belongs to the next frame unless a timeout already published it.
+				// A rejected read always starts the next window, since a dark scene can repeat every register exactly.
+				if (frame_consumed && (!stale_read || published || !data_valid)) {
+					_timestamp_sample_last = frame_end;
+				}
 
 			} else {
 				perf_count(_bad_transfer_perf);
