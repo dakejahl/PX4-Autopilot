@@ -612,3 +612,60 @@ TEST_F(EkfFlowTest, minimumNoiseBelowFivePercent)
 	// THEN: the observation noise follows it below the old 0.05 rad/s floor
 	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], 0.02f * 0.02f, 1e-6f);
 }
+
+TEST_F(EkfFlowTest, rejectedFramesInAirKeepFlowGyroBias)
+{
+	// GIVEN: in the air, a flow sensor whose gyro has a bias
+	startRangeFinderFusion(5.f);
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	const Vector3f flow_gyro_bias(0.02f, -0.01f, 0.f);
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.gyro_rate = flow_gyro_bias;
+	_sensor_simulator._flow.setData(flow_sample);
+	_ekf_wrapper.enableFlowFusion();
+	_sensor_simulator.startFlow();
+	_sensor_simulator.runSeconds(10.f);
+	ASSERT_NEAR(_ekf->getFlowGyroBias()(0), flow_gyro_bias(0), 1e-3f);
+	ASSERT_NEAR(_ekf->getFlowGyroBias()(1), flow_gyro_bias(1), 1e-3f);
+
+	// WHEN: the vehicle rotates while the sensor rejects every frame, which arrive with quality 0 and no gyro
+	flowSample rejected_flow = _sensor_simulator._flow.dataAtRest();
+	rejected_flow.quality = 0;
+	_sensor_simulator._flow.setData(rejected_flow);
+	_sensor_simulator._imu.setGyroData(Vector3f(0.1f, 0.f, 0.f));
+	_sensor_simulator.runSeconds(2.f);
+
+	// THEN: the learned bias holds
+	EXPECT_NEAR(_ekf->getFlowGyroBias()(0), flow_gyro_bias(0), 1e-3f);
+	EXPECT_NEAR(_ekf->getFlowGyroBias()(1), flow_gyro_bias(1), 1e-3f);
+}
+
+TEST_F(EkfFlowTest, noiseReachesMinimumAtQmax)
+{
+	// GIVEN: flow fusion with the default noise ramp, which ends at a quality of 255
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	const float noise_min = _ekf->getParamHandle()->ekf2_of_n_min;
+	const float noise_max = _ekf->getParamHandle()->ekf2_of_n_max;
+
+	// WHEN: the sensor reports a quality of 100
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.quality = 100;
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator.runSeconds(1.f);
+
+	// THEN: the noise sits part way down the ramp from EKF2_OF_QMIN, 1 by default
+	const float weighting = 99.f / 254.f;
+	const float noise_default_ramp = noise_min * weighting + noise_max * (1.f - weighting);
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], noise_default_ramp * noise_default_ramp, 1e-5f);
+
+	// AND WHEN: the ramp ends at that quality
+	_ekf->getParamHandle()->ekf2_of_qmax = 100;
+	_sensor_simulator.runSeconds(1.f);
+
+	// THEN: the noise is at its minimum
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], noise_min * noise_min, 1e-6f);
+}
