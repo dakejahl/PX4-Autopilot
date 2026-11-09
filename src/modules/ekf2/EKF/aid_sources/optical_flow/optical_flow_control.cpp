@@ -93,7 +93,12 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 		is_tilt_good = (_R_to_earth(2, 2) > _params.range_cos_max_tilt);
 #endif // CONFIG_EKF2_RANGE_FINDER
 
-		calcOptFlowBodyRateComp(flow_sample);
+		// Samples below the quality floor include frames the sensor rejected, which carry zero flow and
+		// zero gyro. They must not steer the flow gyro bias or the filtered velocity a restart resets to.
+		// A quality of 0 marks such a frame even where the floor is 0, as it is on the ground.
+		if (is_quality_good && (flow_sample.quality > 0)) {
+			calcOptFlowBodyRateComp(flow_sample);
+		}
 
 		// calculate optical LOS rates using optical flow rates that have had the body angular rate contribution removed
 		// correct for gyro bias errors in the data used to do the motion compensation
@@ -125,20 +130,23 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 		_flow_vel_body(0) = -flow_compensated(1) * range;
 		_flow_vel_body(1) =  flow_compensated(0) * range;
 
-		if (_flow_counter == 0) {
-			_flow_vel_body_lpf.reset(_flow_vel_body);
-			_flow_rate_compensated_lpf.reset(_flow_rate_compensated);
-			_flow_lpf_time_last_us = flow_sample.time_us;
-			_flow_counter = 1;
+		// a restart counts good samples only and seeds its velocity from them
+		if (is_quality_good) {
+			if (_flow_counter == 0) {
+				_flow_vel_body_lpf.reset(_flow_vel_body);
+				_flow_rate_compensated_lpf.reset(_flow_rate_compensated);
+				_flow_lpf_time_last_us = flow_sample.time_us;
+				_flow_counter = 1;
 
-		} else {
+			} else {
 
-			// the filters run once per flow sample, not once per EKF update
-			const uint64_t flow_dt_us = flow_sample.time_us - _flow_lpf_time_last_us;
-			_flow_vel_body_lpf.update(_flow_vel_body, flow_dt_us);
-			_flow_rate_compensated_lpf.update(_flow_rate_compensated, flow_dt_us);
-			_flow_lpf_time_last_us = flow_sample.time_us;
-			_flow_counter++;
+				// the filters run once per flow sample, not once per EKF update
+				const uint64_t flow_dt_us = flow_sample.time_us - _flow_lpf_time_last_us;
+				_flow_vel_body_lpf.update(_flow_vel_body, flow_dt_us);
+				_flow_rate_compensated_lpf.update(_flow_rate_compensated, flow_dt_us);
+				_flow_lpf_time_last_us = flow_sample.time_us;
+				_flow_counter++;
+			}
 		}
 
 		// Check if we are in-air and require optical flow to control position drift

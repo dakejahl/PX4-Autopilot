@@ -35,8 +35,8 @@ parameters:
     EKF2_OF_N_MIN:
       description:
         short: Optical flow minimum noise
-        long: Measurement noise for the optical flow sensor when it's reported quality
-          metric is at the maximum
+        long: Measurement noise for the optical flow sensor when reported quality
+          is at EKF2_OF_QMAX or above.
       type: float
       default: 0.15
       min: 0.05
@@ -45,8 +45,8 @@ parameters:
     EKF2_OF_N_MAX:
       description:
         short: Optical flow maximum noise
-        long: Measurement noise for the optical flow sensor when it's reported quality
-          metric is at the minimum
+        long: Measurement noise for the optical flow sensor when reported quality
+          is at EKF2_OF_QMIN.
       type: float
       default: 0.5
       min: 0.05
@@ -60,6 +60,17 @@ parameters:
       type: int32
       default: 1
       min: 0
+      max: 255
+    EKF2_OF_QMAX:
+      description:
+        short: Optical flow quality at minimum noise
+        long: Quality at which observation noise reaches EKF2_OF_N_MIN. Between
+          EKF2_OF_QMIN and this value the noise is interpolated linearly from
+          EKF2_OF_N_MAX to EKF2_OF_N_MIN. Lower it for a sensor whose quality
+          never reaches 255.
+      type: int32
+      default: 255
+      min: 1
       max: 255
     EKF2_OF_QMIN_GND:
       description:
