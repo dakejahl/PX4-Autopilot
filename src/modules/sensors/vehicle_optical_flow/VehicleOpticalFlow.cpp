@@ -111,10 +111,15 @@ void VehicleOpticalFlow::Run()
 
 	if (_sensor_flow_sub.update(&sensor_optical_flow)) {
 
-		// clear data accumulation if there's a gap in data
-		const uint64_t integration_gap_threshold_us = sensor_optical_flow.integration_timespan_us * 2;
+		// A gap in the data ends the accumulation. A sensor that leaves out the frames it couldn't track makes short
+		// gaps between good frames, and those must not discard the good frames still waiting for the publication
+		// interval. So a gap only counts once it outlasts both the frame and that interval.
+		const uint64_t frame_us = sensor_optical_flow.integration_timespan_us;
+		const uint64_t publication_interval_us = (_param_sens_flow_rate.get() > 0)
+				? static_cast<uint64_t>(1e6f / _param_sens_flow_rate.get()) : 0;
+		const uint64_t gap_threshold_us = (publication_interval_us > frame_us) ? publication_interval_us : frame_us;
 
-		if ((sensor_optical_flow.timestamp_sample >= _flow_timestamp_sample_last + integration_gap_threshold_us)
+		if ((sensor_optical_flow.timestamp_sample >= _flow_timestamp_sample_last + frame_us + gap_threshold_us)
 		    || (_accumulated_count > 0 && (sensor_optical_flow.quality > 0) && _quality_sum == 0)) {
 
 			ClearAccumulatedData();
