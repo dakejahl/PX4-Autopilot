@@ -105,8 +105,8 @@ parameters:
         short: Optical flow quality at minimum noise
         long: Quality at which observation noise reaches EKF2_OF_N_MIN. Between
           EKF2_OF_QMIN and this value the noise is interpolated linearly from
-          EKF2_OF_N_MAX to EKF2_OF_N_MIN. PixArt sensors report raw SQUAL, which
-          rarely exceeds 120.
+          EKF2_OF_N_MAX to EKF2_OF_N_MIN. Lower it for a sensor whose quality
+          never reaches 255.
       type: int32
       default: 255
       min: 1

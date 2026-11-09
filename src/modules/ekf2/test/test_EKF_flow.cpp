@@ -460,6 +460,30 @@ TEST_F(EkfFlowTest, restartAfterRejectedFramesUsesGoodFlowOnly)
 	EXPECT_NEAR(estimated_horz_velocity(1), simulated_horz_velocity(1), 0.05f);
 }
 
+TEST_F(EkfFlowTest, rejectedFramesOnGroundKeepFlowGyroBias)
+{
+	// GIVEN: on the ground, where the quality floor is 0, a flow sensor whose gyro has a bias
+	const Vector3f flow_gyro_bias(0.02f, -0.01f, 0.f);
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.gyro_rate = flow_gyro_bias;
+	_sensor_simulator._flow.setData(flow_sample);
+	_ekf_wrapper.enableFlowFusion();
+	_sensor_simulator.startFlow();
+	_sensor_simulator.runSeconds(10.f);
+	ASSERT_NEAR(_ekf->getFlowGyroBias()(0), flow_gyro_bias(0), 1e-3f);
+	ASSERT_NEAR(_ekf->getFlowGyroBias()(1), flow_gyro_bias(1), 1e-3f);
+
+	// WHEN: the sensor rejects every frame, which arrive with quality 0 and no gyro
+	flowSample rejected_flow = _sensor_simulator._flow.dataAtRest();
+	rejected_flow.quality = 0;
+	_sensor_simulator._flow.setData(rejected_flow);
+	_sensor_simulator.runSeconds(3.f);
+
+	// THEN: the learned bias holds
+	EXPECT_NEAR(_ekf->getFlowGyroBias()(0), flow_gyro_bias(0), 1e-3f);
+	EXPECT_NEAR(_ekf->getFlowGyroBias()(1), flow_gyro_bias(1), 1e-3f);
+}
+
 TEST_F(EkfFlowTest, rotationScaleRemovesSensorRotationGain)
 {
 	// GIVEN: flow fusion 5 m above ground with a sensor that reads body rotation 15 % high
