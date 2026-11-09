@@ -474,5 +474,23 @@ param_modify_on_import_ret param_modify_on_import(bson_node_t node)
 		}
 	}
 
+	// 2026-11-09: the IMU fault detection moved from the EKF2 selector into the sensors module
+	{
+		static constexpr const char *kRenames[][2] {
+			{"EKF2_SEL_IMU_RAT", "SENS_IMU_RAT"},
+			{"EKF2_SEL_IMU_ANG", "SENS_IMU_ANG"},
+			{"EKF2_SEL_IMU_ACC", "SENS_IMU_ACC"},
+			{"EKF2_SEL_IMU_VEL", "SENS_IMU_VEL"},
+		};
+
+		for (const auto &rename : kRenames) {
+			if (strcmp(rename[0], node->name) == 0) {
+				strcpy(node->name, rename[1]);
+				PX4_INFO("migrating %s -> %s", rename[0], rename[1]);
+				return param_modify_on_import_ret::PARAM_MODIFIED;
+			}
+		}
+	}
+
 	return param_modify_on_import_ret::PARAM_NOT_MODIFIED;
 }

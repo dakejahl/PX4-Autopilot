@@ -628,3 +628,252 @@ TEST_F(VotedSensorsUpdateTest, ReEnablingAnImuWhileArmedWaitsForDisarm)
 	ASSERT_TRUE(readStatus(status));
 	EXPECT_EQ(status.accel_device_ids[0], kAccelIds[0]);
 }
+
+TEST_F(VotedSensorsUpdateTest, ImuMode2SwitchesAwayFromAnInconsistentPrimary)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	// the primary gyro reads 1 rad/s off, beyond SENS_IMU_RAT, its accelerometer is fine
+	auto feed = [&]() {
+		publishImu(0, 9.8f, 1.f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f, 0.05f);
+	};
+
+	start(voter, feed);
+	pollFor(voter, 1_s, feed);
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[1]) << "the next gyro by priority";
+	EXPECT_EQ(selection.accel_device_id, kAccelIds[0]) << "only the inconsistent sensor is switched away from";
+	EXPECT_EQ(Peer::gyroPriority(voter, 0), 1);
+	EXPECT_EQ(Peer::accelPriority(voter, 0), 75);
+}
+
+TEST_F(VotedSensorsUpdateTest, ImuMode1KeepsAnInconsistentPrimary)
+{
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	auto feed = [&]() {
+		publishImu(0, 9.8f, 1.f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f, 0.05f);
+	};
+
+	start(voter, feed);
+	pollFor(voter, 1_s, feed);
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]);
+
+	// against the median (0.05) rather than the mean (0.35), only the inconsistent gyro stands out
+	sensors_status_imu_s status{};
+	ASSERT_TRUE(readStatus(status));
+	EXPECT_NEAR(status.gyro_inconsistency_rad_s[0], 0.95f, 0.02f);
+	EXPECT_NEAR(status.gyro_inconsistency_rad_s[1], 0.05f, 0.02f);
+	EXPECT_NEAR(status.gyro_inconsistency_rad_s[3], 0.f, 0.02f);
+
+	// the fault is reported for the multi-EKF selector, but mode 1 does not act on it
+	EXPECT_TRUE(status.gyro_fault_detected);
+	EXPECT_EQ(status.gyro_device_id_faulty, kGyroIds[0]);
+	EXPECT_GT(status.gyro_accumulated_error_rad[0], 0.f);
+	EXPECT_EQ(status.gyro_accumulated_error_rad[1], 0.f);
+	EXPECT_FALSE(status.accel_fault_detected);
+	EXPECT_EQ(Peer::gyroPriority(voter, 0), 75);
+}
+
+TEST_F(VotedSensorsUpdateTest, WithTwoImusMode2KeepsThePrimary)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	auto feed = [&]() {
+		publishImu(0, 9.8f, 1.f);
+		publishImu(1, 9.8f);
+	};
+
+	start(voter, feed);
+	pollFor(voter, 2_s, feed);
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]) << "two IMUs cannot tell which one is off";
+
+	sensors_status_imu_s status{};
+	ASSERT_TRUE(readStatus(status));
+	EXPECT_TRUE(status.gyro_fault_detected);
+	EXPECT_EQ(status.gyro_device_id_faulty, 0u);
+}
+
+TEST_F(VotedSensorsUpdateTest, AnImuThatTimedOutStaysOutOfTheConsistencyCheck)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	// all three agree while the vehicle rotates
+	auto feed_all = [&]() {
+		publishImu(0, 9.8f, 0.5f);
+		publishImu(1, 9.8f, 0.5f);
+		publishImu(3, 9.8f, 0.5f);
+	};
+
+	start(voter, feed_all);
+
+	// IMU 0 stops publishing and its last sample freezes at 0.5 rad/s. The vehicle stops
+	// rotating, and of the two IMUs left, the selected one reads 0 while the other is 1 rad/s off.
+	pollFor(voter, 2_s, [&]() {
+		publishImu(1, 9.8f, 0.f);
+		publishImu(3, 9.8f, 1.f);
+	});
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[1]) << "two live IMUs cannot tell which one is off";
+	EXPECT_EQ(Peer::gyroPriority(voter, 1), 60);
+	EXPECT_EQ(Peer::gyroPriority(voter, 3), 50);
+}
+
+TEST_F(VotedSensorsUpdateTest, ImuMode2SwitchesSoonerOnALargerGyroFault)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	start(voter, [&]() {
+		publishImu(0, 9.8f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f);
+	});
+
+	// a 5 rad/s error accumulates past SENS_IMU_ANG in a fraction of the time a 1 rad/s one takes
+	pollFor(voter, 400_ms, [&]() {
+		publishImu(0, 9.8f, 5.f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f);
+	});
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[1]);
+}
+
+TEST_F(VotedSensorsUpdateTest, ImuMode2KeepsThePrimaryThroughABriefDisagreement)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	auto feed_healthy = [&]() {
+		publishImu(0, 9.8f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f);
+	};
+
+	start(voter, feed_healthy);
+
+	pollFor(voter, 300_ms, [&]() {
+		publishImu(0, 9.8f, 1.f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f);
+	});
+
+	pollFor(voter, 1_s, feed_healthy);
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]);
+	EXPECT_EQ(Peer::gyroPriority(voter, 0), 75);
+}
+
+TEST_F(VotedSensorsUpdateTest, ImuMode2DemotesAnInconsistentBackup)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	// the backup next in line reads 1 rad/s off
+	auto feed = [&]() {
+		publishImu(0, 9.8f);
+		publishImu(1, 9.8f, 1.f);
+		publishImu(3, 9.8f);
+	};
+
+	start(voter, feed);
+	pollFor(voter, 1_s, feed);
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]);
+	EXPECT_EQ(Peer::gyroPriority(voter, 1), 1);
+
+	// once the primary times out, the voter passes over the inconsistent backup
+	pollFor(voter, 600_ms, [&]() {
+		publishImu(1, 9.8f, 1.f);
+		publishImu(3, 9.8f);
+	});
+
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[3]);
+}
+
+TEST_F(VotedSensorsUpdateTest, ImuMode2SwitchesOnlyTheInconsistentAccel)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	// the primary accelerometer reads 3 m/s^2 off, its gyro is fine
+	auto feed = [&]() {
+		publishImu(0, 12.8f);
+		publishImu(1, 9.8f);
+		publishImu(3, 9.8f);
+	};
+
+	start(voter, feed);
+	pollFor(voter, 2_s, feed);
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.accel_device_id, kAccelIds[1]);
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]);
+	EXPECT_EQ(Peer::accelPriority(voter, 0), 1);
+	EXPECT_EQ(Peer::gyroPriority(voter, 0), 75);
+}

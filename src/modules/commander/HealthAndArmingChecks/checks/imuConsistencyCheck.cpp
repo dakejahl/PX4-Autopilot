@@ -43,7 +43,7 @@ void ImuConsistencyChecks::checkAndReport(const Context &context, Report &report
 
 	// Use the difference between IMU's to detect a bad calibration.
 	// If a single IMU is fitted, the value being checked will be zero so this check will always pass.
-	// Report argmax: a single bad IMU also pulls the healthy ones off the mean.
+	// Report the IMU furthest from the median, which is the inconsistent one.
 	unsigned worst_accel_i = 0;
 	float worst_accel = 0.f;
 
