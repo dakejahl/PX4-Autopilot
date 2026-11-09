@@ -130,23 +130,23 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 		_flow_vel_body(0) = -flow_compensated(1) * range;
 		_flow_vel_body(1) =  flow_compensated(0) * range;
 
-		if (!is_quality_good) {
-			// a restart counts good samples only and seeds its velocity from them
+		// a restart counts good samples only and seeds its velocity from them
+		if (is_quality_good) {
+			if (_flow_counter == 0) {
+				_flow_vel_body_lpf.reset(_flow_vel_body);
+				_flow_rate_compensated_lpf.reset(_flow_rate_compensated);
+				_flow_lpf_time_last_us = flow_sample.time_us;
+				_flow_counter = 1;
 
-		} else if (_flow_counter == 0) {
-			_flow_vel_body_lpf.reset(_flow_vel_body);
-			_flow_rate_compensated_lpf.reset(_flow_rate_compensated);
-			_flow_lpf_time_last_us = flow_sample.time_us;
-			_flow_counter = 1;
+			} else {
 
-		} else {
-
-			// the filters run once per flow sample, not once per EKF update
-			const uint64_t flow_dt_us = flow_sample.time_us - _flow_lpf_time_last_us;
-			_flow_vel_body_lpf.update(_flow_vel_body, flow_dt_us);
-			_flow_rate_compensated_lpf.update(_flow_rate_compensated, flow_dt_us);
-			_flow_lpf_time_last_us = flow_sample.time_us;
-			_flow_counter++;
+				// the filters run once per flow sample, not once per EKF update
+				const uint64_t flow_dt_us = flow_sample.time_us - _flow_lpf_time_last_us;
+				_flow_vel_body_lpf.update(_flow_vel_body, flow_dt_us);
+				_flow_rate_compensated_lpf.update(_flow_rate_compensated, flow_dt_us);
+				_flow_lpf_time_last_us = flow_sample.time_us;
+				_flow_counter++;
+			}
 		}
 
 		// Check if we are in-air and require optical flow to control position drift
