@@ -484,6 +484,182 @@ TEST_F(EkfFlowTest, rejectedFramesOnGroundKeepFlowGyroBias)
 	EXPECT_NEAR(_ekf->getFlowGyroBias()(1), flow_gyro_bias(1), 1e-3f);
 }
 
+TEST_F(EkfFlowTest, rotationScaleRemovesSensorRotationGain)
+{
+	// GIVEN: flow fusion 5 m above ground with a sensor that reads body rotation 15 % high
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+
+	const float sensor_rotation_gain = 1.15f;
+	const Vector3f body_rate(0.3f, -0.2f, 0.f);
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.gyro_rate = -body_rate; // see the definition of flowSample for the sign
+	flow_sample.flow_rate = sensor_rotation_gain * Vector2f(flow_sample.gyro_rate.xy());
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator._imu.setGyroData(body_rate);
+
+	// WHEN: the compensation assumes the sensor and gyro agree
+	_sensor_simulator.runSeconds(0.2f);
+	const Vector2f leak = _ekf->getFlowCompensated();
+
+	// AND WHEN: it uses the sensor's rotation gain
+	_ekf->getParamHandle()->ekf2_of_rot_scl = sensor_rotation_gain;
+	_sensor_simulator.runSeconds(0.2f);
+
+	// THEN: the 15 % excess reads as translation only in the first case
+	EXPECT_NEAR(leak(0), 0.15f * flow_sample.gyro_rate(0), 0.01f);
+	EXPECT_NEAR(leak(1), 0.15f * flow_sample.gyro_rate(1), 0.01f);
+	EXPECT_NEAR(_ekf->getFlowCompensated()(0), 0.f, 0.005f);
+	EXPECT_NEAR(_ekf->getFlowCompensated()(1), 0.f, 0.005f);
+}
+
+TEST_F(EkfFlowTest, rateNoiseAddsInQuadrature)
+{
+	// GIVEN: flow fusion with a fixed quality-based noise
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+	ASSERT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], quality_noise * quality_noise, 1e-6f);
+
+	// WHEN: the vehicle rotates at 0.5 rad/s about X and Y with a rate noise of 0.2 per rad/s
+	_ekf->getParamHandle()->ekf2_of_n_rate = 0.2f;
+	const Vector3f body_rate(0.3f, 0.4f, 0.f);
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.gyro_rate = -body_rate;
+	flow_sample.flow_rate = Vector2f(flow_sample.gyro_rate.xy());
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator._imu.setGyroData(body_rate);
+	_sensor_simulator.runSeconds(0.2f);
+
+	// THEN: the observation variance gains (0.2 * 0.5)^2
+	const float expected = quality_noise * quality_noise + 0.1f * 0.1f;
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], expected, 1e-5f);
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[1], expected, 1e-5f);
+}
+
+TEST_F(EkfFlowTest, flowNoiseScalesWithCompensatedFlow)
+{
+	// GIVEN: flow fusion 5 m above ground at a fixed quality-based noise
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+
+	// WHEN: the sensor reports 0.5 rad/s of translational flow with a flow noise of 0.4 per rad/s
+	_ekf->getParamHandle()->ekf2_of_n_flow = 0.4f;
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	flow_sample.flow_rate = Vector2f(0.3f, 0.4f);
+	_sensor_simulator._flow.setData(flow_sample);
+	_sensor_simulator.runSeconds(0.2f);
+
+	// THEN: the observation variance gains (0.4 * 0.5)^2
+	const float expected = quality_noise * quality_noise + 0.2f * 0.2f;
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], expected, 1e-4f);
+}
+
+TEST_F(EkfFlowTest, flowNoiseFollowsPredictedFlowWhenReadingDropsToZero)
+{
+	// GIVEN: flow-only aiding 5 m above ground while moving forward at 2 m/s
+	const float simulated_distance_to_ground = 5.f;
+	_sensor_simulator._trajectory[2].setCurrentPosition(-simulated_distance_to_ground);
+	startRangeFinderFusion(simulated_distance_to_ground);
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	setFlowFromHorizontalVelocityAndDistance(flow_sample, Vector2f(2.f, 0.f), simulated_distance_to_ground);
+	_sensor_simulator._flow.setData(flow_sample);
+	_ekf_wrapper.enableFlowFusion();
+	_sensor_simulator.startFlow();
+	_sensor_simulator.runSeconds(2.f);
+	ASSERT_TRUE(_ekf_wrapper.isIntendingFlowFusion());
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+
+	// WHEN: the reading drops to zero while the estimate still moves, with a flow noise of 0.5 per rad/s
+	_ekf->getParamHandle()->ekf2_of_n_flow = 0.5f;
+	_sensor_simulator._flow.setData(_sensor_simulator._flow.dataAtRest());
+	_sensor_simulator.runSeconds(0.3f);
+
+	// THEN: the flow predicted from the estimate sets the noise, not the zero reading
+	const auto &aid_src = _ekf->aid_src_optical_flow();
+	const float predicted_flow = fabsf(aid_src.innovation[1]);
+	EXPECT_NEAR(aid_src.observation[1], 0.f, 1e-3f);
+	EXPECT_GT(predicted_flow, 0.1f);
+	EXPECT_NEAR(aid_src.observation_variance[1], sq(quality_noise) + sq(0.5f * predicted_flow), 1e-3f);
+}
+
+TEST_F(EkfFlowTest, resetVarianceIgnoresTheVelocityItReplaces)
+{
+	// GIVEN: flow-only aiding 5 m above ground while moving forward at 2 m/s, with a flow noise of 0.5 per rad/s
+	const float simulated_distance_to_ground = 5.f;
+	_sensor_simulator._trajectory[2].setCurrentPosition(-simulated_distance_to_ground);
+	startRangeFinderFusion(simulated_distance_to_ground);
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	setFlowFromHorizontalVelocityAndDistance(flow_sample, Vector2f(2.f, 0.f), simulated_distance_to_ground);
+	_sensor_simulator._flow.setData(flow_sample);
+	_ekf_wrapper.enableFlowFusion();
+	_sensor_simulator.startFlow();
+	_sensor_simulator.runSeconds(2.f);
+	_ekf->getParamHandle()->ekf2_of_n_flow = 0.5f;
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+
+	// WHEN: the sensor rejects every frame until flow fusion stops, then reads zero flow
+	flowSample rejected_flow = _sensor_simulator._flow.dataAtRest();
+	rejected_flow.quality = 0;
+	_sensor_simulator._flow.setData(rejected_flow);
+	_sensor_simulator.runSeconds(3.f);
+	ASSERT_FALSE(_ekf_wrapper.isIntendingFlowFusion());
+
+	const uint8_t reset_count = _ekf->state_reset_status().reset_count.velNE;
+	_sensor_simulator._flow.setData(_sensor_simulator._flow.dataAtRest());
+	Vector3f velocity_variance;
+	bool reset_seen = false;
+
+	for (int i = 0; i < 1000 && !reset_seen; i++) {
+		_sensor_simulator.runSeconds(0.005f);
+
+		if (_ekf->state_reset_status().reset_count.velNE != reset_count) {
+			velocity_variance = _ekf->getVelocityVariance();
+			reset_seen = true;
+		}
+	}
+
+	// THEN: the reset takes its variance from the zero reading, not from the 2 m/s it replaces
+	ASSERT_TRUE(reset_seen);
+	const float expected = sq(simulated_distance_to_ground * quality_noise);
+	EXPECT_NEAR(velocity_variance(0), expected, 0.1f * expected);
+	EXPECT_NEAR(velocity_variance(1), expected, 0.1f * expected);
+}
+
+TEST_F(EkfFlowTest, minimumNoiseBelowOldFloor)
+{
+	// GIVEN: flow fusion at the best quality
+	startRangeFinderFusion(5.f);
+	startZeroFlowFusion();
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+
+	// WHEN: the minimum noise is set for long flow windows
+	_ekf->getParamHandle()->ekf2_of_n_min = 0.02f;
+	_sensor_simulator.runSeconds(5.f);
+
+	// THEN: the observation noise follows it below the old 0.05 rad/s floor
+	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], 0.02f * 0.02f, 1e-6f);
+}
+
 TEST_F(EkfFlowTest, rejectedFramesInAirKeepFlowGyroBias)
 {
 	// GIVEN: in the air, a flow sensor whose gyro has a bias

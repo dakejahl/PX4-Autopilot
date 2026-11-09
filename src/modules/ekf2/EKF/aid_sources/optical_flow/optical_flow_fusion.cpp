@@ -156,10 +156,11 @@ Vector2f Ekf::predictFlow(const Vector3f &flow_gyro) const
 	return Vector2f(vel_body(1) * scale, -vel_body(0) * scale);
 }
 
-float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample) const
+float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample, const float flow_rate) const
 {
 	// calculate the observation noise variance - scaling noise linearly across flow quality range
-	const float R_LOS_best = fmaxf(_params.ekf2_of_n_min, 0.05f);
+	// longer flow windows average out more noise, so the best-case noise may sit well below the worst case
+	const float R_LOS_best = fmaxf(_params.ekf2_of_n_min, 0.01f);
 	const float R_LOS_worst = fmaxf(_params.ekf2_of_n_max, 0.05f);
 
 	// weighting is 0 at EKF2_OF_QMIN and saturates at 1 from EKF2_OF_QMAX up
@@ -168,7 +169,13 @@ float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample) const
 	const float weighting = math::constrain((static_cast<float>(flow_sample.quality) - qmin) / (qmax - qmin), 0.f, 1.f);
 
 	// take the weighted average of the observation noise for the best and wort flow quality
-	const float R_LOS = sq(R_LOS_best * weighting + R_LOS_worst * (1.f - weighting));
+	const float quality_noise = R_LOS_best * weighting + R_LOS_worst * (1.f - weighting);
 
-	return R_LOS;
+	// rotation the compensation misses scales with body rate, so it adds noise during manoeuvres
+	const float rate_noise = _params.ekf2_of_n_rate * Vector2f(flow_sample.gyro_rate.xy()).norm();
+
+	// noise in proportion to the flow rate the caller chose
+	const float flow_noise = _params.ekf2_of_n_flow * flow_rate;
+
+	return sq(quality_noise) + sq(rate_noise) + sq(flow_noise);
 }

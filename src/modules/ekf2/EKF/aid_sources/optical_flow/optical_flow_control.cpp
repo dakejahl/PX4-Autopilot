@@ -104,10 +104,15 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 		// correct for gyro bias errors in the data used to do the motion compensation
 		// Note the sign convention used: A positive LOS rate is a RH rotation of the scene about that axis.
 		const Vector3f flow_gyro_corrected = flow_sample.gyro_rate - _flow_gyro_bias;
-		const Vector2f flow_compensated = flow_sample.flow_rate - flow_gyro_corrected.xy();
+		const Vector2f flow_compensated = flow_sample.flow_rate - _params.ekf2_of_rot_scl * Vector2f(flow_gyro_corrected.xy());
 
-		// calculate the optical flow observation variance
-		const float R_LOS = calcOptFlowMeasVar(flow_sample);
+		const Vector2f flow_predicted = predictFlow(flow_gyro_corrected);
+
+		// A sensor that under-reads motion makes an error proportional to the flow itself. The larger of the measured and
+		// predicted flow sets that noise, so a reading that collapses to zero while the vehicle moves doesn't earn the
+		// most trust. The innovation can't exceed twice that rate, which caps the test ratio at 4 / (gate * n)^2. From
+		// n = 2 / gate no sample fails the innovation check, so a doubted reading is down-weighted, never dropped.
+		const float R_LOS = calcOptFlowMeasVar(flow_sample, fmaxf(flow_compensated.norm(), flow_predicted.norm()));
 
 		const float epsilon = 1e-3f;
 		Vector2f innov_var;
@@ -118,7 +123,7 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 				      flow_sample.time_us,                                 // sample timestamp
 				      flow_compensated,                                    // observation
 				      Vector2f{R_LOS, R_LOS},                              // observation variance
-				      predictFlow(flow_gyro_corrected) - flow_compensated, // innovation
+				      flow_predicted - flow_compensated,                   // innovation
 				      innov_var,                                           // innovation variance
 				      math::max(_params.ekf2_of_gate, 1.f));            // innovation gate
 
@@ -243,7 +248,8 @@ void Ekf::resetFlowFusion(const flowSample &flow_sample)
 	ECL_INFO("reset velocity to flow");
 	_information_events.flags.reset_vel_to_flow = true;
 
-	const float flow_vel_var = sq(predictFlowRange()) * calcOptFlowMeasVar(flow_sample);
+	// the predicted flow comes from the velocity this reset replaces, so only the measured flow sets the noise here
+	const float flow_vel_var = sq(predictFlowRange()) * calcOptFlowMeasVar(flow_sample, _flow_rate_compensated.norm());
 	resetHorizontalVelocityTo(getFilteredFlowVelNE(), flow_vel_var);
 
 	resetAidSourceStatusZeroInnovation(_aid_src_optical_flow);
