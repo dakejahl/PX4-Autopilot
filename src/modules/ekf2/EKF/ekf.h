@@ -857,7 +857,7 @@ private:
 	void resetOnGroundMotionForOpticalFlowChecks();
 
 	// calculate the measurement variance for the optical flow sensor (rad/sec)^2
-	float calcOptFlowMeasVar(const flowSample &flow_sample) const;
+	float calcOptFlowMeasVar(const flowSample &flow_sample, float flow_rate) const;
 
 	// calculate optical flow body angular rate compensation
 	void calcOptFlowBodyRateComp(const flowSample &flow_sample);
