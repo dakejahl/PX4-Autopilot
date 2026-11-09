@@ -48,6 +48,33 @@ using namespace sensors;
 using namespace matrix;
 using namespace time_literals;
 
+// how long the selected sensor has to be inconsistent with the others before SENS_IMU_MODE 2 switches away from it
+static constexpr hrt_abstime INCONSISTENT_PRIMARY_TIMEOUT{500_ms};
+
+// per-axis median, the mean of the middle two for an even count
+static Vector3f median(const Vector3f values[], int count)
+{
+	Vector3f result;
+
+	for (int axis = 0; axis < 3; axis++) {
+		float sorted[MAX_SENSOR_COUNT];
+
+		for (int i = 0; i < count; i++) {
+			int j = i;
+
+			for (; (j > 0) && (sorted[j - 1] > values[i](axis)); j--) {
+				sorted[j] = sorted[j - 1];
+			}
+
+			sorted[j] = values[i](axis);
+		}
+
+		result(axis) = 0.5f * (sorted[(count - 1) / 2] + sorted[count / 2]);
+	}
+
+	return result;
+}
+
 VotedSensorsUpdate::VotedSensorsUpdate(bool hil_enabled,
 				       uORB::SubscriptionCallbackWorkItem(&vehicle_imu_sub)[MAX_SENSOR_COUNT]) :
 	ModuleParams(nullptr),
@@ -81,13 +108,17 @@ void VotedSensorsUpdate::parametersUpdate(bool armed)
 	if (!armed) {
 		updateParams();
 
-		// SENS_IMU_MODE 2 flies on the IMU median from the start, it never switches in flight
-		const bool imu_median = (_param_sens_imu_mode.get() == 2);
+		// the preflight inconsistency limits, which SENS_IMU_MODE 2 also applies in flight
+		auto get_limit = [](const char *name, float & limit) {
+			const param_t handle = param_find(name);
 
-		if (_selection.imu_median != imu_median) {
-			_selection.imu_median = imu_median;
-			_selection_changed = true;
-		}
+			if (handle != PARAM_INVALID) {
+				param_get(handle, &limit);
+			}
+		};
+
+		get_limit("COM_ARM_IMU_ACC", _accel_inconsistency_limit);
+		get_limit("COM_ARM_IMU_GYR", _gyro_inconsistency_limit);
 	}
 
 	// run through all IMUs
@@ -279,29 +310,6 @@ void VotedSensorsUpdate::imuPoll(struct sensor_combined_s &raw)
 		raw.gyro_clipping             = _last_sensor_data[gyro_best_index].gyro_clipping;
 		raw.gyro_calibration_count    = _last_sensor_data[gyro_best_index].gyro_calibration_count;
 
-		if (_selection.imu_median) {
-			// EKF2 gets the median of the same IMUs the rate controller flies on
-			math::MedianFilter<float, 3> accel_median[3], gyro_median[3];
-			int count = 0;
-
-			for (int i = 0; (i < MAX_SENSOR_COUNT) && (count < 3); i++) {
-				if (imuEnabled(i) && (_accel_device_id[i] != 0)
-				    && (raw.timestamp < _last_sensor_data[i].timestamp + IMU_MEDIAN_SAMPLE_TIMEOUT_US)) {
-					for (int axis = 0; axis < 3; axis++) {
-						accel_median[axis].insert(_last_sensor_data[i].accelerometer_m_s2[axis]);
-						gyro_median[axis].insert(_last_sensor_data[i].gyro_rad[axis]);
-					}
-
-					count++;
-				}
-			}
-
-			for (int axis = 0; (count == 3) && (axis < 3); axis++) {
-				raw.accelerometer_m_s2[axis] = accel_median[axis].median();
-				raw.gyro_rad[axis] = gyro_median[axis].median();
-			}
-		}
-
 		if ((accel_best_index != _accel.last_best_vote) || (_selection.accel_device_id != _accel_device_id[accel_best_index])) {
 			_accel.last_best_vote = (uint8_t)accel_best_index;
 			_selection.accel_device_id = _accel_device_id[accel_best_index];
@@ -468,6 +476,13 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 	calcAccelInconsistency();
 	calcGyroInconsistency();
 
+	if (_param_sens_imu_mode.get() == 2) {
+		switchFromInconsistentPrimary(_accel, _accel_diff, _accel_device_id, _accel_inconsistency_limit,
+					      events::px4::enums::sensor_type_t::accel);
+		switchFromInconsistentPrimary(_gyro, _gyro_diff, _gyro_device_id, _gyro_inconsistency_limit,
+					      events::px4::enums::sensor_type_t::gyro);
+	}
+
 	sensors_status_imu_s status{};
 	status.accel_device_id_primary = _selection.accel_device_id;
 	status.gyro_device_id_primary = _selection.gyro_device_id;
@@ -493,6 +508,7 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 		}
 	}
 
+
 	status.timestamp = hrt_absolute_time();
 	_sensors_status_imu_pub.publish(status);
 
@@ -512,24 +528,24 @@ void VotedSensorsUpdate::setRelativeTimestamps(sensor_combined_s &raw)
 
 void VotedSensorsUpdate::calcAccelInconsistency()
 {
-	Vector3f accel_mean{};
 	Vector3f accel_all[MAX_SENSOR_COUNT] {};
+	Vector3f accel_enabled[MAX_SENSOR_COUNT] {};
 	uint8_t accel_count = 0;
 
 	for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
 		if ((_accel_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
-			accel_count++;
 			accel_all[sensor_index] = Vector3f{_last_sensor_data[sensor_index].accelerometer_m_s2};
-			accel_mean += accel_all[sensor_index];
+			accel_enabled[accel_count++] = accel_all[sensor_index];
 		}
 	}
 
 	if (accel_count > 0) {
-		accel_mean /= accel_count;
+		// the median, unlike the mean, is not pulled towards an inconsistent sensor
+		const Vector3f accel_median = median(accel_enabled, accel_count);
 
 		for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
 			if ((_accel_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
-				_accel_diff[sensor_index] = 0.95f * _accel_diff[sensor_index] + 0.05f * (accel_all[sensor_index] - accel_mean);
+				_accel_diff[sensor_index] = 0.95f * _accel_diff[sensor_index] + 0.05f * (accel_all[sensor_index] - accel_median);
 			}
 		}
 	}
@@ -537,25 +553,68 @@ void VotedSensorsUpdate::calcAccelInconsistency()
 
 void VotedSensorsUpdate::calcGyroInconsistency()
 {
-	Vector3f gyro_mean{};
 	Vector3f gyro_all[MAX_SENSOR_COUNT] {};
+	Vector3f gyro_enabled[MAX_SENSOR_COUNT] {};
 	uint8_t gyro_count = 0;
 
 	for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
 		if ((_gyro_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
-			gyro_count++;
 			gyro_all[sensor_index] = Vector3f{_last_sensor_data[sensor_index].gyro_rad};
-			gyro_mean += gyro_all[sensor_index];
+			gyro_enabled[gyro_count++] = gyro_all[sensor_index];
 		}
 	}
 
 	if (gyro_count > 0) {
-		gyro_mean /= gyro_count;
+		// the median, unlike the mean, is not pulled towards an inconsistent sensor
+		const Vector3f gyro_median = median(gyro_enabled, gyro_count);
 
 		for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
 			if ((_gyro_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
-				_gyro_diff[sensor_index] = 0.95f * _gyro_diff[sensor_index] + 0.05f * (gyro_all[sensor_index] - gyro_mean);
+				_gyro_diff[sensor_index] = 0.95f * _gyro_diff[sensor_index] + 0.05f * (gyro_all[sensor_index] - gyro_median);
 			}
 		}
+	}
+}
+
+void VotedSensorsUpdate::switchFromInconsistentPrimary(SensorData &sensor, const Vector3f(&diff)[MAX_SENSOR_COUNT],
+		const uint32_t (&device_id)[MAX_SENSOR_COUNT], float limit, events::px4::enums::sensor_type_t sensor_type)
+{
+	int count = 0;
+
+	for (int i = 0; i < MAX_SENSOR_COUNT; i++) {
+		if ((device_id[i] != 0) && imuEnabled(i)) {
+			count++;
+		}
+	}
+
+	const int primary = sensor.last_best_vote;
+
+	// with fewer than three sensors the median does not tell which one is off,
+	// and a primary already at the lowest priority has no better sensor to switch to
+	if ((count < 3) || !(diff[primary].norm() > limit) || (sensor.priority[primary] <= 1)) {
+		sensor.inconsistent_since = 0;
+		return;
+	}
+
+	const hrt_abstime now = hrt_absolute_time();
+
+	if (sensor.inconsistent_since == 0) {
+		sensor.inconsistent_since = now;
+
+	} else if (now > sensor.inconsistent_since + INCONSISTENT_PRIMARY_TIMEOUT) {
+		// the lowest priority makes the voter select another sensor, as after a failure
+		sensor.priority[primary] = 1;
+		sensor.inconsistent_since = 0;
+
+		/* EVENT
+		 * @description
+		 * The selected sensor disagrees with the other IMUs by more than the preflight inconsistency limit.
+		 *
+		 * <profile name="dev">
+		 * This check can be configured via <param>SENS_IMU_MODE</param> parameter.
+		 * </profile>
+		 */
+		events::send<events::px4::enums::sensor_type_t, uint8_t>(events::ID("sensor_inconsistent_primary"),
+				events::Log::Critical, "{1} sensor #{2} inconsistent, switching to another IMU", sensor_type, primary);
 	}
 }

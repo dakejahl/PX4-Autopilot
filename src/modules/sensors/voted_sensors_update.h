@@ -41,7 +41,6 @@
 
 #include "data_validator/DataValidator.hpp"
 #include "data_validator/DataValidatorGroup.hpp"
-#include "SensorMedian.hpp"
 
 #include <px4_platform_common/events.h>
 #include <px4_platform_common/module_params.h>
@@ -119,6 +118,7 @@ private:
 		int32_t priority[MAX_SENSOR_COUNT] {};
 		int32_t priority_configured[MAX_SENSOR_COUNT] {};
 		uint8_t last_best_vote{0}; /**< index of the latest best vote */
+		hrt_abstime inconsistent_since{0}; /**< since when the selected sensor is beyond the inconsistency limit */
 		uint8_t subscription_count{0};
 		bool advertised[MAX_SENSOR_COUNT] {};
 	};
@@ -163,6 +163,12 @@ private:
 	 */
 	void calcGyroInconsistency();
 
+	/**
+	 * Switch away from the selected sensor once it has been inconsistent with the others for too long (SENS_IMU_MODE 2)
+	 */
+	void switchFromInconsistentPrimary(SensorData &sensor, const matrix::Vector3f(&diff)[MAX_SENSOR_COUNT],
+					   const uint32_t (&device_id)[MAX_SENSOR_COUNT], float limit, events::px4::enums::sensor_type_t sensor_type);
+
 	SensorData _accel{ORB_ID::sensor_accel};
 	SensorData _gyro{ORB_ID::sensor_gyro};
 
@@ -187,6 +193,9 @@ private:
 
 	matrix::Vector3f _accel_diff[MAX_SENSOR_COUNT] {};		/**< filtered accel differences between IMU units (m/s/s) */
 	matrix::Vector3f _gyro_diff[MAX_SENSOR_COUNT] {};			/**< filtered gyro differences between IMU uinits (rad/s) */
+
+	float _accel_inconsistency_limit{INFINITY};	/**< COM_ARM_IMU_ACC, if commander is built (m/s/s) */
+	float _gyro_inconsistency_limit{INFINITY};	/**< COM_ARM_IMU_GYR, if commander is built (rad/s) */
 
 	uint32_t _accel_device_id[MAX_SENSOR_COUNT] {};	/**< accel driver device id for each uorb instance */
 	uint32_t _gyro_device_id[MAX_SENSOR_COUNT] {};	/**< gyro driver device id for each uorb instance */
