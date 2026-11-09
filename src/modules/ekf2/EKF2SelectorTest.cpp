@@ -47,10 +47,12 @@
 #include <px4_platform_common/px4_config.h>
 #include <px4_platform_common/px4_work_queue/WorkQueueManager.hpp>
 #include <px4_platform_common/time.h>
+#include <uORB/Publication.hpp>
 #include <uORB/PublicationMulti.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/estimator_selector_status.h>
+#include <uORB/topics/sensors_status_imu.h>
 
 using namespace time_literals;
 
@@ -339,4 +341,40 @@ TEST_F(EKF2SelectorTest, sustainedFaultFallsBackEventually)
 
 	runFor(7000_ms, 2.f, 0, 0.1f, kFaultBadAccVertical);
 	EXPECT_EQ(primaryInstance(), 0);
+}
+
+// the sensors module reports the primary instance's gyro faulty: the selector leaves that instance at once
+TEST_F(EKF2SelectorTest, imuFaultFromSensorsFailsOverImmediately)
+{
+	uORB::Publication<sensors_status_imu_s> sensors_status_imu_pub{ORB_ID(sensors_status_imu)};
+
+	const hrt_abstime fault_start = hrt_absolute_time();
+	hrt_abstime switched_after = 0;
+
+	while (hrt_elapsed_time(&fault_start) < 5_s) {
+		sensors_status_imu_s imu{};
+		imu.gyro_fault_detected = true;
+		imu.gyro_device_id_faulty = 2000; // the gyro publishStatus() gives instance 0
+		imu.timestamp = hrt_absolute_time();
+		sensors_status_imu_pub.publish(imu);
+
+		publishStatus(0, 0.1f, 0);
+		publishStatus(1, 0.1f, 0);
+		_selector->ScheduleNow();
+		px4_usleep(5_ms);
+
+		if (primaryInstance() == 1) {
+			switched_after = hrt_elapsed_time(&fault_start);
+			break;
+		}
+	}
+
+	// the last sample outlives the test, so leave a clean one for whichever test runs next
+	sensors_status_imu_s clear{};
+	clear.timestamp = hrt_absolute_time();
+	sensors_status_imu_pub.publish(clear);
+
+	EXPECT_EQ(primaryInstance(), 1);
+	EXPECT_GT(switched_after, 0u);
+	EXPECT_LT(switched_after, 1_s);
 }

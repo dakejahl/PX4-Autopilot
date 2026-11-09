@@ -194,6 +194,8 @@ void VotedSensorsUpdate::disableImu(uint8_t index)
 	_gyro_device_id[index] = 0;
 	_accel_diff[index].zero();
 	_gyro_diff[index].zero();
+	_accel_accumulated_error[index] = 0.f;
+	_gyro_accumulated_error[index] = 0.f;
 }
 
 void VotedSensorsUpdate::imuPoll(struct sensor_combined_s &raw)
@@ -476,6 +478,15 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 	calcAccelInconsistency();
 	calcGyroInconsistency();
 
+	const hrt_abstime now = hrt_absolute_time();
+	const float dt = math::constrain((now - _last_fault_detection) * 1e-6f, 0.f, 0.02f);
+	_last_fault_detection = now;
+
+	_accel_fault = detectFault(_accel, _accel_diff, _accel_device_id, _accel_accumulated_error,
+				   _param_sens_imu_acc.get(), _param_sens_imu_vel.get(), dt);
+	_gyro_fault = detectFault(_gyro, _gyro_diff, _gyro_device_id, _gyro_accumulated_error,
+				  math::radians(_param_sens_imu_rat.get()), math::radians(_param_sens_imu_ang.get()), dt);
+
 	if (_param_sens_imu_mode.get() == 2) {
 		switchFromInconsistentPrimary(_accel, _accel_diff, _accel_device_id, _accel_inconsistency_limit,
 					      events::px4::enums::sensor_type_t::accel);
@@ -486,6 +497,10 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 	sensors_status_imu_s status{};
 	status.accel_device_id_primary = _selection.accel_device_id;
 	status.gyro_device_id_primary = _selection.gyro_device_id;
+	status.accel_fault_detected = _accel_fault.detected;
+	status.accel_device_id_faulty = (_accel_fault.index >= 0) ? _accel_device_id[_accel_fault.index] : 0;
+	status.gyro_fault_detected = _gyro_fault.detected;
+	status.gyro_device_id_faulty = (_gyro_fault.index >= 0) ? _gyro_device_id[_gyro_fault.index] : 0;
 
 	static_assert(MAX_SENSOR_COUNT == (sizeof(sensors_status_imu_s::accel_inconsistency_m_s_s) / sizeof(
 			sensors_status_imu_s::accel_inconsistency_m_s_s[0])), "check sensors_status_imu accel_inconsistency_m_s_s size");
@@ -496,6 +511,7 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 		if ((_accel_device_id[i] != 0) && imuEnabled(i)) {
 			status.accel_device_ids[i] = _accel_device_id[i];
 			status.accel_inconsistency_m_s_s[i] = _accel_diff[i].norm();
+			status.accel_accumulated_error_m_s[i] = _accel_accumulated_error[i];
 			status.accel_healthy[i] = (_accel.voter.get_sensor_state(i) == DataValidator::ERROR_FLAG_NO_ERROR);
 			status.accel_priority[i] = _accel.voter.get_sensor_priority(i);
 		}
@@ -503,6 +519,7 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 		if ((_gyro_device_id[i] != 0) && imuEnabled(i)) {
 			status.gyro_device_ids[i] = _gyro_device_id[i];
 			status.gyro_inconsistency_rad_s[i] = _gyro_diff[i].norm();
+			status.gyro_accumulated_error_rad[i] = _gyro_accumulated_error[i];
 			status.gyro_healthy[i] = (_gyro.voter.get_sensor_state(i) == DataValidator::ERROR_FLAG_NO_ERROR);
 			status.gyro_priority[i] = _gyro.voter.get_sensor_priority(i);
 		}
@@ -585,6 +602,48 @@ void VotedSensorsUpdate::calcGyroInconsistency()
 			}
 		}
 	}
+}
+
+VotedSensorsUpdate::ImuFault VotedSensorsUpdate::detectFault(SensorData &sensor, const Vector3f(&diff)[MAX_SENSOR_COUNT],
+		const uint32_t (&device_id)[MAX_SENSOR_COUNT], float (&accumulated_error)[MAX_SENSOR_COUNT], float limit,
+		float accumulated_limit, float dt)
+{
+	int count = 0;
+	bool exceeded = false;
+	float largest = 0.f;
+	int largest_index = -1;
+
+	for (int i = 0; i < MAX_SENSOR_COUNT; i++) {
+		if (!inConsistencyCheck(sensor, device_id, i)) {
+			continue;
+		}
+
+		count++;
+
+		// integrating the excess lets a brief disagreement drain away again,
+		// while a large error reaches the limit sooner than a small one
+		accumulated_error[i] = fmaxf(accumulated_error[i] + (diff[i].norm() - limit) * dt, 0.f);
+
+		if (accumulated_error[i] > accumulated_limit) {
+			exceeded = true;
+		}
+
+		if (accumulated_error[i] > largest) {
+			largest = accumulated_error[i];
+			largest_index = i;
+		}
+	}
+
+	ImuFault fault{};
+
+	// two sensors can tell that one of them is off, it takes a third to tell which one
+	fault.detected = exceeded && (count >= 2);
+
+	if (fault.detected && (count >= 3)) {
+		fault.index = largest_index;
+	}
+
+	return fault;
 }
 
 void VotedSensorsUpdate::switchFromInconsistentPrimary(SensorData &sensor, const Vector3f(&diff)[MAX_SENSOR_COUNT],

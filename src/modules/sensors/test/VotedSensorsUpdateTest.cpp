@@ -685,6 +685,14 @@ TEST_F(VotedSensorsUpdateTest, ImuMode1KeepsAnInconsistentPrimary)
 	EXPECT_NEAR(status.gyro_inconsistency_rad_s[0], 0.95f, 0.02f);
 	EXPECT_NEAR(status.gyro_inconsistency_rad_s[1], 0.05f, 0.02f);
 	EXPECT_NEAR(status.gyro_inconsistency_rad_s[3], 0.f, 0.02f);
+
+	// the fault is reported for the multi-EKF selector, but mode 1 does not act on it
+	EXPECT_TRUE(status.gyro_fault_detected);
+	EXPECT_EQ(status.gyro_device_id_faulty, kGyroIds[0]);
+	EXPECT_GT(status.gyro_accumulated_error_rad[0], 0.f);
+	EXPECT_EQ(status.gyro_accumulated_error_rad[1], 0.f);
+	EXPECT_FALSE(status.accel_fault_detected);
+	EXPECT_EQ(Peer::gyroPriority(voter, 0), 75);
 }
 
 TEST_F(VotedSensorsUpdateTest, WithTwoImusMode2KeepsThePrimary)
@@ -702,11 +710,16 @@ TEST_F(VotedSensorsUpdateTest, WithTwoImusMode2KeepsThePrimary)
 	};
 
 	start(voter, feed);
-	pollFor(voter, 1_s, feed);
+	pollFor(voter, 2_s, feed);
 
 	sensor_selection_s selection{};
 	ASSERT_TRUE(readSelection(selection));
 	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]) << "two IMUs cannot tell which one is off";
+
+	sensors_status_imu_s status{};
+	ASSERT_TRUE(readStatus(status));
+	EXPECT_TRUE(status.gyro_fault_detected);
+	EXPECT_EQ(status.gyro_device_id_faulty, 0u);
 }
 
 TEST_F(VotedSensorsUpdateTest, AnImuThatTimedOutStaysOutOfTheConsistencyCheck)

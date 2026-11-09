@@ -168,6 +168,19 @@ private:
 	 */
 	void calcGyroInconsistency();
 
+	struct ImuFault {
+		bool detected{false};	/**< a sensor accumulated more inconsistency than the limit */
+		int8_t index{-1};	/**< the faulty sensor, -1 if fewer than three sensors cannot tell which one */
+	};
+
+	/**
+	 * Accumulates each sensor's inconsistency beyond limit over time and reports a fault
+	 * once a sensor's accumulation exceeds accumulated_limit
+	 */
+	ImuFault detectFault(SensorData &sensor, const matrix::Vector3f(&diff)[MAX_SENSOR_COUNT],
+			     const uint32_t (&device_id)[MAX_SENSOR_COUNT], float (&accumulated_error)[MAX_SENSOR_COUNT],
+			     float limit, float accumulated_limit, float dt);
+
 	/**
 	 * Switch away from the selected sensor once it has been inconsistent with the others for too long (SENS_IMU_MODE 2)
 	 */
@@ -199,6 +212,12 @@ private:
 	matrix::Vector3f _accel_diff[MAX_SENSOR_COUNT] {};		/**< filtered accel differences between IMU units (m/s/s) */
 	matrix::Vector3f _gyro_diff[MAX_SENSOR_COUNT] {};			/**< filtered gyro differences between IMU uinits (rad/s) */
 
+	float _accel_accumulated_error[MAX_SENSOR_COUNT] {};	/**< accel inconsistency beyond SENS_IMU_ACC, accumulated (m/s) */
+	float _gyro_accumulated_error[MAX_SENSOR_COUNT] {};	/**< gyro inconsistency beyond SENS_IMU_RAT, accumulated (rad) */
+	ImuFault _accel_fault{};
+	ImuFault _gyro_fault{};
+	hrt_abstime _last_fault_detection{0};
+
 	float _accel_inconsistency_limit{INFINITY};	/**< COM_ARM_IMU_ACC, if commander is built (m/s/s) */
 	float _gyro_inconsistency_limit{INFINITY};	/**< COM_ARM_IMU_GYR, if commander is built (rad/s) */
 
@@ -212,7 +231,11 @@ private:
 	bool _parameter_update{false};
 
 	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode
+		(ParamInt<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode,
+		(ParamFloat<px4::params::SENS_IMU_RAT>) _param_sens_imu_rat,
+		(ParamFloat<px4::params::SENS_IMU_ANG>) _param_sens_imu_ang,
+		(ParamFloat<px4::params::SENS_IMU_ACC>) _param_sens_imu_acc,
+		(ParamFloat<px4::params::SENS_IMU_VEL>) _param_sens_imu_vel
 	)
 };
 

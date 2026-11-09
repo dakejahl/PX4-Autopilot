@@ -193,3 +193,39 @@ parameters:
         2: Publish primary IMU selection, switch away from a primary inconsistent with the other IMUs
       default: 1
       reboot_required: true
+    SENS_IMU_RAT:
+      description:
+        short: IMU fault angular rate threshold
+        long: A gyro deviating from the median of all gyros by more than this accumulates
+          the excess as angular error.
+      type: float
+      default: 7.0
+      unit: deg/s
+      decimal: 1
+    SENS_IMU_ANG:
+      description:
+        short: IMU fault angular threshold
+        long: A gyro whose accumulated angular error exceeds this is declared faulty.
+          The multi-EKF selector then drops the EKF instances using it.
+      type: float
+      default: 15.0
+      unit: deg
+      decimal: 1
+    SENS_IMU_ACC:
+      description:
+        short: IMU fault acceleration threshold
+        long: An accelerometer deviating from the median of all accelerometers by more
+          than this accumulates the excess as velocity error.
+      type: float
+      default: 1.0
+      unit: m/s^2
+      decimal: 2
+    SENS_IMU_VEL:
+      description:
+        short: IMU fault velocity threshold
+        long: An accelerometer whose accumulated velocity error exceeds this is declared
+          faulty. The multi-EKF selector then drops the EKF instances using it.
+      type: float
+      default: 2.0
+      unit: m/s
+      decimal: 2
