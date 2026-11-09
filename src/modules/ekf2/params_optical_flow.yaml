@@ -94,7 +94,9 @@ parameters:
           poor texture makes an error proportional to the flow itself, which is
           large near the ground and small at altitude. Taking the larger keeps a
           reading that drops to zero while the vehicle moves from being trusted
-          most. 0 disables.
+          most. The innovation then can't exceed twice the rate that sets this
+          noise, so from 2 / EKF2_OF_GATE up, 0.67 at the default gate, no sample
+          fails the innovation check. 0 disables.
       type: float
       default: 0.0
       min: 0.0
