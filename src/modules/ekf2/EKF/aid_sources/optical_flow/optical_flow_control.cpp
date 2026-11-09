@@ -95,7 +95,8 @@ void Ekf::controlOpticalFlowFusion(const imuSample &imu_delayed)
 
 		// Samples below the quality floor include frames the sensor rejected, which carry zero flow and
 		// zero gyro. They must not steer the flow gyro bias or the filtered velocity a restart resets to.
-		if (is_quality_good) {
+		// A quality of 0 marks such a frame even where the floor is 0, as it is on the ground.
+		if (is_quality_good && (flow_sample.quality > 0)) {
 			calcOptFlowBodyRateComp(flow_sample);
 		}
 
