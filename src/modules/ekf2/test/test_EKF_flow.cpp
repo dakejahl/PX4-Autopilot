@@ -565,6 +565,38 @@ TEST_F(EkfFlowTest, flowNoiseScalesWithCompensatedFlow)
 	EXPECT_NEAR(_ekf->aid_src_optical_flow().observation_variance[0], expected, 1e-4f);
 }
 
+TEST_F(EkfFlowTest, flowNoiseFollowsPredictedFlowWhenReadingDropsToZero)
+{
+	// GIVEN: flow-only aiding 5 m above ground while moving forward at 2 m/s
+	const float simulated_distance_to_ground = 5.f;
+	_sensor_simulator._trajectory[2].setCurrentPosition(-simulated_distance_to_ground);
+	startRangeFinderFusion(simulated_distance_to_ground);
+	_ekf->set_in_air_status(true);
+	_ekf->set_vehicle_at_rest(false);
+	_sensor_simulator.runSeconds(5.f);
+
+	flowSample flow_sample = _sensor_simulator._flow.dataAtRest();
+	setFlowFromHorizontalVelocityAndDistance(flow_sample, Vector2f(2.f, 0.f), simulated_distance_to_ground);
+	_sensor_simulator._flow.setData(flow_sample);
+	_ekf_wrapper.enableFlowFusion();
+	_sensor_simulator.startFlow();
+	_sensor_simulator.runSeconds(2.f);
+	ASSERT_TRUE(_ekf_wrapper.isIntendingFlowFusion());
+	const float quality_noise = _ekf->getParamHandle()->ekf2_of_n_min;
+
+	// WHEN: the reading drops to zero while the estimate still moves, with a flow noise of 0.5 per rad/s
+	_ekf->getParamHandle()->ekf2_of_n_flow = 0.5f;
+	_sensor_simulator._flow.setData(_sensor_simulator._flow.dataAtRest());
+	_sensor_simulator.runSeconds(0.3f);
+
+	// THEN: the flow predicted from the estimate sets the noise, not the zero reading
+	const auto &aid_src = _ekf->aid_src_optical_flow();
+	const float predicted_flow = fabsf(aid_src.innovation[1]);
+	EXPECT_NEAR(aid_src.observation[1], 0.f, 1e-3f);
+	EXPECT_GT(predicted_flow, 0.1f);
+	EXPECT_NEAR(aid_src.observation_variance[1], sq(quality_noise) + sq(0.5f * predicted_flow), 1e-3f);
+}
+
 TEST_F(EkfFlowTest, minimumNoiseBelowFivePercent)
 {
 	// GIVEN: flow fusion at the best quality
