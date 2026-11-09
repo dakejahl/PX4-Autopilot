@@ -597,7 +597,7 @@ TEST_F(EkfFlowTest, flowNoiseFollowsPredictedFlowWhenReadingDropsToZero)
 	EXPECT_NEAR(aid_src.observation_variance[1], sq(quality_noise) + sq(0.5f * predicted_flow), 1e-3f);
 }
 
-TEST_F(EkfFlowTest, minimumNoiseBelowFivePercent)
+TEST_F(EkfFlowTest, minimumNoiseBelowOldFloor)
 {
 	// GIVEN: flow fusion at the best quality
 	startRangeFinderFusion(5.f);
