@@ -223,6 +223,7 @@ void VehicleOpticalFlow::Run()
 
 			_quality_sum += sensor_optical_flow.quality;
 			_accumulated_count++;
+			_flow_timestamp_sample_good_last = sensor_optical_flow.timestamp_sample;
 		}
 
 		bool publish = true;
@@ -247,6 +248,8 @@ void VehicleOpticalFlow::Run()
 			_delta_angle.copyTo(vehicle_optical_flow.delta_angle);
 
 			if (_accumulated_count > 0) {
+				// the flow ended with the last good frame, even if rejected frames followed it into this window
+				vehicle_optical_flow.timestamp_sample = _flow_timestamp_sample_good_last;
 				vehicle_optical_flow.integration_timespan_us = _integration_timespan_us;
 
 				// blind frames already left the flow and the timespan; the quality of what

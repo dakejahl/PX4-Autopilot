@@ -112,6 +112,7 @@ private:
 	matrix::Dcmf _flow_rotation{matrix::eye<float, 3>()};
 
 	hrt_abstime _flow_timestamp_sample_last{0};
+	hrt_abstime _flow_timestamp_sample_good_last{0};
 	matrix::Vector2f _flow_integral{};
 	matrix::Vector3f _delta_angle{};
 	uint32_t _integration_timespan_us{};
