@@ -39,9 +39,8 @@ static constexpr int16_t combine(uint8_t msb, uint8_t lsb)
 }
 
 // SQUAL thresholds of the datasheet's false-motion discard, per operating
-// mode. Quality is published as raw SQUAL (feature count / 4) so it means the
-// same thing in every mode; the PAA3905 flights that located the tracking knee
-// have no PAW3902 counterpart yet, so this driver keeps the datasheet rule.
+// mode. Quality is published as raw SQUAL (feature count / 4), so it means the
+// same thing in every mode.
 static constexpr uint8_t SQUAL_THRESHOLD_BRIGHT          = 0x19;
 static constexpr uint8_t SQUAL_THRESHOLD_LOW_LIGHT       = 0x46;
 static constexpr uint8_t SQUAL_THRESHOLD_SUPER_LOW_LIGHT = 0x55;
