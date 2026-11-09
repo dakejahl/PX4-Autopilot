@@ -79,6 +79,8 @@ protected:
 
 private:
 	void ClearAccumulatedData();
+	uint64_t GapThresholdUs(uint64_t frame_us) const;
+	void PublishWindow(const sensor_optical_flow_s &last_frame);
 	void UpdateSensorGyro();
 
 	void Run() override;
@@ -112,6 +114,7 @@ private:
 	matrix::Dcmf _flow_rotation{matrix::eye<float, 3>()};
 
 	hrt_abstime _flow_timestamp_sample_last{0};
+	sensor_optical_flow_s _flow_last{};
 	matrix::Vector2f _flow_integral{};
 	matrix::Vector3f _delta_angle{};
 	uint32_t _integration_timespan_us{};
