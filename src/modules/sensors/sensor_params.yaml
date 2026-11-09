@@ -190,7 +190,7 @@ parameters:
       values:
         0: Disabled
         1: Publish primary IMU selection
-        2: Publish primary IMU selection, switch away from a primary inconsistent with the other IMUs
+        2: Publish primary IMU selection, switch away from an IMU inconsistent with the other IMUs
       default: 1
       reboot_required: true
     SENS_IMU_RAT:
@@ -206,7 +206,8 @@ parameters:
       description:
         short: IMU fault angular threshold
         long: A gyro whose accumulated angular error exceeds this is declared faulty.
-          The multi-EKF selector then drops the EKF instances using it.
+          The multi-EKF selector then drops the EKF instances using it, and SENS_IMU_MODE
+          2 switches away from it.
       type: float
       default: 15.0
       unit: deg
@@ -224,7 +225,8 @@ parameters:
       description:
         short: IMU fault velocity threshold
         long: An accelerometer whose accumulated velocity error exceeds this is declared
-          faulty. The multi-EKF selector then drops the EKF instances using it.
+          faulty. The multi-EKF selector then drops the EKF instances using it, and SENS_IMU_MODE
+          2 switches away from it.
       type: float
       default: 2.0
       unit: m/s

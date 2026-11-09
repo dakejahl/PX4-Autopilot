@@ -102,6 +102,7 @@ The setup for multiple EKF instances is controlled by the following parameters:
 
   When set to 1 (default for single EKF operation) the sensor module selects IMU data used by the EKF.
   This provides protection against loss of data from the sensor but does not protect against bad sensor data.
+  When set to 2, the sensor module also switches away from an IMU that disagrees with at least two others.
   When set to 0, the sensor module does not make a selection.
 
 - [SENS_MAG_MODE](../advanced_config/parameter_reference.md#SENS_MAG_MODE):

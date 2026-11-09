@@ -226,6 +226,6 @@ private:
 #if defined(CONFIG_SENSORS_VEHICLE_MAGNETOMETER)
 		(ParamInt<px4::params::SYS_HAS_MAG>) _param_sys_has_mag,
 #endif // CONFIG_SENSORS_VEHICLE_MAGNETOMETER
-		(ParamBool<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode
+		(ParamInt<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode
 	)
 };

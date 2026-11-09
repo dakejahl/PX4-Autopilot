@@ -48,9 +48,6 @@ using namespace sensors;
 using namespace matrix;
 using namespace time_literals;
 
-// how long the selected sensor has to be inconsistent with the others before SENS_IMU_MODE 2 switches away from it
-static constexpr hrt_abstime INCONSISTENT_PRIMARY_TIMEOUT{500_ms};
-
 // per-axis median, the mean of the middle two for an even count
 static Vector3f median(const Vector3f values[], int count)
 {
@@ -107,18 +104,6 @@ void VotedSensorsUpdate::parametersUpdate(bool armed)
 	// the voter's own parameters are not read in flight, the priorities below are
 	if (!armed) {
 		updateParams();
-
-		// the preflight inconsistency limits, which SENS_IMU_MODE 2 also applies in flight
-		auto get_limit = [](const char *name, float & limit) {
-			const param_t handle = param_find(name);
-
-			if (handle != PARAM_INVALID) {
-				param_get(handle, &limit);
-			}
-		};
-
-		get_limit("COM_ARM_IMU_ACC", _accel_inconsistency_limit);
-		get_limit("COM_ARM_IMU_GYR", _gyro_inconsistency_limit);
 	}
 
 	// run through all IMUs
@@ -488,10 +473,8 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw)
 				  math::radians(_param_sens_imu_rat.get()), math::radians(_param_sens_imu_ang.get()), dt);
 
 	if (_param_sens_imu_mode.get() == 2) {
-		switchFromInconsistentPrimary(_accel, _accel_diff, _accel_device_id, _accel_inconsistency_limit,
-					      events::px4::enums::sensor_type_t::accel);
-		switchFromInconsistentPrimary(_gyro, _gyro_diff, _gyro_device_id, _gyro_inconsistency_limit,
-					      events::px4::enums::sensor_type_t::gyro);
+		demoteFaulty(_accel, _accel_fault, events::px4::enums::sensor_type_t::accel);
+		demoteFaulty(_gyro, _gyro_fault, events::px4::enums::sensor_type_t::gyro);
 	}
 
 	sensors_status_imu_s status{};
@@ -646,45 +629,26 @@ VotedSensorsUpdate::ImuFault VotedSensorsUpdate::detectFault(SensorData &sensor,
 	return fault;
 }
 
-void VotedSensorsUpdate::switchFromInconsistentPrimary(SensorData &sensor, const Vector3f(&diff)[MAX_SENSOR_COUNT],
-		const uint32_t (&device_id)[MAX_SENSOR_COUNT], float limit, events::px4::enums::sensor_type_t sensor_type)
+void VotedSensorsUpdate::demoteFaulty(SensorData &sensor, const ImuFault &fault,
+				      events::px4::enums::sensor_type_t sensor_type)
 {
-	int count = 0;
-
-	for (int i = 0; i < MAX_SENSOR_COUNT; i++) {
-		if (inConsistencyCheck(sensor, device_id, i)) {
-			count++;
-		}
-	}
-
-	const int primary = sensor.last_best_vote;
-
-	// with fewer than three sensors the median does not tell which one is off,
-	// and a primary already at the lowest priority has no better sensor to switch to
-	if ((count < 3) || !(diff[primary].norm() > limit) || (sensor.priority[primary] <= 1)) {
-		sensor.inconsistent_since = 0;
+	if ((fault.index < 0) || (sensor.priority[fault.index] <= 1)) {
 		return;
 	}
 
-	const hrt_abstime now = hrt_absolute_time();
+	// the lowest priority makes the voter prefer every other sensor, as after a failure, so a
+	// faulty backup is no longer the next pick either
+	sensor.priority[fault.index] = 1;
 
-	if (sensor.inconsistent_since == 0) {
-		sensor.inconsistent_since = now;
-
-	} else if (now > sensor.inconsistent_since + INCONSISTENT_PRIMARY_TIMEOUT) {
-		// the lowest priority makes the voter select another sensor, as after a failure
-		sensor.priority[primary] = 1;
-		sensor.inconsistent_since = 0;
-
-		/* EVENT
-		 * @description
-		 * The selected sensor disagrees with the other IMUs by more than the preflight inconsistency limit.
-		 *
-		 * <profile name="dev">
-		 * This check can be configured via <param>SENS_IMU_MODE</param> parameter.
-		 * </profile>
-		 */
-		events::send<events::px4::enums::sensor_type_t, uint8_t>(events::ID("sensor_inconsistent_primary"),
-				events::Log::Critical, "{1} sensor #{2} inconsistent, switching to another IMU", sensor_type, primary);
-	}
+	/* EVENT
+	 * @description
+	 * The sensor disagrees with the other IMUs. Every other IMU is preferred over it until reboot.
+	 *
+	 * <profile name="dev">
+	 * This check can be configured via <param>SENS_IMU_MODE</param>, <param>SENS_IMU_RAT</param>,
+	 * <param>SENS_IMU_ANG</param>, <param>SENS_IMU_ACC</param> and <param>SENS_IMU_VEL</param> parameters.
+	 * </profile>
+	 */
+	events::send<events::px4::enums::sensor_type_t, uint8_t>(events::ID("sensor_inconsistent"),
+			events::Log::Critical, "{1} sensor #{2} inconsistent with the other IMUs", sensor_type, fault.index);
 }
