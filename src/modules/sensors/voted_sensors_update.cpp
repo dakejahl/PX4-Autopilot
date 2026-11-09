@@ -526,6 +526,17 @@ void VotedSensorsUpdate::setRelativeTimestamps(sensor_combined_s &raw)
 	}
 }
 
+bool VotedSensorsUpdate::inConsistencyCheck(SensorData &sensor, const uint32_t (&device_id)[MAX_SENSOR_COUNT],
+		int index)
+{
+	// a sensor the voter has timed out or found stuck keeps its last sample, which would
+	// otherwise stay in the median and decide between the sensors that are still live
+	static constexpr uint32_t NOT_LIVE = DataValidator::ERROR_FLAG_NO_DATA | DataValidator::ERROR_FLAG_STALE_DATA
+					     | DataValidator::ERROR_FLAG_TIMEOUT | DataValidator::ERROR_FLAG_HIGH_ERRCOUNT;
+
+	return (device_id[index] != 0) && imuEnabled(index) && ((sensor.voter.get_sensor_state(index) & NOT_LIVE) == 0);
+}
+
 void VotedSensorsUpdate::calcAccelInconsistency()
 {
 	Vector3f accel_all[MAX_SENSOR_COUNT] {};
@@ -533,7 +544,7 @@ void VotedSensorsUpdate::calcAccelInconsistency()
 	uint8_t accel_count = 0;
 
 	for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
-		if ((_accel_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
+		if (inConsistencyCheck(_accel, _accel_device_id, sensor_index)) {
 			accel_all[sensor_index] = Vector3f{_last_sensor_data[sensor_index].accelerometer_m_s2};
 			accel_enabled[accel_count++] = accel_all[sensor_index];
 		}
@@ -544,7 +555,7 @@ void VotedSensorsUpdate::calcAccelInconsistency()
 		const Vector3f accel_median = median(accel_enabled, accel_count);
 
 		for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
-			if ((_accel_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
+			if (inConsistencyCheck(_accel, _accel_device_id, sensor_index)) {
 				_accel_diff[sensor_index] = 0.95f * _accel_diff[sensor_index] + 0.05f * (accel_all[sensor_index] - accel_median);
 			}
 		}
@@ -558,7 +569,7 @@ void VotedSensorsUpdate::calcGyroInconsistency()
 	uint8_t gyro_count = 0;
 
 	for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
-		if ((_gyro_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
+		if (inConsistencyCheck(_gyro, _gyro_device_id, sensor_index)) {
 			gyro_all[sensor_index] = Vector3f{_last_sensor_data[sensor_index].gyro_rad};
 			gyro_enabled[gyro_count++] = gyro_all[sensor_index];
 		}
@@ -569,7 +580,7 @@ void VotedSensorsUpdate::calcGyroInconsistency()
 		const Vector3f gyro_median = median(gyro_enabled, gyro_count);
 
 		for (int sensor_index = 0; sensor_index < MAX_SENSOR_COUNT; sensor_index++) {
-			if ((_gyro_device_id[sensor_index] != 0) && imuEnabled(sensor_index)) {
+			if (inConsistencyCheck(_gyro, _gyro_device_id, sensor_index)) {
 				_gyro_diff[sensor_index] = 0.95f * _gyro_diff[sensor_index] + 0.05f * (gyro_all[sensor_index] - gyro_median);
 			}
 		}
@@ -582,7 +593,7 @@ void VotedSensorsUpdate::switchFromInconsistentPrimary(SensorData &sensor, const
 	int count = 0;
 
 	for (int i = 0; i < MAX_SENSOR_COUNT; i++) {
-		if ((device_id[i] != 0) && imuEnabled(i)) {
+		if (inConsistencyCheck(sensor, device_id, i)) {
 			count++;
 		}
 	}

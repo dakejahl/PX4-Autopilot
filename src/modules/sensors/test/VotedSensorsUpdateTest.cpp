@@ -708,3 +708,36 @@ TEST_F(VotedSensorsUpdateTest, WithTwoImusMode2KeepsThePrimary)
 	ASSERT_TRUE(readSelection(selection));
 	EXPECT_EQ(selection.gyro_device_id, kGyroIds[0]) << "two IMUs cannot tell which one is off";
 }
+
+TEST_F(VotedSensorsUpdateTest, AnImuThatTimedOutStaysOutOfTheConsistencyCheck)
+{
+	setParam("SENS_IMU_MODE", 2);
+	setPriority(0, 75, 75);
+	setPriority(1, 60, 60);
+	setPriority(3, 50, 50);
+
+	ImuSubscriptionOwner owner;
+	VotedSensorsUpdate voter(false, owner.subs);
+
+	// all three agree while the vehicle rotates
+	auto feed_all = [&]() {
+		publishImu(0, 9.8f, 0.5f);
+		publishImu(1, 9.8f, 0.5f);
+		publishImu(3, 9.8f, 0.5f);
+	};
+
+	start(voter, feed_all);
+
+	// IMU 0 stops publishing and its last sample freezes at 0.5 rad/s. The vehicle stops
+	// rotating, and of the two IMUs left, the selected one reads 0 while the other is 1 rad/s off.
+	pollFor(voter, 2_s, [&]() {
+		publishImu(1, 9.8f, 0.f);
+		publishImu(3, 9.8f, 1.f);
+	});
+
+	sensor_selection_s selection{};
+	ASSERT_TRUE(readSelection(selection));
+	EXPECT_EQ(selection.gyro_device_id, kGyroIds[1]) << "two live IMUs cannot tell which one is off";
+	EXPECT_EQ(Peer::gyroPriority(voter, 1), 60);
+	EXPECT_EQ(Peer::gyroPriority(voter, 3), 50);
+}

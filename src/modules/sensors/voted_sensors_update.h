@@ -154,12 +154,17 @@ private:
 	bool imuEnabled(uint8_t index) const { return (_accel.priority[index] > 0) && (_gyro.priority[index] > 0); }
 
 	/**
-	 * Calculates the magnitude in m/s/s of the largest difference between each accelerometer vector and the mean of all vectors
+	 * Whether the sensor at this index takes part in the comparison between IMUs
+	 */
+	bool inConsistencyCheck(SensorData &sensor, const uint32_t (&device_id)[MAX_SENSOR_COUNT], int index);
+
+	/**
+	 * Filters each accelerometer's difference from the per-axis median of all of them
 	 */
 	void calcAccelInconsistency();
 
 	/**
-	 * Calculates the magnitude in rad/s of the largest difference between each gyro vector and the mean of all vectors
+	 * Filters each gyro's difference from the per-axis median of all of them
 	 */
 	void calcGyroInconsistency();
 
