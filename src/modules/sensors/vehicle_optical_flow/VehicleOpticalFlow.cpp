@@ -119,8 +119,7 @@ void VehicleOpticalFlow::Run()
 				? static_cast<uint64_t>(1e6f / _param_sens_flow_rate.get()) : 0;
 		const uint64_t gap_threshold_us = (publication_interval_us > frame_us) ? publication_interval_us : frame_us;
 
-		if ((sensor_optical_flow.timestamp_sample >= _flow_timestamp_sample_last + frame_us + gap_threshold_us)
-		    || (_accumulated_count > 0 && (sensor_optical_flow.quality > 0) && _quality_sum == 0)) {
+		if (sensor_optical_flow.timestamp_sample >= _flow_timestamp_sample_last + frame_us + gap_threshold_us) {
 
 			ClearAccumulatedData();
 		}
