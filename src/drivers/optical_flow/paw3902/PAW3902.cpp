@@ -328,6 +328,7 @@ void PAW3902::RunImpl()
 						if (_bright_to_low_counter >= 10) {
 							_mode = Mode::LowLight;
 							Reset();
+							return;
 						}
 
 					} else {
@@ -359,6 +360,7 @@ void PAW3902::RunImpl()
 						if (_low_to_superlow_counter >= 10) {
 							_mode = Mode::SuperLowLight;
 							Reset();
+							return;
 						}
 
 					} else if (shutter < 0x0BB8) {
@@ -370,6 +372,7 @@ void PAW3902::RunImpl()
 						if (_low_to_bright_counter >= 10) {
 							_mode = Mode::Bright;
 							Reset();
+							return;
 						}
 
 					} else {
@@ -411,6 +414,7 @@ void PAW3902::RunImpl()
 					if (_superlow_to_low_counter >= 10) {
 						_mode = Mode::LowLight;
 						Reset();
+						return;
 					}
 
 					break;
