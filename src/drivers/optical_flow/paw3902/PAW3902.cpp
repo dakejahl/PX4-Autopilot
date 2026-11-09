@@ -264,10 +264,6 @@ void PAW3902::RunImpl()
 
 				hrt_store_absolute_time(&_last_read_time);
 
-				if (_discard_reading > 0) {
-					_discard_reading--;
-				}
-
 				if (buffer.data.RawData_Sum > 0x98) {
 					perf_count(_bad_register_perf);
 					PX4_DEBUG("invalid RawData_Sum > 0x98");
@@ -543,6 +539,11 @@ void PAW3902::RunImpl()
 
 				if (success && _failure_count > 0) {
 					_failure_count--;
+				}
+
+				// the datasheet discards the first three motion reports, so count this one only after it was judged
+				if (_discard_reading > 0) {
+					_discard_reading--;
 				}
 
 				_shutter_prev = shutter;
