@@ -176,6 +176,8 @@ float Ekf::calcOptFlowMeasVar(const flowSample &flow_sample) const
 
 	// a sensor that under-reads motion makes an error proportional to the flow itself. The larger of the measured and
 	// predicted flow sets it, so a reading that collapses to zero while the vehicle moves doesn't earn the most trust.
+	// The innovation can't exceed twice that rate, which caps the test ratio at 4 / (gate * n)^2. From n = 2 / gate no
+	// sample fails the innovation check, so a doubted reading is down-weighted, never dropped.
 	const Vector3f gyro_corrected = flow_sample.gyro_rate - _flow_gyro_bias;
 	const Vector2f flow_compensated = flow_sample.flow_rate - _params.ekf2_of_rot_scl * Vector2f(gyro_corrected.xy());
 	const float flow_rate = fmaxf(flow_compensated.norm(), predictFlow(gyro_corrected).norm());
