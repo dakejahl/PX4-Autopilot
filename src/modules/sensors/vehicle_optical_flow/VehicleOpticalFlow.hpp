@@ -136,7 +136,8 @@ private:
 	};
 
 	// A polled zero-motion flow sample ends one frame period before the poll and spans up to the
-	// backup interval, so at 1 kHz the integration window can start ~47 ms before the sample arrives.
+	// backup interval, so the integration window can start ~47 ms before the sample arrives. 64 samples
+	// cover that up to a gyro rate of about 1.4 kHz. Above it the start of such a window is lost.
 	RingBuffer<gyroSample, 64> _gyro_buffer{};
 	RingBuffer<rangeSample, 5> _range_buffer{};
 
