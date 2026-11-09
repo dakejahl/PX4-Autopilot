@@ -41,7 +41,6 @@ static constexpr int16_t combine(uint8_t msb, uint8_t lsb)
 // SQUAL is the chip's feature count divided by 4, on the same scale in every
 // mode. Only the datasheet's false-motion frames are discarded. Every other frame
 // goes out with its raw SQUAL, so the flight controller owns the quality gate.
-// Flights against GNSS showed tracking noise below a SQUAL of about 60.
 
 static constexpr bool datasheet_false_motion(Mode mode, uint8_t squal, uint32_t shutter)
 {
@@ -344,7 +343,6 @@ void PAA3905::RunImpl()
 
 				// publish sensor_optical_flow
 				sensor_optical_flow_s sensor_optical_flow{};
-				sensor_optical_flow.timestamp_sample = timestamp_sample;
 				sensor_optical_flow.device_id = get_device_id();
 
 				sensor_optical_flow.error_count = perf_event_count(_bad_register_perf) + perf_event_count(_bad_transfer_perf);
@@ -409,10 +407,10 @@ void PAA3905::RunImpl()
 				// integrating now will be reported by the next read. Without motion a poll therefore
 				// only vouches for the time up to one frame period ago, so that next frame keeps
 				// its full window instead of starting at the poll.
+				const uint32_t frame_period_us = (_mode == Mode::SuperLowLight) ? SAMPLE_INTERVAL_MODE_2 : SAMPLE_INTERVAL_MODE_1;
 				hrt_abstime frame_end = timestamp_sample;
 
 				if (!frame_end_known && !motion_reported) {
-					const uint32_t frame_period_us = (_mode == Mode::SuperLowLight) ? SAMPLE_INTERVAL_MODE_2 : SAMPLE_INTERVAL_MODE_1;
 					frame_end = (timestamp_sample > frame_period_us) ? (timestamp_sample - frame_period_us) : 0;
 				}
 
@@ -432,8 +430,9 @@ void PAA3905::RunImpl()
 				const bool dead_burst = (shutter == 0) && (buffer.data.SQUAL == 0) && (buffer.data.RawData_Sum == 0);
 
 				bool published = false;
-				bool rejected = false;
 
+				// A rejected frame isn't published. A flight controller that takes quality-0 flow lets it reset its
+				// velocity toward zero after a dark stretch.
 				if (data_valid) {
 
 					const bool zero_flow = (delta_x_raw == 0) && (delta_y_raw == 0);
@@ -478,7 +477,7 @@ void PAA3905::RunImpl()
 					if (publish || (frame_consumed && (hrt_elapsed_time(&_last_publish) >= kBackupScheduleIntervalUs))) {
 
 						if (!publish) {
-							// heartbeat with no new frame: zero flow at the last read's quality
+							// heartbeat with no new frame: zero flow at this read's SQUAL
 							sensor_optical_flow.quality = buffer.data.SQUAL;
 						}
 
@@ -489,28 +488,12 @@ void PAA3905::RunImpl()
 						published = true;
 					}
 
-					// backup schedule if we're reliant on the motion interrupt and there's very little flow,
-					// with margin over the frame period so it cannot land just ahead of the MOTION edge
+					// backup schedule if we're reliant on the motion interrupt and there's very little flow. The first poll
+					// after an interrupt comes a quarter period past the next frame, clear of its MOTION edge.
 					if (_motion_interrupt_enabled && little_to_no_flow) {
-						switch (_mode) {
-						case Mode::Bright:
-							ScheduleDelayed(SAMPLE_INTERVAL_MODE_0 + SAMPLE_INTERVAL_MODE_0 / 4);
-							break;
-
-						case Mode::LowLight:
-							ScheduleDelayed(SAMPLE_INTERVAL_MODE_1 + SAMPLE_INTERVAL_MODE_1 / 4);
-							break;
-
-						case Mode::SuperLowLight:
-							ScheduleDelayed(SAMPLE_INTERVAL_MODE_2 + SAMPLE_INTERVAL_MODE_2 / 4);
-							break;
-						}
+						ScheduleDelayed(frame_period_us + frame_period_us / 4);
 					}
 
-				} else {
-					// Rejected frames stay off the bus. A flight controller that fuses quality-0 flow lets it
-					// steer its flow restart.
-					rejected = true;
 				}
 
 				success = (buffer.data.RawData_Sum <= 0x98) && !dead_burst;
@@ -527,7 +510,7 @@ void PAA3905::RunImpl()
 				// we publish, so track every read that consumed a frame. A stale read consumed nothing:
 				// its window belongs to the next frame unless a timeout already published it.
 				// A rejected read always starts the next window, since a dark scene can repeat every register exactly.
-				if (frame_consumed && (!stale_read || published || rejected)) {
+				if (frame_consumed && (!stale_read || published || !data_valid)) {
 					_timestamp_sample_last = frame_end;
 				}
 
