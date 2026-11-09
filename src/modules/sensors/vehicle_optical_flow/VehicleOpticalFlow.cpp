@@ -114,8 +114,7 @@ void VehicleOpticalFlow::Run()
 		// clear data accumulation if there's a gap in data
 		const uint64_t integration_gap_threshold_us = sensor_optical_flow.integration_timespan_us * 2;
 
-		if ((sensor_optical_flow.timestamp_sample >= _flow_timestamp_sample_last + integration_gap_threshold_us)
-		    || (_accumulated_count > 0 && (sensor_optical_flow.quality > 0) && _quality_sum == 0)) {
+		if (sensor_optical_flow.timestamp_sample >= _flow_timestamp_sample_last + integration_gap_threshold_us) {
 
 			ClearAccumulatedData();
 		}
