@@ -63,7 +63,7 @@ void LoggedTopics::add_default_topics()
 #endif // CONFIG_NAVIGATOR_ADSB
 	add_topic("distance_sensor_mode_change_request");
 	add_topic("device_information", 900);
-	add_topic_multi("dronecan_node_status", 250);
+	add_topic_multi("dronecan_node_status", 50);
 	add_optional_topic("external_ins_attitude");
 	add_optional_topic("external_ins_global_position");
 	add_optional_topic("external_ins_local_position");
