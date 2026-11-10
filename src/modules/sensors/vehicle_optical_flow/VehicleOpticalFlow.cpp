@@ -127,7 +127,11 @@ void VehicleOpticalFlow::Run()
 
 
 		// quality 0 marks a frame the sensor rejected: it consumed its window but carries no flow
-		const bool rejected = (sensor_optical_flow.quality == 0);
+		// So does a frame under SENS_FLOW_QFLOOR while the sensor reports its exposure at the limit. A sensor set up to
+		// publish every frame sends the ones its own false-motion rule would have rejected there. The estimator isn't
+		// told the condition, so the floor acts here, and sensor_optical_flow still logs those frames as they came.
+		const bool rejected = (sensor_optical_flow.quality == 0)
+				      || (sensor_optical_flow.shutter_at_limit && (sensor_optical_flow.quality < _param_sens_flow_qfloor.get()));
 
 		const hrt_abstime timestamp_oldest = sensor_optical_flow.timestamp_sample - sensor_optical_flow.integration_timespan_us;
 		// never integrate past the end of the flow window; the rest belongs to the next frame
