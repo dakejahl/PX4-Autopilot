@@ -207,6 +207,7 @@ parameters:
           ARK flow nodes built to pack it carry the PAA3905 challenging-surface flag in bit 0 of the quality byte.
           Other nodes send raw quality there, so enable this only when every flow node on the bus packs the bit.
           Decode strips the bit from quality and logs the flag in sensor_optical_flow.
+          It also logs the sensor's light mode there, which these nodes report in their NodeStatus vendor code.
           Decode and drop also reports flagged samples at quality 0, which keeps them out of fusion.
       type: enum
       values:

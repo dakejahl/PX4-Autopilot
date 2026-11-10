@@ -81,6 +81,17 @@ void UavcanFlowBridge::flow_sub_cb(const uavcan::ReceivedDataStructure<com::hex:
 			flow.quality = 0;
 		}
 
+		// These nodes also report the sensor's light mode in bits 1:0 of their NodeStatus vendor code, since the flow
+		// message has no field for it. It arrives at 1 Hz, so it can trail a mode change by a second.
+		for (auto &node_status_sub : _node_status_subs) {
+			dronecan_node_status_s node_status;
+
+			if (node_status_sub.copy(&node_status) && (node_status.node_id == msg.getSrcNodeID().get())) {
+				flow.mode = node_status.vendor_specific_status_code & 0x3;
+				break;
+			}
+		}
+
 	} else {
 		flow.quality = msg.quality;
 	}
