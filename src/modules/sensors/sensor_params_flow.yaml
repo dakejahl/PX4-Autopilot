@@ -63,6 +63,20 @@ parameters:
         6: "Yaw 270\xB0"
         7: "Yaw 315\xB0"
       default: 0
+    SENS_FLOW_QFLOOR:
+      description:
+        short: Optical flow quality floor at the exposure limit
+        long: |-
+          Quality below which a flow frame is left out while the sensor reports its
+          exposure at the limit of its light mode, which is when it is short of light.
+          A PixArt sensor's own rule rejects frames below a SQUAL of 25 to 85 there,
+          depending on the mode. This floor takes that rule's place for a sensor set up
+          to publish every frame. It has no effect on a sensor that doesn't report the
+          condition.
+      type: int32
+      default: 80
+      min: 0
+      max: 255
     SENS_FLOW_RATE:
       description:
         short: Optical flow max rate

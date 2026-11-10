@@ -16,6 +16,7 @@ uint32 integration_timespan_us # (microseconds) accumulation timespan in microse
 uint8 quality                  # quality, 0: bad quality, 255: maximum quality
 
 bool challenging_surface       # the sensor flags the surface as hard to track (PAA3905 Motion bit 0)
+bool shutter_at_limit          # the exposure is at the limit of the sensor's light mode, where its false-motion rule applies
 
 uint32 error_count
 
