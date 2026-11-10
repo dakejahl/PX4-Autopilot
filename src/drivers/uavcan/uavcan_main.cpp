@@ -1159,7 +1159,8 @@ void UavcanNode::publish_can_interface_statuses()
 
 void UavcanNode::publish_node_statuses()
 {
-	constexpr hrt_abstime status_pub_interval = 100_ms;
+	// twice the 10 Hz a flow node sends its status at, so none of its messages is skipped
+	constexpr hrt_abstime status_pub_interval = 50_ms;
 	const hrt_abstime now = hrt_absolute_time();
 
 	if (now - _last_node_status_pub >= status_pub_interval) {
