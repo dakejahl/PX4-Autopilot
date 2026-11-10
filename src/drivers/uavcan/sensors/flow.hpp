@@ -37,6 +37,8 @@
 
 #include <stdint.h>
 
+#include <uORB/SubscriptionMultiArray.hpp>
+#include <uORB/topics/dronecan_node_status.h>
 #include <uORB/topics/sensor_optical_flow.h>
 
 #include <com/hex/equipment/flow/Measurement.hpp>
@@ -62,6 +64,8 @@ private:
 		FlowCbBinder;
 
 	uavcan::Subscriber<com::hex::equipment::flow::Measurement, FlowCbBinder> _sub_flow;
+
+	uORB::SubscriptionMultiArray<dronecan_node_status_s> _node_status_subs{ORB_ID::dronecan_node_status};
 
 	int32_t _challenging_surface_mode{0}; // UAVCAN_FLOW_CHAL
 
