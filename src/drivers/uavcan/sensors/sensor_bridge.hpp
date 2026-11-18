@@ -103,12 +103,20 @@ struct Channel {
 // instant cancels the offset; the ISR receive stamp would leave the transfer
 // and scheduling latency in the result. UNKNOWN, unconverged and foreign-epoch
 // stamps fall back to the receive time.
-inline hrt_abstime sample_timestamp(uint64_t node_timestamp_us, uint64_t bus_now_us, hrt_abstime now)
+inline hrt_abstime sample_timestamp(uint64_t node_timestamp_us, uint64_t bus_now_us, hrt_abstime now,
+				    bool *synchronized = nullptr)
 {
 	static constexpr uint64_t kMaxTransportDelay = 100_ms;
 
-	if (node_timestamp_us > 0 && bus_now_us >= node_timestamp_us
-	    && (bus_now_us - node_timestamp_us) < kMaxTransportDelay) {
+	const bool valid = node_timestamp_us > 0 && bus_now_us >= node_timestamp_us
+			   && (bus_now_us - node_timestamp_us) < kMaxTransportDelay
+			   && now >= (bus_now_us - node_timestamp_us);
+
+	if (synchronized) {
+		*synchronized = valid;
+	}
+
+	if (valid) {
 		return now - (bus_now_us - node_timestamp_us);
 	}
 
