@@ -161,8 +161,11 @@ make px4_sitl_sih sihsim_quadx_flow
 
 # Standard VTOL navigating on optical flow only (GNSS fusion disabled)
 make px4_sitl_sih sihsim_standard_vtol_flow
+
+# Multicopter with a short and a long range flow sensor, both fused (GNSS fusion disabled)
+make px4_sitl_sih sihsim_quadx_dual_flow
 ```
 
-The sensor itself is configured with the [`SIH_OF_*` parameters](../sim_sih/index.md#optical-flow) (rate, noise, and maximum ground distance).
+The sensors are configured with the [`SIH_OF*` parameters](../sim_sih/index.md#optical-flow) (count, rate, noise, and ground distance range).
 
 Optical flow is also simulated by [Gazebo Classic](../sim_gazebo_classic/index.md), which renders the downward facing camera image and runs flow computation on it.

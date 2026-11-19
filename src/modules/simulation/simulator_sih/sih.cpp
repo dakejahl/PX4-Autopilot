@@ -84,12 +84,14 @@ Sih::Sih() :
 {
 	srand(1234); // initialize the random seed once before calling generate_wgn()
 
-	device::Device::DeviceId device_id{};
-	device_id.devid_s.bus_type = device::Device::DeviceBusType::DeviceBusType_SIMULATION;
-	device_id.devid_s.bus = 0;
-	device_id.devid_s.address = 0;
-	device_id.devid_s.devtype = DRV_FLOW_DEVTYPE_SIM;
-	_optical_flow_device_id = device_id.devid;
+	for (uint8_t i = 0; i < MAX_OPTICAL_FLOW; i++) {
+		device::Device::DeviceId device_id{};
+		device_id.devid_s.bus_type = device::Device::DeviceBusType::DeviceBusType_SIMULATION;
+		device_id.devid_s.bus = 0;
+		device_id.devid_s.address = i;
+		device_id.devid_s.devtype = DRV_FLOW_DEVTYPE_SIM;
+		_optical_flow[i].device_id = device_id.devid;
+	}
 }
 
 Sih::~Sih()
@@ -111,12 +113,13 @@ void Sih::run()
 
 	parameters_updated();
 
-	if (_param_sih_of_en.get()) {
-		// Advertise before the simulated clock starts running: the sensors module brings up its
-		// optical flow pipeline when the topic first appears, and it only looks for it while
-		// updating its parameters. Advertising here makes it visible for the startup scan even
-		// though the first sample is only published once the control pipeline is alive.
-		_optical_flow_pub.advertise();
+	// Advertise before the simulated clock starts running: the sensors module brings up its
+	// optical flow pipeline when the topic first appears, and it only looks for it while
+	// updating its parameters. Advertising here makes it visible for the startup scan even
+	// though the first sample is only published once the control pipeline is alive. Advertising
+	// in order also gives every sensor the uORB instance of its index.
+	for (uint8_t i = 0; i < _optical_flow_count; i++) {
+		_optical_flow[i].pub.advertise();
 	}
 
 	const hrt_abstime task_start = hrt_absolute_time();
@@ -267,8 +270,12 @@ void Sih::updateFailureConfig()
 			     == failure_injection::Mode::Off);
 	_distance_sensor_blocked = (_failure_config.mode(failure_injection_s::FAILURE_UNIT_SENSOR_DISTANCE_SENSOR, 1)
 				    == failure_injection::Mode::Off);
-	_optical_flow_blocked = (_failure_config.mode(failure_injection_s::FAILURE_UNIT_SENSOR_OPTICAL_FLOW, 1)
-				 == failure_injection::Mode::Off);
+
+	for (uint8_t i = 0; i < MAX_OPTICAL_FLOW; i++) {
+		_optical_flow[i].blocked = (_failure_config.mode(failure_injection_s::FAILURE_UNIT_SENSOR_OPTICAL_FLOW, i + 1)
+					    == failure_injection::Mode::Off);
+	}
+
 	_accel_blocked = (_failure_config.mode(failure_injection_s::FAILURE_UNIT_SENSOR_ACCEL, 1)
 			  == failure_injection::Mode::Off);
 	_gyro_blocked = (_failure_config.mode(failure_injection_s::FAILURE_UNIT_SENSOR_GYRO, 1)
@@ -342,7 +349,7 @@ void Sih::sensor_step()
 	// once the control pipeline is alive. Publishing while the system is still starting up
 	// races with the sensors module bringing up its optical flow pipeline and deadlocks the
 	// simulation, as this thread is the one advancing the lockstep clock.
-	if (_param_sih_of_en.get()) {
+	if (_optical_flow_count > 0) {
 		if (_last_actuator_output_time > 0) {
 			accumulate_optical_flow(dt);
 
@@ -452,6 +459,12 @@ void Sih::parameters_updated()
 	_px4_rangefinder.set_min_distance(_distance_snsr_min);
 	_px4_rangefinder.set_max_distance(_distance_snsr_max);
 
+	_optical_flow_count = static_cast<uint8_t>(constrain(_param_sih_of_en.get(), static_cast<int32_t>(0),
+			      static_cast<int32_t>(MAX_OPTICAL_FLOW)));
+	_optical_flow[0].min_distance = _param_sih_of0_h_min.get();
+	_optical_flow[0].max_distance = _param_sih_of0_h_max.get();
+	_optical_flow[1].min_distance = _param_sih_of1_h_min.get();
+	_optical_flow[1].max_distance = _param_sih_of1_h_max.get();
 	_optical_flow_interval_us = static_cast<hrt_abstime>(roundf(1e6f / math::max(_param_sih_of_rate.get(), 1.f)));
 
 	_T_TAU = _param_sih_t_tau.get();
@@ -1136,14 +1149,13 @@ void Sih::accumulate_optical_flow(const float dt)
 	// value is produced by a right handed rotation of the sensor about the body axis, which
 	// gives the translation over the ground the opposite sign (see the flow observation model
 	// in the EKF).
-	const float distance = ground_distance(_param_sih_of_h_max.get());
+	float max_distance = 0.f;
 
-	if (!PX4_ISFINITE(distance) || distance > _param_sih_of_h_max.get()) {
-		// too high above the ground, or not looking at it: no image to track
-		_optical_flow_tracking = false;
-		_optical_flow_dt += dt;
-		return;
+	for (uint8_t i = 0; i < _optical_flow_count; i++) {
+		max_distance = math::max(max_distance, _optical_flow[i].max_distance);
 	}
+
+	const float distance = ground_distance(max_distance);
 
 	const Vector3f v_B = _q.rotateVectorInverse(_v_N); // ground relative velocity in body frame
 
@@ -1152,62 +1164,76 @@ void Sih::accumulate_optical_flow(const float dt)
 	const Vector2f translation_flow = Vector2f(-v_B(1), v_B(0)) / math::max(distance, FLOW_MIN_DISTANCE);
 	const Vector2f flow_rate = Vector2f(_w_B(0), _w_B(1)) + translation_flow;
 
-	if (flow_rate.norm() > FLOW_MAX_RATE) {
-		// the image moves too fast for the sensor to correlate two consecutive frames
-		_optical_flow_tracking = false;
-	}
+	for (uint8_t i = 0; i < _optical_flow_count; i++) {
+		OpticalFlowSim &flow = _optical_flow[i];
+		flow.dt += dt;
 
-	_optical_flow_integral += flow_rate * dt;
-	_optical_flow_dt += dt;
+		if (!PX4_ISFINITE(distance) || (distance > flow.max_distance) || (distance < flow.min_distance)) {
+			// out of focus, or not looking at the ground: no image to track
+			flow.tracking = false;
+			continue;
+		}
+
+		if (flow_rate.norm() > FLOW_MAX_RATE) {
+			// the image moves too fast for the sensor to correlate two consecutive frames
+			flow.tracking = false;
+		}
+
+		flow.integral += flow_rate * dt;
+	}
 }
 
 void Sih::send_optical_flow(const hrt_abstime &time_now_us)
 {
-	Vector2f pixel_flow = _optical_flow_integral;
-	const float integration_time = _optical_flow_dt;
-	const bool tracking = _optical_flow_tracking;
+	for (uint8_t i = 0; i < _optical_flow_count; i++) {
+		OpticalFlowSim &flow_sim = _optical_flow[i];
 
-	// start a new integration interval
-	_optical_flow_integral.setZero();
-	_optical_flow_dt = 0.f;
-	_optical_flow_tracking = true;
+		Vector2f pixel_flow = flow_sim.integral;
+		const float integration_time = flow_sim.dt;
+		const bool tracking = flow_sim.tracking;
 
-	if (_optical_flow_blocked || integration_time < FLT_EPSILON) {
-		return;
+		// start a new integration interval
+		flow_sim.integral.setZero();
+		flow_sim.dt = 0.f;
+		flow_sim.tracking = true;
+
+		if (flow_sim.blocked || integration_time < FLT_EPSILON) {
+			continue;
+		}
+
+		sensor_optical_flow_s flow{};
+		flow.timestamp_sample = time_now_us;
+		flow.device_id = flow_sim.device_id;
+
+		if (tracking) {
+			// white noise on the flow rate estimate, integrated over the interval
+			pixel_flow += Vector2f(generate_wgn(), generate_wgn()) * (_param_sih_of_noise.get() * integration_time);
+			flow.quality = UINT8_MAX;
+
+		} else {
+			pixel_flow.setZero();
+			flow.quality = 0;
+		}
+
+		pixel_flow.copyTo(flow.pixel_flow);
+		flow.integration_timespan_us = static_cast<uint32_t>(roundf(integration_time * 1e6f));
+
+		// the sensor has neither a gyro nor a rangefinder: the flow module completes the sample
+		// with the vehicle gyro and the downward facing distance sensor
+		flow.delta_angle[0] = flow.delta_angle[1] = flow.delta_angle[2] = NAN;
+		flow.delta_angle_available = false;
+		flow.distance_m = NAN;
+		flow.distance_available = false;
+
+		flow.max_flow_rate = FLOW_MAX_RATE;
+		flow.min_ground_distance = flow_sim.min_distance;
+		flow.max_ground_distance = flow_sim.max_distance;
+		flow.mode = sensor_optical_flow_s::MODE_LOWLIGHT;
+		flow.error_count = 0;
+
+		flow.timestamp = hrt_absolute_time();
+		flow_sim.pub.publish(flow);
 	}
-
-	sensor_optical_flow_s flow{};
-	flow.timestamp_sample = time_now_us;
-	flow.device_id = _optical_flow_device_id;
-
-	if (tracking) {
-		// white noise on the flow rate estimate, integrated over the interval
-		pixel_flow += Vector2f(generate_wgn(), generate_wgn()) * (_param_sih_of_noise.get() * integration_time);
-		flow.quality = UINT8_MAX;
-
-	} else {
-		pixel_flow.setZero();
-		flow.quality = 0;
-	}
-
-	pixel_flow.copyTo(flow.pixel_flow);
-	flow.integration_timespan_us = static_cast<uint32_t>(roundf(integration_time * 1e6f));
-
-	// the sensor has neither a gyro nor a rangefinder: the flow module completes the sample
-	// with the vehicle gyro and the downward facing distance sensor
-	flow.delta_angle[0] = flow.delta_angle[1] = flow.delta_angle[2] = NAN;
-	flow.delta_angle_available = false;
-	flow.distance_m = NAN;
-	flow.distance_available = false;
-
-	flow.max_flow_rate = FLOW_MAX_RATE;
-	flow.min_ground_distance = 0.f;
-	flow.max_ground_distance = _param_sih_of_h_max.get();
-	flow.mode = sensor_optical_flow_s::MODE_LOWLIGHT;
-	flow.error_count = 0;
-
-	flow.timestamp = hrt_absolute_time();
-	_optical_flow_pub.publish(flow);
 }
 
 void Sih::send_ranging_beacon(const hrt_abstime &time_now_us)

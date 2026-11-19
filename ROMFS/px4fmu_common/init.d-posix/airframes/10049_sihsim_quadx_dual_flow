@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# @name QuadrotorX SITL for SIH with two optical flow sensors
+#
+# @type Simulation
+# @class Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=quadx_dual_flow}
+
+. ${R}etc/init.d-posix/airframes/10046_sihsim_quadx_flow
+
+# a short range sensor and a long range sensor, overlapping between 5 and 10 m
+param set-default SIH_OF_EN 2
+param set-default SIH_OF0_H_MAX 10
+param set-default SIH_OF1_H_MIN 5
+param set-default SIH_OF1_H_MAX 50
+param set-default SIH_DISTSNSR_MAX 60
+
+param set-default EKF2_OF1_CTRL 1

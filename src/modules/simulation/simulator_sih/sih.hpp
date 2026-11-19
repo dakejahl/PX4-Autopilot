@@ -72,6 +72,7 @@
 #include <lib/lat_lon_alt/lat_lon_alt.hpp>
 #include <lib/perf/perf_counter.h>
 #include <uORB/Publication.hpp>
+#include <uORB/PublicationMulti.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/airspeed.h>
@@ -142,7 +143,6 @@ private:
 	uORB::Publication<airspeed_s>            _airspeed_pub{ORB_ID(airspeed)};
 	uORB::Publication<ranging_beacon_s>      _ranging_beacon_pub{ORB_ID(ranging_beacon)};
 	uORB::Publication<esc_status_s>          _esc_status_pub{ORB_ID(esc_status)};
-	uORB::Publication<sensor_optical_flow_s> _optical_flow_pub{ORB_ID(sensor_optical_flow)};
 
 	// groundtruth
 	uORB::Publication<vehicle_angular_velocity_s> _angular_velocity_ground_truth_pub{ORB_ID(vehicle_angular_velocity_groundtruth)};
@@ -156,7 +156,6 @@ private:
 
 	bool _airspeed_blocked{false};
 	bool _distance_sensor_blocked{false};
-	bool _optical_flow_blocked{false};
 	bool _accel_blocked{false};
 	bool _gyro_blocked{false};
 	uint16_t _stuck_motor_mask{0};
@@ -292,12 +291,25 @@ private:
 	hrt_abstime _ranging_beacon_time{0};
 	uint8_t _ranging_beacon_idx{0};
 
-	// optical flow accumulation over one integration interval
+	// optical flow sensors, all looking straight down from the centre of gravity
+	static constexpr uint8_t MAX_OPTICAL_FLOW = 2;
+
+	struct OpticalFlowSim {
+		uORB::PublicationMulti<sensor_optical_flow_s> pub{ORB_ID(sensor_optical_flow)};
+		uint32_t device_id{0};
+		float min_distance{0.f};
+		float max_distance{0.f};
+		bool blocked{false};
+
+		// accumulation over one integration interval
+		matrix::Vector2f integral{};
+		float dt{0.f};
+		bool tracking{true};
+	};
+
+	OpticalFlowSim _optical_flow[MAX_OPTICAL_FLOW] {};
+	uint8_t _optical_flow_count{0};
 	hrt_abstime _optical_flow_time{0};
-	matrix::Vector2f _optical_flow_integral{};
-	float _optical_flow_dt{0.f};
-	bool _optical_flow_tracking{true};
-	uint32_t _optical_flow_device_id{0};
 
 	bool _grounded{true}; // whether the vehicle is on the ground
 
@@ -411,7 +423,10 @@ private:
 		(ParamInt<px4::params::SIH_OF_EN>) _param_sih_of_en,
 		(ParamFloat<px4::params::SIH_OF_RATE>) _param_sih_of_rate,
 		(ParamFloat<px4::params::SIH_OF_NOISE>) _param_sih_of_noise,
-		(ParamFloat<px4::params::SIH_OF_H_MAX>) _param_sih_of_h_max,
+		(ParamFloat<px4::params::SIH_OF0_H_MIN>) _param_sih_of0_h_min,
+		(ParamFloat<px4::params::SIH_OF0_H_MAX>) _param_sih_of0_h_max,
+		(ParamFloat<px4::params::SIH_OF1_H_MIN>) _param_sih_of1_h_min,
+		(ParamFloat<px4::params::SIH_OF1_H_MAX>) _param_sih_of1_h_max,
 		(ParamFloat<px4::params::SIH_T_TAU>) _param_sih_t_tau,
 		// forward propeller
 		(ParamFloat<px4::params::SIH_F_T_MAX>) _param_sih_f_t_max,

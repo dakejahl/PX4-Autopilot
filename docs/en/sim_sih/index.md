@@ -31,17 +31,18 @@ Two modes are supported:
 
 The following vehicle types are supported:
 
-| Vehicle                                                              | Make Target                                   | Status       |
-| -------------------------------------------------------------------- | --------------------------------------------- | ------------ |
-| Quadrotor X <Badge type="tip" text="PX4 v1.9" />                     | `make px4_sitl_sih sihsim_quadx`              | Stable       |
-| Hexarotor X <Badge type="tip" text="PX4 v1.16" />                    | `make px4_sitl_sih sihsim_hex`                | Experimental |
-| Fixed-wing (airplane) <Badge type="tip" text="PX4 v1.13" />          | `make px4_sitl_sih sihsim_airplane`           | Experimental |
-| Tailsitter VTOL <Badge type="tip" text="PX4 v1.13" />                | `make px4_sitl_sih sihsim_xvert`              | Experimental |
-| Standard VTOL (QuadPlane) <Badge type="tip" text="PX4 v1.16" />      | `make px4_sitl_sih sihsim_standard_vtol`      | Experimental |
-| Ackermann Rover <Badge type="tip" text="PX4 v1.16" />                | `make px4_sitl_sih sihsim_rover_ackermann`    | Experimental |
-| Differential Rover <Badge type="tip" text="PX4 v2.0" />              | `make px4_sitl_sih sihsim_rover_differential` | Experimental |
-| Quadrotor X with optical flow <Badge type="tip" text="PX4 v2.0" />   | `make px4_sitl_sih sihsim_quadx_flow`         | Experimental |
-| Standard VTOL with optical flow <Badge type="tip" text="PX4 v2.0" /> | `make px4_sitl_sih sihsim_standard_vtol_flow` | Experimental |
+| Vehicle                                                                        | Make Target                                   | Status       |
+| ------------------------------------------------------------------------------ | --------------------------------------------- | ------------ |
+| Quadrotor X <Badge type="tip" text="PX4 v1.9" />                               | `make px4_sitl_sih sihsim_quadx`              | Stable       |
+| Hexarotor X <Badge type="tip" text="PX4 v1.16" />                              | `make px4_sitl_sih sihsim_hex`                | Experimental |
+| Fixed-wing (airplane) <Badge type="tip" text="PX4 v1.13" />                    | `make px4_sitl_sih sihsim_airplane`           | Experimental |
+| Tailsitter VTOL <Badge type="tip" text="PX4 v1.13" />                          | `make px4_sitl_sih sihsim_xvert`              | Experimental |
+| Standard VTOL (QuadPlane) <Badge type="tip" text="PX4 v1.16" />                | `make px4_sitl_sih sihsim_standard_vtol`      | Experimental |
+| Ackermann Rover <Badge type="tip" text="PX4 v1.16" />                          | `make px4_sitl_sih sihsim_rover_ackermann`    | Experimental |
+| Differential Rover <Badge type="tip" text="PX4 v2.0" />                        | `make px4_sitl_sih sihsim_rover_differential` | Experimental |
+| Quadrotor X with optical flow <Badge type="tip" text="PX4 v2.0" />             | `make px4_sitl_sih sihsim_quadx_flow`         | Experimental |
+| Standard VTOL with optical flow <Badge type="tip" text="PX4 v2.0" />           | `make px4_sitl_sih sihsim_standard_vtol_flow` | Experimental |
+| Quadrotor X with two optical flow sensors <Badge type="tip" text="PX4 v2.0" /> | `make px4_sitl_sih sihsim_quadx_dual_flow`    | Experimental |
 
 ::: warning
 Only the quadrotor vehicle type is stable and recommended for development. All other vehicle types (hexarotor, fixed-wing, VTOL, rover) are experimental and may have aerodynamic model or controller interaction issues that produce unrealistic flight behaviour.
@@ -123,13 +124,14 @@ SIH supports setting a wind velocity with the PX4 parameters [`SIH_WIND_N`](../a
 
 #### Optical Flow
 
-SIH can simulate a downward facing optical flow sensor, so that flow aided navigation can be exercised without a rendered camera image.
-The sensor reports the integrated flow only: the flow module completes the sample with the vehicle gyro and a downward facing distance sensor, which therefore has to be enabled as well ([`SIH_DISTSNSR_EN`](../advanced_config/parameter_reference.md#SIH_DISTSNSR_EN)).
+SIH can simulate up to two downward facing optical flow sensors, so that flow aided navigation can be exercised without a rendered camera image.
+The sensors report the integrated flow only: the flow module completes the sample with the vehicle gyro and a downward facing distance sensor, which therefore has to be enabled as well ([`SIH_DISTSNSR_EN`](../advanced_config/parameter_reference.md#SIH_DISTSNSR_EN)).
 
-The flow sensor is configured with [`SIH_OF_EN`](../advanced_config/parameter_reference.md#SIH_OF_EN), [`SIH_OF_RATE`](../advanced_config/parameter_reference.md#SIH_OF_RATE), [`SIH_OF_NOISE`](../advanced_config/parameter_reference.md#SIH_OF_NOISE), and [`SIH_OF_H_MAX`](../advanced_config/parameter_reference.md#SIH_OF_H_MAX).
-Quality drops to zero above `SIH_OF_H_MAX` or when the flow rate exceeds what the sensor can correlate.
+[`SIH_OF_EN`](../advanced_config/parameter_reference.md#SIH_OF_EN) sets the number of sensors, and [`SIH_OF_RATE`](../advanced_config/parameter_reference.md#SIH_OF_RATE) and [`SIH_OF_NOISE`](../advanced_config/parameter_reference.md#SIH_OF_NOISE) apply to all of them.
+Each sensor has its own ground distance range, set with [`SIH_OF0_H_MIN`](../advanced_config/parameter_reference.md#SIH_OF0_H_MIN) and [`SIH_OF0_H_MAX`](../advanced_config/parameter_reference.md#SIH_OF0_H_MAX) for the first sensor and `SIH_OF1_*` for the second.
+Quality drops to zero outside that range or when the flow rate exceeds what the sensor can correlate.
 
-Two ready-made airframes use it:
+Ready-made airframes:
 
 ```sh
 # Multicopter navigating on optical flow only (GNSS fusion disabled)
@@ -137,6 +139,9 @@ make px4_sitl_sih sihsim_quadx_flow
 
 # Standard VTOL navigating on optical flow only (GNSS fusion disabled)
 make px4_sitl_sih sihsim_standard_vtol_flow
+
+# Multicopter with a 0-10 m and a 5-50 m flow sensor, both fused (GNSS fusion disabled)
+make px4_sitl_sih sihsim_quadx_dual_flow
 ```
 
 #### Set Custom Takeoff Location

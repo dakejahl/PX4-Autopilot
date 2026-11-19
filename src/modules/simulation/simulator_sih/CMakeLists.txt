@@ -82,6 +82,7 @@ if(PX4_PLATFORM MATCHES "posix")
 		airplane
 		quadx
 		quadx_flow
+		quadx_dual_flow
 		xvert
 		standard_vtol
 		standard_vtol_flow
